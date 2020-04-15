@@ -1,10 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
-import { JwtModule, JwtService } from '@nestjs/jwt';
-import { ConfigService, ConfigModule } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth/auth.service';
 
 describe('AppController', () => {
@@ -18,7 +15,6 @@ describe('AppController', () => {
         { provide: AuthService, useValue: {} },
         { provide: JwtService, useValue: {} },
       ],
-      imports: [UsersModule],
     }).compile();
 
     appController = app.get<AppController>(AppController);

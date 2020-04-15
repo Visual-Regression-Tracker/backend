@@ -1,36 +1,23 @@
 import { Injectable } from '@nestjs/common';
-
-export type User = {
-  userId: number;
-  username: string;
-  password: string;
-};
+import { InjectModel } from '@nestjs/sequelize';
+import { User } from './user.model';
 
 @Injectable()
 export class UsersService {
-  private readonly users: User[];
+  constructor(
+    @InjectModel(User)
+    private userModel: typeof User,
+  ) {}
 
-  constructor() {
-    this.users = [
-      {
-        userId: 1,
-        username: 'john',
-        password: 'changeme',
-      },
-      {
-        userId: 2,
-        username: 'chris',
-        password: 'secret',
-      },
-      {
-        userId: 3,
-        username: 'maria',
-        password: 'guess',
-      },
-    ];
+  async findAll(): Promise<User[]> {
+    return this.userModel.findAll();
   }
 
-  async findOne(username: string): Promise<User | undefined> {
-    return this.users.find(user => user.username === username);
+  findOne(id: string): Promise<User> {
+    return this.userModel.findOne({
+      where: {
+        id,
+      },
+    });
   }
 }
