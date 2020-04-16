@@ -1,6 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { User } from './user.entity';
 import { InjectModel } from '@nestjs/sequelize';
+import { CreateUserDto } from './dto/user-create.dto';
+import { UserLoginResponseDto } from './dto/user-login-response.dto';
+import { genSalt, hash } from 'bcryptjs';
 
 @Injectable()
 export class UsersService {
@@ -19,5 +22,36 @@ export class UsersService {
         id,
       },
     });
+  }
+
+  async getUserByEmail(email: string): Promise<User> {
+    return await this.userModel.findOne({
+      where: { email },
+    });
+  }
+
+  async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
+    try {
+      const user = new User();
+      user.email = createUserDto.email.trim().toLowerCase();
+      user.firstName = createUserDto.firstName;
+      user.lastName = createUserDto.lastName;
+
+      const salt = await genSalt(10);
+      user.password = await hash(createUserDto.password, salt);
+
+      const userData = await user.save();
+
+      return new UserLoginResponseDto(userData, null);
+    } catch (err) {
+      if (err.original.constraint === 'user_email_key') {
+        throw new HttpException(
+          `User with email '${err.errors[0].value}' already exists`,
+          HttpStatus.CONFLICT,
+        );
+      }
+
+      throw new HttpException(err, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 }

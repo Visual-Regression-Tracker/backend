@@ -15,7 +15,7 @@ const db: SequelizeModuleOptions = {
 
 const jwt: JwtModuleOptions = {
   secret: 'jwtPrivateKey',
-  signOptions: { expiresIn: '60s' },
+  signOptions: { expiresIn: '1d' },
 };
 
 export const config = {
