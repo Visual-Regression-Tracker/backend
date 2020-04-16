@@ -7,7 +7,7 @@ export class User extends Model<User> {
 
   @Column
   password: string;
-  
+
   @Column
   firstName: string;
 
@@ -19,6 +19,9 @@ export class User extends Model<User> {
 
   @Column
   ASDAS: string;
+
+  @Column
+  AAAA: string;
 
   @Column({ defaultValue: true })
   isActive: boolean;

@@ -1,5 +1,5 @@
 import { Column, Model, Table, HasOne } from 'sequelize-typescript';
-import { User } from 'src/users/user.model';
+import { User } from 'src/users/user.entity';
 
 @Table
 export class Build extends Model<Build> {
