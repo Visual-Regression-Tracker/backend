@@ -14,15 +14,6 @@ export class User extends Model<User> {
   @Column
   lastName: string;
 
-  @Column
-  hui: string;
-
-  @Column
-  ASDAS: string;
-
-  @Column
-  AAAA: string;
-
   @Column({ defaultValue: true })
   isActive: boolean;
 }
