@@ -1,4 +1,6 @@
-import { Column, Model, Table } from 'sequelize-typescript';
+import { Column, Model, Table, HasMany } from 'sequelize-typescript';
+import { BuildDto } from 'src/builds/dto/builds.dto';
+import { Build } from 'src/builds/build.entity';
 
 @Table
 export class User extends Model<User> {
@@ -16,4 +18,7 @@ export class User extends Model<User> {
 
   @Column({ defaultValue: true })
   isActive: boolean;
+
+  @HasMany(() => Build)
+  builds: Build[];
 }

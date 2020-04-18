@@ -1,4 +1,10 @@
-import { Column, Model, Table, HasOne } from 'sequelize-typescript';
+import {
+  Column,
+  Model,
+  Table,
+  BelongsTo,
+  ForeignKey,
+} from 'sequelize-typescript';
 import { User } from 'src/users/user.entity';
 
 @Table
@@ -7,11 +13,15 @@ export class Build extends Model<Build> {
   number: number;
 
   @Column
-  branch: string;
+  branchName: string;
 
   @Column
   status: string;
 
-  @HasOne(() => User)
-  startedBy: User;
+  @ForeignKey(() => User)
+  @Column
+  userId: number;
+
+  @BelongsTo(() => User)
+  user: User;
 }

@@ -8,7 +8,7 @@ const db: SequelizeModuleOptions = {
   port: 5432,
   username: 'postgres',
   password: 'postgres',
-  database: 'nest',
+  database: 'vrt',
   autoLoadModels: true,
   synchronize: true,
 };

@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { SharedModule } from './shared/shared.module';
 import { ConfigService } from './shared/config/config.service';
+import { BuildsModule } from './builds/builds.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ConfigService } from './shared/config/config.service';
       useFactory: (configService: ConfigService) => configService.dbConfig,
       inject: [ConfigService],
     }),
+    BuildsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
