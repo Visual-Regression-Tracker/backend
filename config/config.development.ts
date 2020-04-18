@@ -18,7 +18,12 @@ const jwt: JwtModuleOptions = {
   signOptions: { expiresIn: '1d' },
 };
 
+const image = {
+  uploadPath: 'imageUploads/'
+}
+
 export const config = {
   db,
   jwt,
+  image
 };

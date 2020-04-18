@@ -19,7 +19,12 @@ const jwt: JwtModuleOptions = {
   signOptions: { expiresIn: process.env.JWT_LIFE_TIME },
 };
 
+const image = {
+  uploadPath: process.env.IMG_UPLOAD_FOLDER 
+}
+
 export const config = {
   db,
   jwt,
+  image,
 };

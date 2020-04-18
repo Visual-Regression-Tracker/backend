@@ -2,12 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Test } from './test.entity';
 import { CreateTestDto } from './dto/create-test.dto';
+import { ConfigService } from 'src/shared/config/config.service';
+import { writeFile } from 'fs';
+import { resolve } from 'path';
 
 @Injectable()
 export class TestsService {
   constructor(
     @InjectModel(Test)
     private testModel: typeof Test,
+    private configService: ConfigService,
   ) {}
 
   async findAll(buildId: number): Promise<Test[]> {
@@ -21,15 +25,17 @@ export class TestsService {
     const test = new Test();
 
     // save image
-    // createTestDto.imageBase64
-
-    test.name = createTestDto.name;
-    test.os = createTestDto.os;
-    test.browser = createTestDto.browser;
-    test.viewport = createTestDto.viewport;
-    test.device = createTestDto.device;
-    test.status = 'new';
-    test.buildId = createTestDto.buildId;
+    const imageName = `${Date.now()}.${createTestDto.name}.screenshot.png`
+    await writeFile(
+      resolve(
+        this.configService.imgConfig.uploadPath,
+        imageName,
+      ),
+      Buffer.from(createTestDto.imageBase64, 'base64'),
+      err => {
+        return err;
+      },
+    );
 
     if (lastSuccessTest) {
       test.baselineUrl = lastSuccessTest.baselineUrl;
@@ -41,7 +47,17 @@ export class TestsService {
 
       // if ther is NO diff
       test.status = 'ok';
+    } else {
+      test.status = 'new';
     }
+
+    test.imageUrl = imageName
+    test.name = createTestDto.name;
+    test.os = createTestDto.os;
+    test.browser = createTestDto.browser;
+    test.viewport = createTestDto.viewport;
+    test.device = createTestDto.device;
+    test.buildId = createTestDto.buildId;
 
     return test.save();
   }
