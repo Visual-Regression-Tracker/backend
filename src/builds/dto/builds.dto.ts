@@ -6,10 +6,16 @@ export class BuildDto {
   readonly id: number;
 
   @ApiProperty()
+  readonly projectName: string;
+
+  @ApiProperty()
   readonly branchName: string;
 
   @ApiProperty()
   readonly status: string;
+
+  @ApiProperty()
+  readonly createdBy: string;
 
   @ApiProperty()
   readonly createdAt: Date;
@@ -19,5 +25,7 @@ export class BuildDto {
     this.createdAt = build.createdAt;
     this.status = build.status;
     this.branchName = build.branchName;
+    this.createdBy = build.user.email;
+    this.projectName = build.project.name;
   }
 }

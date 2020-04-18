@@ -7,6 +7,7 @@ import { SequelizeModule } from '@nestjs/sequelize';
 import { SharedModule } from './shared/shared.module';
 import { ConfigService } from './shared/config/config.service';
 import { BuildsModule } from './builds/builds.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { BuildsModule } from './builds/builds.module';
       inject: [ConfigService],
     }),
     BuildsModule,
+    ProjectsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -6,6 +6,7 @@ import {
   ForeignKey,
 } from 'sequelize-typescript';
 import { User } from 'src/users/user.entity';
+import { Project } from 'src/projects/project.entity';
 
 @Table
 export class Build extends Model<Build> {
@@ -17,6 +18,13 @@ export class Build extends Model<Build> {
 
   @Column
   status: string;
+
+  @ForeignKey(() => Project)
+  @Column
+  projectId: number;
+
+  @BelongsTo(() => Project)
+  project: Project;
 
   @ForeignKey(() => User)
   @Column

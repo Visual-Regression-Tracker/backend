@@ -1,8 +1,13 @@
-import { Controller, Get, UseGuards, Post, Body, Req } from '@nestjs/common';
+import { Controller, Get, UseGuards, Post, Body, Req, Param, ParseIntPipe } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { BuildDto } from './dto/builds.dto';
-import { ApiOkResponse, ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOkResponse,
+  ApiBearerAuth,
+  ApiTags,
+  ApiParam,
+} from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
 
 @Controller('builds')
@@ -10,18 +15,19 @@ import { CreateBuildDto } from './dto/build-create.dto';
 export class BuildsController {
   constructor(private buildsService: BuildsService) {}
 
-  @UseGuards(JwtAuthGuard)
-  @Get()
+  @Get(':projectId')
+  @ApiParam({ name: 'projectId', required: true })
   @ApiOkResponse({ type: [BuildDto] })
   @ApiBearerAuth()
-  getAll(): Promise<BuildDto[]> {
-    return this.buildsService.findAll();
+  @UseGuards(JwtAuthGuard)
+  getAll(@Param('projectId', new ParseIntPipe()) projectId: number): Promise<BuildDto[]> {
+    return this.buildsService.findAll(projectId);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post()
   @ApiOkResponse({ type: BuildDto })
   @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   create(
     @Body() createBuildDto: CreateBuildDto,
     @Req() request,
