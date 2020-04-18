@@ -4,9 +4,11 @@ import {
   Table,
   BelongsTo,
   ForeignKey,
+  HasMany,
 } from 'sequelize-typescript';
 import { User } from 'src/users/user.entity';
 import { Project } from 'src/projects/project.entity';
+import { Test } from 'src/tests/test.entity';
 
 @Table
 export class Build extends Model<Build> {
@@ -32,4 +34,7 @@ export class Build extends Model<Build> {
 
   @BelongsTo(() => User)
   user: User;
+
+  @HasMany(() => Test)
+  tests: Test[];
 }

@@ -5,6 +5,7 @@ import { BuildDto } from './dto/builds.dto';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { Project } from 'src/projects/project.entity';
 import { User } from 'src/users/user.entity';
+import { Test } from 'src/tests/test.entity';
 
 @Injectable()
 export class BuildsService {
@@ -16,7 +17,7 @@ export class BuildsService {
   async findById(id: number): Promise<BuildDto> {
     const build = await this.buildModel.findOne({
       where: { id },
-      include: [Project, User],
+      include: [Project, User, Test],
     });
     return new BuildDto(build);
   }
@@ -24,7 +25,7 @@ export class BuildsService {
   async findAll(projectId: number): Promise<BuildDto[]> {
     const build = await this.buildModel.findAll({
       where: { projectId },
-      include: [Project, User],
+      include: [Project, User, Test],
     });
     return build.map(b => new BuildDto(b));
   }

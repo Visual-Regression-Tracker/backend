@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Build } from '../build.entity';
+import { Test } from 'src/tests/test.entity';
 
 export class BuildDto {
   @ApiProperty()
@@ -20,6 +21,9 @@ export class BuildDto {
   @ApiProperty()
   readonly createdAt: Date;
 
+  @ApiProperty()
+  readonly tests: Test[];
+
   constructor(build: Build) {
     this.id = build.id;
     this.createdAt = build.createdAt;
@@ -27,5 +31,6 @@ export class BuildDto {
     this.branchName = build.branchName;
     this.createdBy = build.user.email;
     this.projectName = build.project.name;
+    this.tests = build.tests;
   }
 }
