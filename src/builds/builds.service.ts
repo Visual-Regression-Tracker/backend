@@ -25,7 +25,7 @@ export class BuildsService {
   async findAll(projectId: number): Promise<BuildDto[]> {
     const build = await this.buildModel.findAll({
       where: { projectId },
-      include: [Project, User, Test],
+      include: [Project, User],
     });
     return build.map(b => new BuildDto(b));
   }

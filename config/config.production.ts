@@ -23,8 +23,13 @@ const image = {
   uploadPath: process.env.IMG_UPLOAD_FOLDER 
 }
 
+const app = {
+  port: +process.env.APP_PORT
+}
+
 export const config = {
   db,
   jwt,
   image,
+  app,
 };

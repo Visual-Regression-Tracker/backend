@@ -22,8 +22,13 @@ const image = {
   uploadPath: 'imageUploads/'
 }
 
+const app = {
+  port: 4200
+}
+
 export const config = {
   db,
   jwt,
-  image
+  image,
+  app,
 };
