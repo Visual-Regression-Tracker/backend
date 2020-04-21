@@ -6,16 +6,14 @@ import {
   UseGuards,
   Body,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { AppService } from './app.service';
 import { AuthService } from './auth/auth.service';
-import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { JwtAuthGuard } from './auth/guards/auth.guard';
 import { ApiOkResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { UserLoginResponseDto } from './users/dto/user-login-response.dto';
 import { UserLoginRequestDto } from './users/dto/user-login-request.dto';
 import { CreateUserDto } from './users/dto/user-create.dto';
 import { UsersService } from './users/users.service';
-import { User } from './users/user.entity';
 
 @Controller()
 export class AppController {

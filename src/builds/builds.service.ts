@@ -30,12 +30,11 @@ export class BuildsService {
     return build.map(b => new BuildDto(b));
   }
 
-  async create(userId: number, buildDto: CreateBuildDto): Promise<BuildDto> {
+  async create(buildDto: CreateBuildDto): Promise<BuildDto> {
     const build = new Build();
     build.branchName = buildDto.branchName;
     build.projectId = buildDto.projectId;
     build.status = 'new';
-    build.userId = userId;
 
     const buildData = await build.save();
 

@@ -16,6 +16,9 @@ export class User extends Model<User> {
   @Column
   lastName: string;
 
+  @Column
+  apiKey: string;
+
   @Column({ defaultValue: true })
   isActive: boolean;
 

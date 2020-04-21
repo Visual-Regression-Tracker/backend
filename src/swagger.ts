@@ -7,7 +7,7 @@ export function setupSwagger(app: INestApplication) {
     .setDescription('API Documentation')
     .setVersion('1.0')
     .addBearerAuth()
-    .addApiKey()
+    .addApiKey({ type: 'apiKey', name: 'apiKey', in: 'header', description: 'API Key For External calls' })
     .build();
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('api', app, document);

@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './jwt.strategy';
 import { ConfigService } from 'src/shared/config/config.service';
 import { SharedModule } from 'src/shared/shared.module';
+import { ApiGuard } from './guards/api.guard';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { SharedModule } from 'src/shared/shared.module';
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, ApiGuard],
   exports: [AuthService],
 })
 export class AuthModule {}

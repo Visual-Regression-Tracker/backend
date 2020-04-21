@@ -29,7 +29,6 @@ export class BuildDto {
     this.createdAt = build.createdAt;
     this.status = build.status;
     this.branchName = build.branchName;
-    this.createdBy = build.user.email;
     this.projectName = build.project.name;
     this.tests = build.tests;
   }

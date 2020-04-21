@@ -4,6 +4,8 @@ import { InjectModel } from '@nestjs/sequelize';
 import { CreateUserDto } from './dto/user-create.dto';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
 import { genSalt, hash } from 'bcryptjs';
+import uuidAPIKey from 'uuid-apikey';
+import { AuthService } from 'src/auth/auth.service';
 
 @Injectable()
 export class UsersService {
@@ -24,6 +26,12 @@ export class UsersService {
     });
   }
 
+  async getUserByApiKey(apiKey: string): Promise<User> {
+    return await this.userModel.findOne({
+      where: { apiKey },
+    });
+  }
+
   async getUserByEmail(email: string): Promise<User> {
     return await this.userModel.findOne({
       where: { email },
@@ -36,6 +44,7 @@ export class UsersService {
       user.email = createUserDto.email.trim().toLowerCase();
       user.firstName = createUserDto.firstName;
       user.lastName = createUserDto.lastName;
+      user.apiKey = uuidAPIKey.create({ noDashes: true }).apiKey;
 
       const salt = await genSalt(10);
       user.password = await hash(createUserDto.password, salt);
