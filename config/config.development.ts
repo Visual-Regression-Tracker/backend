@@ -23,7 +23,8 @@ const image = {
 }
 
 const app = {
-  port: 4200
+  port: 4200,
+  frontendUrl: 'http://localhost:3000'
 }
 
 export const config = {

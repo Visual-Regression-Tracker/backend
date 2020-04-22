@@ -37,6 +37,9 @@ export class Test extends Model<Test> {
   @Column
   status: string;
 
+  @Column
+  pixelMisMatchCount: number;
+
   @ForeignKey(() => Build)
   @Column
   buildId: number;

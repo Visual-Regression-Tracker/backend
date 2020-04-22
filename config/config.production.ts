@@ -24,7 +24,8 @@ const image = {
 }
 
 const app = {
-  port: +process.env.APP_PORT
+  port: +process.env.APP_PORT,
+  frontendUrl: process.env.APP__FRONTEND_URL
 }
 
 export const config = {

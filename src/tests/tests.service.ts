@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Test } from './test.entity';
-import { CreateTestDto } from './dto/create-test.dto';
+import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { ConfigService } from 'src/shared/config/config.service';
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { PNG } from 'pngjs';
 import { Op } from 'sequelize';
 import Pixelmatch from 'Pixelmatch';
+import { CreateTestResponseDto } from './dto/create-test-response.dto';
 
 @Injectable()
 export class TestsService {
@@ -23,7 +24,7 @@ export class TestsService {
     });
   }
 
-  async create(createTestDto: CreateTestDto): Promise<Test> {
+  async create(createTestDto: CreateTestRequestDto): Promise<CreateTestResponseDto> {
     const lastSuccessTest = await this.findLastSuccessfull(createTestDto);
     const test = new Test();
 
@@ -72,6 +73,7 @@ export class TestsService {
           PNG.sync.write(diff),
         );
         test.diffUrl = diffImageKey;
+        test.pixelMisMatchCount = pixelMisMatchCount;
 
         if (pixelMisMatchCount > 0) {
           // if there is diff
@@ -93,10 +95,12 @@ export class TestsService {
     test.device = createTestDto.device;
     test.buildId = createTestDto.buildId;
 
-    return test.save();
+    const testData = await test.save();
+
+    return new CreateTestResponseDto(testData);
   }
 
-  async findLastSuccessfull(createTestDto: CreateTestDto): Promise<Test> {
+  async findLastSuccessfull(createTestDto: CreateTestRequestDto): Promise<Test> {
     return this.testModel.findOne({
       where: {
         name: createTestDto.name,

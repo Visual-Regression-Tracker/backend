@@ -17,8 +17,9 @@ import {
 import { TestsService } from './tests.service';
 import { Test } from './test.entity';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { CreateTestDto } from './dto/create-test.dto';
+import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
+import { CreateTestResponseDto } from './dto/create-test-response.dto';
 
 @Controller('tests')
 @ApiTags('tests')
@@ -35,10 +36,10 @@ export class TestsController {
   }
 
   @Post()
-  @ApiOkResponse({ type: Test })
+  @ApiOkResponse({ type: CreateTestResponseDto })
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard)
-  create(@Body() createTestDto: CreateTestDto): Promise<Test> {
+  create(@Body() createTestDto: CreateTestRequestDto): Promise<CreateTestResponseDto> {
     return this.testsService.create(createTestDto);
   }
 }

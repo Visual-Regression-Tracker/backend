@@ -18,6 +18,7 @@ export class BuildsService {
     const build = await this.buildModel.findOne({
       where: { id },
       include: [Project, User, Test],
+      order: [['createdAt', 'DESC']],
     });
     return new BuildDto(build);
   }
@@ -26,6 +27,7 @@ export class BuildsService {
     const build = await this.buildModel.findAll({
       where: { projectId },
       include: [Project, User],
+      order: [['createdAt', 'DESC']],
     });
     return build.map(b => new BuildDto(b));
   }
