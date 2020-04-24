@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber } from 'class-validator';
+import { IsString, IsUUID } from 'class-validator';
 
 export class CreateBuildDto {
   @ApiProperty()
@@ -7,6 +7,6 @@ export class CreateBuildDto {
   readonly branchName: string;
 
   @ApiProperty()
-  @IsNumber()
-  readonly projectId: number;
+  @IsUUID()
+  readonly projectId: string;
 }

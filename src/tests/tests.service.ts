@@ -19,7 +19,7 @@ export class TestsService {
     private configService: ConfigService,
   ) {}
 
-  async findOneById(id: number): Promise<Test> {
+  async findOneById(id: string): Promise<Test> {
     return this.testModel.findOne({
       where: { id },
     });
@@ -31,7 +31,7 @@ export class TestsService {
     });
   }
 
-  async approve(testId: number): Promise<CreateTestResponseDto> {
+  async approve(testId: string): Promise<CreateTestResponseDto> {
     const test = await this.findOneById(testId);
     test.baselineUrl = test.imageUrl;
     test.status = TestStatus.ok;
@@ -41,7 +41,7 @@ export class TestsService {
     return new CreateTestResponseDto(testData);
   }
 
-  async reject(testId: number): Promise<CreateTestResponseDto> {
+  async reject(testId: string): Promise<CreateTestResponseDto> {
     const test = await this.findOneById(testId);
     test.status = TestStatus.failed;
 

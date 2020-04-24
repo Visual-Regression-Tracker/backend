@@ -4,7 +4,7 @@ import { Test } from 'src/tests/test.entity';
 
 export class BuildDto {
   @ApiProperty()
-  readonly id: number;
+  readonly id: string;
 
   @ApiProperty()
   readonly projectName: string;

@@ -48,7 +48,7 @@ export class TestsController {
   @ApiOkResponse({ type: CreateTestResponseDto })
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard)
-  approve(@Param('testId', new ParseIntPipe()) testId: number): Promise<CreateTestResponseDto> {
+  approve(@Param('testId') testId: string): Promise<CreateTestResponseDto> {
     return this.testsService.approve(testId);
   }
 
@@ -57,7 +57,7 @@ export class TestsController {
   @ApiOkResponse({ type: CreateTestResponseDto })
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard)
-  reject(@Param('testId', new ParseIntPipe()) testId: number): Promise<CreateTestResponseDto> {
+  reject(@Param('testId') testId: string): Promise<CreateTestResponseDto> {
     return this.testsService.reject(testId);
   }
 }

@@ -1,11 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsBase64 } from 'class-validator';
 import { Test } from '../test.entity';
 import config from 'config';
 
 export class CreateTestResponseDto {
   @ApiProperty()
-  readonly id: number;
+  readonly id: string;
 
   @ApiProperty()
   readonly name: string;

@@ -4,7 +4,6 @@ import {
   Table,
   BelongsTo,
   ForeignKey,
-  Unique,
   DataType,
 } from 'sequelize-typescript';
 import { Build } from 'src/builds/build.entity';
@@ -12,6 +11,13 @@ import { TestStatus } from './test.status';
 
 @Table
 export class Test extends Model<Test> {
+  @Column({
+    type: DataType.UUID,
+    defaultValue: DataType.UUIDV4,
+    primaryKey: true,
+  })
+  id: string;
+
   @Column
   name: string;
 
@@ -50,8 +56,10 @@ export class Test extends Model<Test> {
   pixelMisMatchCount: number;
 
   @ForeignKey(() => Build)
-  @Column
-  buildId: number;
+  @Column({
+    type: DataType.UUID,
+  })
+  buildId: string;
 
   @BelongsTo(() => Build)
   build: Build;

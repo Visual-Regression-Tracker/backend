@@ -5,6 +5,7 @@ import {
   BelongsTo,
   ForeignKey,
   HasMany,
+  DataType,
 } from 'sequelize-typescript';
 import { User } from 'src/users/user.entity';
 import { Project } from 'src/projects/project.entity';
@@ -12,6 +13,13 @@ import { Test } from 'src/tests/test.entity';
 
 @Table
 export class Build extends Model<Build> {
+  @Column({
+    type: DataType.UUID,
+    defaultValue: DataType.UUIDV4,
+    primaryKey: true,
+  })
+  id: string;
+
   @Column
   number: number;
 
@@ -22,15 +30,19 @@ export class Build extends Model<Build> {
   status: string;
 
   @ForeignKey(() => Project)
-  @Column
-  projectId: number;
+  @Column({
+    type: DataType.UUID,
+  })
+  projectId: string;
 
   @BelongsTo(() => Project)
   project: Project;
 
   @ForeignKey(() => User)
-  @Column
-  userId: number;
+  @Column({
+    type: DataType.UUID,
+  })
+  userId: string;
 
   @BelongsTo(() => User)
   user: User;

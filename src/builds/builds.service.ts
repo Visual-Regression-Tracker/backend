@@ -14,7 +14,7 @@ export class BuildsService {
     private buildModel: typeof Build,
   ) {}
 
-  async findById(id: number): Promise<BuildDto> {
+  async findById(id: string): Promise<BuildDto> {
     const build = await this.buildModel.findOne({
       where: { id },
       include: [Project, User, Test],
@@ -23,7 +23,7 @@ export class BuildsService {
     return new BuildDto(build);
   }
 
-  async findAll(projectId: number): Promise<BuildDto[]> {
+  async findAll(projectId: string): Promise<BuildDto[]> {
     const build = await this.buildModel.findAll({
       where: { projectId },
       include: [Project, User],
