@@ -9,6 +9,7 @@ import { PNG } from 'pngjs';
 import { Op } from 'sequelize';
 import Pixelmatch from 'Pixelmatch';
 import { CreateTestResponseDto } from './dto/create-test-response.dto';
+import { TestStatus } from './test.status';
 
 @Injectable()
 export class TestsService {
@@ -33,7 +34,7 @@ export class TestsService {
   async approve(testId: number): Promise<CreateTestResponseDto> {
     const test = await this.findOneById(testId);
     test.baselineUrl = test.imageUrl;
-    test.status = 'ok';
+    test.status = TestStatus.ok;
 
     const testData = await test.save();
 
@@ -42,7 +43,7 @@ export class TestsService {
 
   async reject(testId: number): Promise<CreateTestResponseDto> {
     const test = await this.findOneById(testId);
-    test.status = 'failed';
+    test.status = TestStatus.failed;
 
     const testData = await test.save();
 
@@ -102,15 +103,15 @@ export class TestsService {
 
         if (pixelMisMatchCount > 0) {
           // if there is diff
-          test.status = 'unresolved';
+          test.status = TestStatus.unresolved;
         } else {
           // if ther is NO diff
-          test.status = 'ok';
+          test.status = TestStatus.ok;
         }
       }
     } else {
       // no baseline
-      test.status = 'new';
+      test.status = TestStatus.new;
     }
 
     test.imageUrl = imageName;

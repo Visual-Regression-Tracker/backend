@@ -5,8 +5,10 @@ import {
   BelongsTo,
   ForeignKey,
   Unique,
+  DataType,
 } from 'sequelize-typescript';
 import { Build } from 'src/builds/build.entity';
+import { TestStatus } from './test.status';
 
 @Table
 export class Test extends Model<Test> {
@@ -34,8 +36,15 @@ export class Test extends Model<Test> {
   @Column
   device: string;
 
-  @Column
-  status: string;
+  @Column({
+    type: DataType.ENUM(
+      TestStatus.new,
+      TestStatus.unresolved,
+      TestStatus.ok,
+      TestStatus.failed,
+    ),
+  })
+  status: TestStatus;
 
   @Column
   pixelMisMatchCount: number;
