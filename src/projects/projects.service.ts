@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Project } from './project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { Build } from 'src/builds/build.entity';
 
 @Injectable()
 export class ProjectsService {
@@ -14,9 +15,17 @@ export class ProjectsService {
     return this.projectModel.findAll();
   }
 
+  async findOneById(id: string): Promise<Project> {
+    return this.projectModel.findOne({
+      where: { id },
+      include: [Build],
+      order: [['builds', 'createdAt', 'DESC']],
+    });
+  }
+
   async create(createProjectDto: CreateProjectDto): Promise<Project> {
-      const project = new Project()
-      project.name = createProjectDto.name;
+    const project = new Project();
+    project.name = createProjectDto.name;
 
     return project.save();
   }

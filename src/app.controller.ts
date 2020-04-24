@@ -6,7 +6,6 @@ import {
   UseGuards,
   Body,
 } from '@nestjs/common';
-import { AppService } from './app.service';
 import { AuthService } from './auth/auth.service';
 import { JwtAuthGuard } from './auth/guards/auth.guard';
 import { ApiOkResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -18,15 +17,9 @@ import { UsersService } from './users/users.service';
 @Controller()
 export class AppController {
   constructor(
-    private appService: AppService,
     private authService: AuthService,
     private usersService: UsersService,
   ) {}
-
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
-  }
 
   @Post('auth/login')
   @ApiOkResponse({ type: UserLoginResponseDto })

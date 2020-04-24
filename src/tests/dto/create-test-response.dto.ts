@@ -1,28 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Test } from '../test.entity';
 import config from 'config';
+import { TestDto } from './test.dto';
 
-export class CreateTestResponseDto {
-  @ApiProperty()
-  readonly id: string;
-
-  @ApiProperty()
-  readonly name: string;
-
-  @ApiProperty()
-  readonly status: string;
-
-  @ApiProperty()
-  readonly pixelMisMatchCount: number;
-
+export class CreateTestResponseDto extends TestDto {
   @ApiProperty()
   readonly url: string;
 
   constructor(test: Test) {
-    this.id = test.id;
-    this.name = test.name;
-    this.status = test.status;
-    this.pixelMisMatchCount = test.pixelMisMatchCount;
+    super(test);
     this.url = `${config.app.frontendUrl}/test/${test.id}`;
   }
 }

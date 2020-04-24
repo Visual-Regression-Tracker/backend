@@ -10,7 +10,13 @@ import {
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { BuildDto } from './dto/builds.dto';
-import { ApiOkResponse, ApiBearerAuth, ApiTags, ApiParam, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiOkResponse,
+  ApiBearerAuth,
+  ApiTags,
+  ApiParam,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
 
@@ -19,13 +25,13 @@ import { ApiGuard } from 'src/auth/guards/api.guard';
 export class BuildsController {
   constructor(private buildsService: BuildsService) {}
 
-  @Get(':projectId')
-  @ApiParam({ name: 'projectId', required: true })
-  @ApiOkResponse({ type: [BuildDto] })
+  @Get(':id')
+  @ApiParam({ name: 'id', required: true })
+  @ApiOkResponse({ type: BuildDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getAll(@Param('projectId', new ParseUUIDPipe()) projectId: string): Promise<BuildDto[]> {
-    return this.buildsService.findAll(projectId);
+  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
+    return this.buildsService.findById(id);
   }
 
   @Post()

@@ -10,6 +10,7 @@ import { Op } from 'sequelize';
 import Pixelmatch from 'Pixelmatch';
 import { CreateTestResponseDto } from './dto/create-test-response.dto';
 import { TestStatus } from './test.status';
+import { TestDto } from './dto/test.dto';
 
 @Injectable()
 export class TestsService {
@@ -31,20 +32,29 @@ export class TestsService {
     });
   }
 
-  async approve(testId: string): Promise<Test> {
+  async getDetails(testId: string): Promise<TestDto> {
+    const testData = await this.findOneById(testId);
+    return new TestDto(testData);
+  }
+
+  async approve(testId: string): Promise<TestDto> {
     const test = await this.findOneById(testId);
     test.baselineUrl = test.imageUrl;
     test.diffUrl = null;
     test.status = TestStatus.ok;
 
-    return test.save();
+    const testData = await test.save();
+
+    return new TestDto(testData);
   }
 
-  async reject(testId: string): Promise<Test> {
+  async reject(testId: string): Promise<TestDto> {
     const test = await this.findOneById(testId);
     test.status = TestStatus.failed;
 
-    return test.save();
+    const testData = await test.save();
+
+    return new TestDto(testData);
   }
 
   async create(createTestDto: CreateTestRequestDto): Promise<CreateTestResponseDto> {

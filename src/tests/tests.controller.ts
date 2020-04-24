@@ -16,24 +16,24 @@ import {
   ApiSecurity,
 } from '@nestjs/swagger';
 import { TestsService } from './tests.service';
-import { Test } from './test.entity';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
 import { CreateTestResponseDto } from './dto/create-test-response.dto';
+import { TestDto } from './dto/test.dto';
 
 @Controller('tests')
 @ApiTags('tests')
 export class TestsController {
   constructor(private testsService: TestsService) {}
 
-  @Get(':buildId')
-  @ApiParam({ name: 'buildId', required: true })
-  @ApiOkResponse({ type: [Test] })
+  @Get(':id')
+  @ApiParam({ name: 'id', required: true })
+  @ApiOkResponse({ type: TestDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getAll(@Param('buildId', new ParseUUIDPipe()) buildId: string): Promise<Test[]> {
-    return this.testsService.findAll(buildId);
+  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestDto> {
+    return this.testsService.getDetails(id);
   }
 
   @Post()
@@ -46,19 +46,19 @@ export class TestsController {
 
   @Get('approve/:testId')
   @ApiParam({ name: 'testId', required: true })
-  @ApiOkResponse({ type: Test })
+  @ApiOkResponse({ type: TestDto })
   @ApiSecurity('api_key')
   @UseGuards(JwtAuthGuard)
-  approve(@Param('testId', new ParseUUIDPipe()) testId: string): Promise<Test> {
+  approve(@Param('testId', new ParseUUIDPipe()) testId: string): Promise<TestDto> {
     return this.testsService.approve(testId);
   }
 
   @Get('reject/:testId')
   @ApiParam({ name: 'testId', required: true })
-  @ApiOkResponse({ type: Test })
+  @ApiOkResponse({ type: TestDto })
   @ApiSecurity('api_key')
   @UseGuards(JwtAuthGuard)
-  reject(@Param('testId', new ParseUUIDPipe()) testId: string): Promise<Test> {
+  reject(@Param('testId', new ParseUUIDPipe()) testId: string): Promise<TestDto> {
     return this.testsService.reject(testId);
   }
 }

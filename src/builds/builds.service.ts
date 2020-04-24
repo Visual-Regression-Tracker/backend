@@ -23,15 +23,6 @@ export class BuildsService {
     return new BuildDto(build);
   }
 
-  async findAll(projectId: string): Promise<BuildDto[]> {
-    const build = await this.buildModel.findAll({
-      where: { projectId },
-      include: [Project, User],
-      order: [['createdAt', 'DESC']],
-    });
-    return build.map(b => new BuildDto(b));
-  }
-
   async create(buildDto: CreateBuildDto): Promise<BuildDto> {
     const build = new Build();
     build.branchName = buildDto.branchName;
