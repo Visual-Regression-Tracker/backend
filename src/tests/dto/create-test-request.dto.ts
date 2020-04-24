@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsBase64, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsBase64, IsUUID } from 'class-validator';
 
 export class CreateTestRequestDto {
   @ApiProperty()

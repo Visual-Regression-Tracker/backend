@@ -25,7 +25,7 @@ export class TestsService {
     });
   }
 
-  async findAll(buildId: number): Promise<Test[]> {
+  async findAll(buildId: string): Promise<Test[]> {
     return this.testModel.findAll({
       where: { buildId },
     });

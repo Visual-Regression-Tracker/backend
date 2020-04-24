@@ -5,6 +5,7 @@ import {
   Post,
   Body,
   Param,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
@@ -23,7 +24,7 @@ export class BuildsController {
   @ApiOkResponse({ type: [BuildDto] })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getAll(@Param('projectId') projectId: string): Promise<BuildDto[]> {
+  getAll(@Param('projectId', new ParseUUIDPipe()) projectId: string): Promise<BuildDto[]> {
     return this.buildsService.findAll(projectId);
   }
 

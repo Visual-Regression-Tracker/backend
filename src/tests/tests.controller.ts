@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Post,
   Body,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -31,7 +32,7 @@ export class TestsController {
   @ApiOkResponse({ type: [Test] })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getAll(@Param('buildId', new ParseIntPipe()) buildId: number): Promise<Test[]> {
+  getAll(@Param('buildId', new ParseUUIDPipe()) buildId: string): Promise<Test[]> {
     return this.testsService.findAll(buildId);
   }
 
@@ -48,7 +49,7 @@ export class TestsController {
   @ApiOkResponse({ type: CreateTestResponseDto })
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard)
-  approve(@Param('testId') testId: string): Promise<CreateTestResponseDto> {
+  approve(@Param('testId', new ParseUUIDPipe()) testId: string): Promise<CreateTestResponseDto> {
     return this.testsService.approve(testId);
   }
 
@@ -57,7 +58,7 @@ export class TestsController {
   @ApiOkResponse({ type: CreateTestResponseDto })
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard)
-  reject(@Param('testId') testId: string): Promise<CreateTestResponseDto> {
+  reject(@Param('testId', new ParseUUIDPipe()) testId: string): Promise<CreateTestResponseDto> {
     return this.testsService.reject(testId);
   }
 }
