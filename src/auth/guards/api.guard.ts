@@ -14,8 +14,8 @@ export class ApiGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request: Request = context.switchToHttp().getRequest();
     try {
-      await this.usersService.getUserByApiKey(request.header('apiKey'));
-      return true;
+      const user = await this.usersService.getUserByApiKey(request.header('apiKey'));
+      return !!user;
     } catch {
       throw new UnauthorizedException();
     }

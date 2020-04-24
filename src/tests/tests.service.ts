@@ -31,23 +31,20 @@ export class TestsService {
     });
   }
 
-  async approve(testId: string): Promise<CreateTestResponseDto> {
+  async approve(testId: string): Promise<Test> {
     const test = await this.findOneById(testId);
     test.baselineUrl = test.imageUrl;
+    test.diffUrl = null;
     test.status = TestStatus.ok;
 
-    const testData = await test.save();
-
-    return new CreateTestResponseDto(testData);
+    return test.save();
   }
 
-  async reject(testId: string): Promise<CreateTestResponseDto> {
+  async reject(testId: string): Promise<Test> {
     const test = await this.findOneById(testId);
     test.status = TestStatus.failed;
 
-    const testData = await test.save();
-
-    return new CreateTestResponseDto(testData);
+    return test.save();
   }
 
   async create(createTestDto: CreateTestRequestDto): Promise<CreateTestResponseDto> {
