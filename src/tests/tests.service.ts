@@ -18,10 +18,35 @@ export class TestsService {
     private configService: ConfigService,
   ) {}
 
+  async findOneById(id: number): Promise<Test> {
+    return this.testModel.findOne({
+      where: { id },
+    });
+  }
+
   async findAll(buildId: number): Promise<Test[]> {
     return this.testModel.findAll({
       where: { buildId },
     });
+  }
+
+  async approve(testId: number): Promise<CreateTestResponseDto> {
+    const test = await this.findOneById(testId);
+    test.baselineUrl = test.imageUrl;
+    test.status = 'ok';
+
+    const testData = await test.save();
+
+    return new CreateTestResponseDto(testData);
+  }
+
+  async reject(testId: number): Promise<CreateTestResponseDto> {
+    const test = await this.findOneById(testId);
+    test.status = 'failed';
+
+    const testData = await test.save();
+
+    return new CreateTestResponseDto(testData);
   }
 
   async create(createTestDto: CreateTestRequestDto): Promise<CreateTestResponseDto> {
@@ -84,6 +109,7 @@ export class TestsService {
         }
       }
     } else {
+      // no baseline
       test.status = 'new';
     }
 

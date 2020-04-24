@@ -5,6 +5,9 @@ import config from 'config';
 
 export class CreateTestResponseDto {
   @ApiProperty()
+  readonly id: number;
+
+  @ApiProperty()
   readonly name: string;
 
   @ApiProperty()
@@ -17,6 +20,7 @@ export class CreateTestResponseDto {
   readonly url: string;
 
   constructor(test: Test) {
+    this.id = test.id;
     this.name = test.name;
     this.status = test.status;
     this.pixelMisMatchCount = test.pixelMisMatchCount;

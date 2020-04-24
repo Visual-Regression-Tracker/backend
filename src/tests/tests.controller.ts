@@ -42,4 +42,22 @@ export class TestsController {
   create(@Body() createTestDto: CreateTestRequestDto): Promise<CreateTestResponseDto> {
     return this.testsService.create(createTestDto);
   }
+
+  @Get('approve/:testId')
+  @ApiParam({ name: 'testId', required: true })
+  @ApiOkResponse({ type: CreateTestResponseDto })
+  @ApiSecurity('api_key')
+  @UseGuards(ApiGuard)
+  approve(@Param('testId', new ParseIntPipe()) testId: number): Promise<CreateTestResponseDto> {
+    return this.testsService.approve(testId);
+  }
+
+  @Get('reject/:testId')
+  @ApiParam({ name: 'testId', required: true })
+  @ApiOkResponse({ type: CreateTestResponseDto })
+  @ApiSecurity('api_key')
+  @UseGuards(ApiGuard)
+  reject(@Param('testId', new ParseIntPipe()) testId: number): Promise<CreateTestResponseDto> {
+    return this.testsService.reject(testId);
+  }
 }
