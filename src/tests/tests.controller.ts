@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Body,
   ParseUUIDPipe,
 } from '@nestjs/common';
@@ -21,6 +22,7 @@ import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
 import { CreateTestResponseDto } from './dto/create-test-response.dto';
 import { TestDto } from './dto/test.dto';
+import { UpdateIgnoreAreaDto } from './dto/update-ignoreArea.dto';
 
 @Controller('tests')
 @ApiTags('tests')
@@ -34,6 +36,14 @@ export class TestsController {
   @UseGuards(JwtAuthGuard)
   getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestDto> {
     return this.testsService.getDetails(id);
+  }
+
+  @Put()
+  @ApiOkResponse({ type: TestDto })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  updateIgnoreAreas(@Body() updateIgnoreAreaDto: UpdateIgnoreAreaDto): Promise<TestDto> {
+    return this.testsService.updateIgnoreAreas(updateIgnoreAreaDto);
   }
 
   @Post()

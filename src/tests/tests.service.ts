@@ -11,18 +11,24 @@ import Pixelmatch from 'Pixelmatch';
 import { CreateTestResponseDto } from './dto/create-test-response.dto';
 import { TestStatus } from './test.status';
 import { TestDto } from './dto/test.dto';
+import { IgnoreArea } from './ignoreArea.entity';
+import { IgnoreAreaDto } from './dto/ignoreArea.dto';
+import { UpdateIgnoreAreaDto } from './dto/update-ignoreArea.dto';
 
 @Injectable()
 export class TestsService {
   constructor(
     @InjectModel(Test)
     private testModel: typeof Test,
+    @InjectModel(IgnoreArea)
+    private ignoreAreaModel: typeof IgnoreArea,
     private configService: ConfigService,
   ) {}
 
   async findOneById(id: string): Promise<Test> {
     return this.testModel.findOne({
       where: { id },
+      include: [IgnoreArea],
     });
   }
 
@@ -55,6 +61,27 @@ export class TestsService {
     const testData = await test.save();
 
     return new TestDto(testData);
+  }
+
+  async updateIgnoreAreas(updateIgnoreAreaDto: UpdateIgnoreAreaDto): Promise<TestDto> {
+    // delete all ignore areas
+    await this.ignoreAreaModel.destroy({
+      where: { testId: updateIgnoreAreaDto.testId },
+    });
+
+    // save new ignore areas
+    const ignoreAreas = updateIgnoreAreaDto.ignoreAreas.map(areaDto => {
+      const ignoreArea = new IgnoreArea();
+      ignoreArea.x = areaDto.x;
+      ignoreArea.y = areaDto.y;
+      ignoreArea.height = areaDto.height;
+      ignoreArea.width = areaDto.width;
+      ignoreArea.testId = updateIgnoreAreaDto.testId;
+      return ignoreArea.save();
+    });
+    await Promise.all(ignoreAreas);
+
+    return this.getDetails(updateIgnoreAreaDto.testId);
   }
 
   async create(createTestDto: CreateTestRequestDto): Promise<CreateTestResponseDto> {

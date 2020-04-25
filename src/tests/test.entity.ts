@@ -5,9 +5,11 @@ import {
   BelongsTo,
   ForeignKey,
   DataType,
+  HasMany,
 } from 'sequelize-typescript';
 import { Build } from 'src/builds/build.entity';
 import { TestStatus } from './test.status';
+import { IgnoreArea } from './ignoreArea.entity';
 
 @Table
 export class Test extends Model<Test> {
@@ -63,4 +65,7 @@ export class Test extends Model<Test> {
 
   @BelongsTo(() => Build)
   build: Build;
+
+  @HasMany(() => IgnoreArea)
+  ignoreAreas: IgnoreArea[]
 }

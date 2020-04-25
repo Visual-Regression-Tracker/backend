@@ -4,33 +4,33 @@ import { IsString, IsOptional, IsBase64, IsUUID } from 'class-validator';
 export class CreateTestRequestDto {
   @ApiProperty()
   @IsString()
-  readonly name: string;
+  name: string;
 
   @ApiProperty()
   @IsBase64()
-  readonly imageBase64: string;
+  imageBase64: string;
 
   @ApiProperty()
   @IsOptional()
   @IsString()
-  readonly os: string;
+  os: string;
 
   @ApiProperty()
   @IsOptional()
   @IsString()
-  readonly browser: string;
+  browser: string;
 
   @ApiProperty()
   @IsOptional()
   @IsString()
-  readonly viewport: string;
+  viewport: string;
 
   @ApiProperty()
   @IsOptional()
   @IsString()
-  readonly device: string;
+  device: string;
 
   @ApiProperty()
   @IsUUID()
-  readonly buildId: string;
+  buildId: string;
 }

@@ -4,9 +4,10 @@ import { TestsService } from './tests.service';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { Test } from './test.entity';
 import { UsersModule } from 'src/users/users.module';
+import { IgnoreArea } from './ignoreArea.entity';
 
 @Module({
-  imports: [SequelizeModule.forFeature([Test]), UsersModule],
+  imports: [SequelizeModule.forFeature([Test, IgnoreArea]), UsersModule],
   controllers: [TestsController],
   providers: [TestsService],
 })
