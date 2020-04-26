@@ -7,8 +7,7 @@ import {
   DataType,
 } from 'sequelize-typescript';
 import { Build } from '../builds/build.entity';
-import { TestStatus } from '../tests/test.status';
-import { Test } from '../tests/test.entity';
+import { TestStatus } from './test.status';
 import { TestVariation } from 'src/test-variations/testVariation.entity';
 
 @Table

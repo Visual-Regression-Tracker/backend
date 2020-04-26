@@ -6,24 +6,30 @@ import config from 'config';
 
 export class TestRunDto {
   @ApiProperty()
+  @IsString()
   readonly id: string;
 
   @ApiProperty()
   readonly testVariation: TestVariationDto;
 
   @ApiProperty()
+  @IsString()
   readonly imageName: string;
 
   @ApiProperty()
+  @IsString()
   readonly diffName: string;
 
   @ApiProperty()
+  @IsString()
   readonly status: string;
 
   @ApiProperty()
+  @IsNumber()
   readonly pixelMisMatchCount: number;
 
   @ApiProperty()
+  @IsString()
   readonly url: string;
 
   constructor(testRun: TestRun) {

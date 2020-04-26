@@ -1,30 +1,38 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsUUID, IsJSON } from 'class-validator';
 import { IgnoreAreaDto } from './ignore-area.dto';
 
 export class TestVariationDto {
   @ApiProperty()
+  @IsUUID()
   readonly id: string;
 
   @ApiProperty()
+  @IsString()
   readonly name: string;
 
   @ApiProperty()
+  @IsString()
   readonly baselineName: string;
 
   @ApiProperty()
+  @IsString()
   readonly os: string;
 
   @ApiProperty()
+  @IsString()
   readonly browser: string;
 
   @ApiProperty()
+  @IsString()
   readonly viewport: string;
 
   @ApiProperty()
+  @IsString()
   readonly device: string;
 
   @ApiProperty()
+  @IsJSON()
   readonly ignoreAreas: IgnoreAreaDto[];
 
   constructor(testVariation: TestVariationDto) {

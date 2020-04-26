@@ -4,10 +4,9 @@ import { TestRun } from './testRun.entity';
 import { PNG } from 'pngjs';
 import { writeFileSync, readFileSync } from 'fs';
 import { resolve } from 'path';
-import { TestStatus } from 'src/tests/test.status';
+import { TestStatus } from 'src/test-runs/test.status';
 import { ConfigService } from 'src/shared/config/config.service';
 import Pixelmatch from 'Pixelmatch';
-import { IgnoreArea } from 'src/tests/ignoreArea.entity';
 import { TestVariation } from 'src/test-variations/testVariation.entity';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
 import { TestRunDto } from 'src/test/dto/test-run.dto';
@@ -117,7 +116,7 @@ export class TestRunsService {
     return await testRun.save();
   }
 
-  private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreArea[]): Buffer {
+  private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buffer {
     ignoreAreas.forEach(area => {
       for (let y = area.y; y < area.y + area.height; y++) {
         for (let x = area.x; x < area.x + area.width; x++) {

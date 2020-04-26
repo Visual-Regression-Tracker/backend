@@ -1,6 +1,6 @@
 import { Column, Model, Table, DataType, HasMany } from 'sequelize-typescript';
-import { IgnoreArea } from '../tests/ignoreArea.entity';
 import { TestRun } from 'src/test-runs/testRun.entity';
+import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
 
 @Table
 export class TestVariation extends Model<TestVariation> {
@@ -33,7 +33,7 @@ export class TestVariation extends Model<TestVariation> {
     type: DataType.JSON,
     defaultValue: [],
   })
-  ignoreAreas: IgnoreArea[];
+  ignoreAreas: IgnoreAreaDto[];
 
   @HasMany(() => TestRun)
   testRuns: TestRun[];
