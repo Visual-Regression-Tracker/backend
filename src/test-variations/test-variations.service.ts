@@ -15,10 +15,10 @@ export class TestVariationsService {
     return this.testVariationModel.findOrCreate({
       where: {
         name: createTestDto.name,
-        os: createTestDto.os,
-        browser: createTestDto.browser,
-        viewport: createTestDto.viewport,
-        device: createTestDto.device,
+        os: createTestDto.os ? createTestDto.os : null,
+        browser: createTestDto.browser ? createTestDto.browser : null,
+        viewport: createTestDto.viewport ? createTestDto.viewport : null,
+        device: createTestDto.device ? createTestDto.device : null,
       },
     });
   }
