@@ -116,6 +116,12 @@ export class TestRunsService {
     return await testRun.save();
   }
 
+  async delete(id: string): Promise<number> {
+    return this.testRunModel.destroy({
+      where: { id },
+    });
+  }
+
   private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buffer {
     ignoreAreas.forEach(area => {
       for (let y = area.y; y < area.y + area.height; y++) {

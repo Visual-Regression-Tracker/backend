@@ -25,13 +25,17 @@ export class TestService {
     return new TestRunDto(testRun);
   }
 
-  async postTestRunResult(createTestRequestDto: CreateTestRequestDto): Promise<TestRunDto> {
+  async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunDto> {
     const [testVariation] = await this.testVariationService.findOrCreate(createTestRequestDto);
 
     const testRun = await this.testRunsService.create(testVariation, createTestRequestDto);
 
     const testRunDetails = await this.testRunsService.findOne(testRun.id);
     return new TestRunDto(testRunDetails);
+  }
+
+  async deleteTestRun(id: string): Promise<number> {
+    return this.testRunsService.delete(id);
   }
 
   async approveTestRun(testRunId: string): Promise<TestRunDto> {

@@ -1,4 +1,14 @@
-import { Controller, Get, UseGuards, Param, ParseUUIDPipe, Post, Body, Put } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  UseGuards,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Body,
+  Put,
+  Delete,
+} from '@nestjs/common';
 import { ApiTags, ApiParam, ApiOkResponse, ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { TestRunDto } from './dto/test-run.dto';
@@ -27,6 +37,7 @@ export class TestController {
   @Get('approve/:testRunId')
   @ApiParam({ name: 'testRunId', required: true })
   @ApiOkResponse({ type: TestRunDto })
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   approveTestRun(@Param('testRunId', new ParseUUIDPipe()) testRunId: string): Promise<TestRunDto> {
     return this.testService.approveTestRun(testRunId);
@@ -35,17 +46,10 @@ export class TestController {
   @Get('reject/:testRunId')
   @ApiParam({ name: 'testRunId', required: true })
   @ApiOkResponse({ type: TestRunDto })
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   rejectTestRun(@Param('testRunId', new ParseUUIDPipe()) testRunId: string): Promise<TestRunDto> {
     return this.testService.rejectTestRun(testRunId);
-  }
-
-  @Post()
-  @ApiOkResponse({ type: TestRunDto })
-  @ApiSecurity('api_key')
-  @UseGuards(ApiGuard)
-  postTestRunResult(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRunDto> {
-    return this.testService.postTestRunResult(createTestRequestDto);
   }
 
   @Put('ignoreArea/:variationId')
@@ -57,5 +61,22 @@ export class TestController {
     @Body() ignoreAreas: IgnoreAreaDto[],
   ): Promise<[number, TestVariationDto[]]> {
     return this.testService.updateIgnoreAreas(variationId, ignoreAreas);
+  }
+
+  @Post()
+  @ApiOkResponse({ type: TestRunDto })
+  @ApiSecurity('api_key')
+  @UseGuards(ApiGuard)
+  postTestRun(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRunDto> {
+    return this.testService.postTestRun(createTestRequestDto);
+  }
+
+  @Delete('/:testRunId')
+  @ApiParam({ name: 'testRunId', required: true })
+  @ApiOkResponse({ type: Number })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  deleteTestRun(@Param('testRunId', new ParseUUIDPipe()) testRunId: string): Promise<number> {
+    return this.testService.deleteTestRun(testRunId);
   }
 }
