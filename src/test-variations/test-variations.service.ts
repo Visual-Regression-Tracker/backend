@@ -10,9 +10,7 @@ export class TestVariationsService {
     private testVariationModel: typeof TestVariation,
   ) {}
 
-  async findOrCreate(
-    createTestDto: CreateTestRequestDto,
-  ): Promise<[TestVariation, boolean]> {
+  async findOrCreate(createTestDto: CreateTestRequestDto): Promise<[TestVariation, boolean]> {
     return this.testVariationModel.findOrCreate({
       where: {
         name: createTestDto.name,

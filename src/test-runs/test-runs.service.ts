@@ -8,9 +8,9 @@ import { TestStatus } from 'src/tests/test.status';
 import { ConfigService } from 'src/shared/config/config.service';
 import Pixelmatch from 'Pixelmatch';
 import { IgnoreArea } from 'src/tests/ignoreArea.entity';
-import { Test } from 'src/tests/test.entity';
 import { TestVariation } from 'src/test-variations/testVariation.entity';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
+import { TestRunDto } from 'src/test/dto/test-run.dto';
 
 @Injectable()
 export class TestRunsService {
@@ -20,7 +20,7 @@ export class TestRunsService {
     private configService: ConfigService,
   ) {}
 
-  async getAllByBuildId(buildId: string): Promise<TestRun[]> {
+  async getAll(buildId: string): Promise<TestRun[]> {
     return this.testRunModel.findAll({
       where: { buildId },
       include: [TestVariation],
@@ -35,15 +35,33 @@ export class TestRunsService {
     });
   }
 
-  async create(testVariation: TestVariation, createTestRequestDto: CreateTestRequestDto): Promise<TestRun> {
+  async approve(id: string): Promise<TestRunDto> {
+    const testRun = await this.findOne(id);
+    testRun.status = TestStatus.ok;
+    testRun.testVariation.baselineName = testRun.imageName;
+
+    const [testData] = await Promise.all([testRun.save(), testRun.testVariation.save()]);
+
+    return new TestRunDto(testData);
+  }
+
+  async reject(id: string): Promise<TestRunDto> {
+    const testRun = await this.findOne(id);
+    testRun.status = TestStatus.failed;
+
+    const testData = await testRun.save();
+    return new TestRunDto(testData);
+  }
+
+  async create(
+    testVariation: TestVariation,
+    createTestRequestDto: CreateTestRequestDto,
+  ): Promise<TestRun> {
     // save image
     const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
     const imageName = `${Date.now()}.screenshot.png`;
     const image = PNG.sync.read(imageBuffer);
-    writeFileSync(
-      resolve(this.configService.imgConfig.uploadPath, imageName),
-      imageBuffer,
-    );
+    writeFileSync(resolve(this.configService.imgConfig.uploadPath, imageName), imageBuffer);
 
     // create test run
     const testRun = new TestRun();

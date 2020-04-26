@@ -31,6 +31,7 @@ export class TestVariation extends Model<TestVariation> {
 
   @Column({
     type: DataType.JSON,
+    defaultValue: [],
   })
   ignoreAreas: IgnoreArea[];
 
