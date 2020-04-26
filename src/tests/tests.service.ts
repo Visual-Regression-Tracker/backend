@@ -32,6 +32,20 @@ export class TestsService {
     });
   }
 
+  async findLastUpdatedTest(createTestDto: CreateTestRequestDto): Promise<Test> {
+    return this.testModel.findOne({
+      where: {
+        name: createTestDto.name,
+        os: createTestDto.os,
+        browser: createTestDto.browser,
+        viewport: createTestDto.viewport,
+        device: createTestDto.device,
+      },
+      include: [IgnoreArea],
+      order: [['updatedAt', 'DESC']],
+    });
+  }
+
   async findAll(buildId: string): Promise<Test[]> {
     return this.testModel.findAll({
       where: { buildId },
@@ -85,9 +99,6 @@ export class TestsService {
   }
 
   async create(createTestDto: CreateTestRequestDto): Promise<CreateTestResponseDto> {
-    const lastSuccessTest = await this.findLastSuccessfull(createTestDto);
-    const test = new Test();
-
     // save image
     const imageBuffer = Buffer.from(createTestDto.imageBase64, 'base64');
     const imageName = `${Date.now()}.${createTestDto.name}.screenshot.png`;
@@ -97,14 +108,27 @@ export class TestsService {
       imageBuffer,
     );
 
-    if (lastSuccessTest) {
+    const test = new Test();
+    test.imageUrl = imageName;
+    test.name = createTestDto.name;
+    test.os = createTestDto.os;
+    test.browser = createTestDto.browser;
+    test.viewport = createTestDto.viewport;
+    test.device = createTestDto.device;
+    test.buildId = createTestDto.buildId;
+
+    const lastUpdatedTest = await this.findLastUpdatedTest(createTestDto);
+    // copy baseline from last updated test
+    if (lastUpdatedTest) {
       // get latest baseline
-      test.baselineUrl = lastSuccessTest.baselineUrl;
+      test.baselineUrl = lastUpdatedTest.baselineUrl;
+      // get latest ignore areas
+      test.ignoreAreas = lastUpdatedTest.ignoreAreas
 
       if (test.baselineUrl) {
         const baseline = PNG.sync.read(
           readFileSync(
-            resolve(this.configService.imgConfig.uploadPath, lastSuccessTest.baselineUrl),
+            resolve(this.configService.imgConfig.uploadPath, lastUpdatedTest.baselineUrl),
           ),
         );
 
@@ -116,8 +140,8 @@ export class TestsService {
 
         // compare
         const pixelMisMatchCount = Pixelmatch(
-          baseline.data,
-          image.data,
+          this.applyIgnoreAreas(baseline, lastUpdatedTest.ignoreAreas),
+          this.applyIgnoreAreas(image, lastUpdatedTest.ignoreAreas),
           diff.data,
           baseline.width,
           baseline.height,
@@ -147,31 +171,23 @@ export class TestsService {
       // no baseline
       test.status = TestStatus.new;
     }
-
-    test.imageUrl = imageName;
-    test.name = createTestDto.name;
-    test.os = createTestDto.os;
-    test.browser = createTestDto.browser;
-    test.viewport = createTestDto.viewport;
-    test.device = createTestDto.device;
-    test.buildId = createTestDto.buildId;
-
     const testData = await test.save();
 
     return new CreateTestResponseDto(testData);
   }
 
-  async findLastSuccessfull(createTestDto: CreateTestRequestDto): Promise<Test> {
-    return this.testModel.findOne({
-      where: {
-        name: createTestDto.name,
-        os: createTestDto.os,
-        browser: createTestDto.browser,
-        viewport: createTestDto.viewport,
-        device: createTestDto.device,
-        baselineUrl: { [Op.ne]: null },
-      },
-      order: [['createdAt', 'DESC']],
+  private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreArea[]): Buffer {
+    ignoreAreas.forEach(area => {
+      for (let y = area.y; y < area.y + area.height; y++) {
+        for (let x = area.x; x < area.x + area.width; x++) {
+          const k = 4 * (image.width * y + x);
+          image.data[k + 0] = 0;
+          image.data[k + 1] = 0;
+          image.data[k + 2] = 0;
+          image.data[k + 3] = 0;
+        }
+      }
     });
+    return image.data;
   }
 }
