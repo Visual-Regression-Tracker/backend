@@ -9,18 +9,35 @@ import { ConfigService } from 'src/shared/config/config.service';
 import Pixelmatch from 'Pixelmatch';
 import { IgnoreArea } from 'src/tests/ignoreArea.entity';
 import { Test } from 'src/tests/test.entity';
+import { TestVariation } from 'src/test-variations/testVariation.entity';
+import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
 
 @Injectable()
 export class TestRunsService {
   constructor(
-    // @InjectModel(TestRun)
-    // private testRunModel: typeof TestRun,
+    @InjectModel(TestRun)
+    private testRunModel: typeof TestRun,
     private configService: ConfigService,
   ) {}
 
-  async create(test: Test, buildId: string, imageBase64: string): Promise<TestRun> {
+  async getAllByBuildId(buildId: string): Promise<TestRun[]> {
+    return this.testRunModel.findAll({
+      where: { buildId },
+      include: [TestVariation],
+      order: [['createdAt', 'DESC']],
+    });
+  }
+
+  async findOne(id: string): Promise<TestRun> {
+    return this.testRunModel.findOne({
+      where: { id },
+      include: [TestVariation],
+    });
+  }
+
+  async create(testVariation: TestVariation, createTestRequestDto: CreateTestRequestDto): Promise<TestRun> {
     // save image
-    const imageBuffer = Buffer.from(imageBase64, 'base64');
+    const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
     const imageName = `${Date.now()}.screenshot.png`;
     const image = PNG.sync.read(imageBuffer);
     writeFileSync(
@@ -30,14 +47,14 @@ export class TestRunsService {
 
     // create test run
     const testRun = new TestRun();
-    testRun.imageUrl = imageName;
-    testRun.testVariationId = test.id;
-    testRun.buildId = buildId;
+    testRun.imageName = imageName;
+    testRun.testVariationId = testVariation.id;
+    testRun.buildId = createTestRequestDto.buildId;
 
     // compare with baseline
-    if (test.baselineUrl) {
+    if (testVariation.baselineName) {
       const baseline = PNG.sync.read(
-        readFileSync(resolve(this.configService.imgConfig.uploadPath, test.baselineUrl)),
+        readFileSync(resolve(this.configService.imgConfig.uploadPath, testVariation.baselineName)),
       );
 
       const diffImageKey = `${Date.now()}.diff.png`;
@@ -48,8 +65,8 @@ export class TestRunsService {
 
       // compare
       const pixelMisMatchCount = Pixelmatch(
-        this.applyIgnoreAreas(baseline, test.ignoreAreas),
-        this.applyIgnoreAreas(image, test.ignoreAreas),
+        this.applyIgnoreAreas(baseline, testVariation.ignoreAreas),
+        this.applyIgnoreAreas(image, testVariation.ignoreAreas),
         diff.data,
         baseline.width,
         baseline.height,
@@ -64,7 +81,7 @@ export class TestRunsService {
         resolve(this.configService.imgConfig.uploadPath, diffImageKey),
         PNG.sync.write(diff),
       );
-      testRun.diffUrl = diffImageKey;
+      testRun.diffName = diffImageKey;
       testRun.pixelMisMatchCount = pixelMisMatchCount;
 
       if (pixelMisMatchCount > 0) {

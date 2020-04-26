@@ -7,5 +7,6 @@ import { ConfigService } from 'src/shared/config/config.service';
 @Module({
   imports: [SequelizeModule.forFeature([TestRun])],
   providers: [TestRunsService, ConfigService],
+  exports: [TestRunsService]
 })
 export class TestRunsModule {}

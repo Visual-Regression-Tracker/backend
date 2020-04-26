@@ -21,10 +21,10 @@ export class TestRun extends Model<TestRun> {
   id: string;
 
   @Column
-  imageUrl: string;
+  imageName: string;
 
   @Column
-  diffUrl: string;
+  diffName: string;
 
   @Column({
     type: DataType.ENUM(

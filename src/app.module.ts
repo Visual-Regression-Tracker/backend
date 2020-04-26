@@ -10,6 +10,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { TestsModule } from './tests/tests.module';
 import { TestRunsModule } from './test-runs/test-runs.module';
 import { TestVariationsModule } from './test-variations/test-variations.module';
+import { TestModule } from './test/test.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { TestVariationsModule } from './test-variations/test-variations.module';
     TestsModule,
     TestRunsModule,
     TestVariationsModule,
+    TestModule,
   ],
   controllers: [AppController],
 })

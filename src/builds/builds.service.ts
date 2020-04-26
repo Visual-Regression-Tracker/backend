@@ -3,25 +3,19 @@ import { Build } from './build.entity';
 import { InjectModel } from '@nestjs/sequelize';
 import { BuildDto } from './dto/builds.dto';
 import { CreateBuildDto } from './dto/build-create.dto';
-import { Project } from 'src/projects/project.entity';
-import { User } from 'src/users/user.entity';
-import { Test } from 'src/tests/test.entity';
-import { TestRun } from 'src/test-runs/testRun.entity';
+import { TestService } from 'src/test/test.service';
+import { TestRunDto } from 'src/test/dto/test-run.dto';
 
 @Injectable()
 export class BuildsService {
   constructor(
     @InjectModel(Build)
     private buildModel: typeof Build,
+    private testService: TestService,
   ) {}
 
-  async findById(id: string): Promise<BuildDto> {
-    const build = await this.buildModel.findOne({
-      where: { id },
-      include: [Project, User, Test, TestRun],
-      order: [['createdAt', 'DESC']],
-    });
-    return new BuildDto(build);
+  async findById(id: string): Promise<TestRunDto[]> {
+    return this.testService.getTestRunsByBuildId(id);
   }
 
   async create(buildDto: CreateBuildDto): Promise<BuildDto> {
@@ -32,6 +26,6 @@ export class BuildsService {
 
     const buildData = await build.save();
 
-    return this.findById(buildData.id);
+    return new BuildDto(buildData);
   }
 }

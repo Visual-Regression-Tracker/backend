@@ -19,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
+import { TestRunDto } from 'src/test/dto/test-run.dto';
 
 @Controller('builds')
 @ApiTags('builds')
@@ -27,10 +28,10 @@ export class BuildsController {
 
   @Get(':id')
   @ApiParam({ name: 'id', required: true })
-  @ApiOkResponse({ type: BuildDto })
+  @ApiOkResponse({ type: [TestRunDto] })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
+  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRunDto[]> {
     return this.buildsService.findById(id);
   }
 

@@ -7,6 +7,7 @@ import { TestVariationsController } from './test-variations.controller';
 @Module({
   imports: [SequelizeModule.forFeature([TestVariation])],
   providers: [TestVariationsService],
-  controllers: [TestVariationsController]
+  controllers: [TestVariationsController],
+  exports: [TestVariationsService]
 })
 export class TestVariationsModule {}

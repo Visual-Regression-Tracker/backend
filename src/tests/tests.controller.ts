@@ -57,7 +57,6 @@ export class TestsController {
   @Get('approve/:testId')
   @ApiParam({ name: 'testId', required: true })
   @ApiOkResponse({ type: TestDto })
-  @ApiSecurity('api_key')
   @UseGuards(JwtAuthGuard)
   approve(@Param('testId', new ParseUUIDPipe()) testId: string): Promise<TestDto> {
     return this.testsService.approve(testId);
@@ -66,7 +65,6 @@ export class TestsController {
   @Get('reject/:testId')
   @ApiParam({ name: 'testId', required: true })
   @ApiOkResponse({ type: TestDto })
-  @ApiSecurity('api_key')
   @UseGuards(JwtAuthGuard)
   reject(@Param('testId', new ParseUUIDPipe()) testId: string): Promise<TestDto> {
     return this.testsService.reject(testId);
