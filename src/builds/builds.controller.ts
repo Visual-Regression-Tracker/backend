@@ -6,17 +6,12 @@ import {
   Body,
   Param,
   ParseUUIDPipe,
+  Delete,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { BuildDto } from './dto/builds.dto';
-import {
-  ApiOkResponse,
-  ApiBearerAuth,
-  ApiTags,
-  ApiParam,
-  ApiSecurity,
-} from '@nestjs/swagger';
+import { ApiOkResponse, ApiBearerAuth, ApiTags, ApiParam, ApiSecurity } from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
 import { TestRunDto } from 'src/test/dto/test-run.dto';
@@ -33,6 +28,15 @@ export class BuildsController {
   @UseGuards(JwtAuthGuard)
   getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRunDto[]> {
     return this.buildsService.findById(id);
+  }
+
+  @Delete(':id')
+  @ApiParam({ name: 'id', required: true })
+  @ApiOkResponse({ type: Number })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<number> {
+    return this.buildsService.remove(id);
   }
 
   @Post()

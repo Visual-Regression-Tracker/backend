@@ -28,4 +28,10 @@ export class BuildsService {
 
     return new BuildDto(buildData);
   }
+
+  async remove(id: string): Promise<number> {
+    return this.buildModel.destroy({
+      where: { id },
+    });
+  }
 }
