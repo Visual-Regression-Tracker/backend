@@ -1,11 +1,12 @@
-import { Controller, Get, UseGuards, Param, ParseUUIDPipe, Post, Body } from '@nestjs/common';
+import { Controller, Get, UseGuards, Param, ParseUUIDPipe, Post, Body, Put } from '@nestjs/common';
 import { ApiTags, ApiParam, ApiOkResponse, ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
-import { BuildDto } from 'src/builds/dto/builds.dto';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { TestRunDto } from './dto/test-run.dto';
 import { TestService } from './test.service';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
+import { IgnoreAreaDto } from './dto/ignore-area.dto';
+import { TestVariationDto } from './dto/test-variation.dto';
 
 @ApiTags('test')
 @Controller('test')
@@ -45,5 +46,16 @@ export class TestController {
   @UseGuards(ApiGuard)
   postTestRunResult(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRunDto> {
     return this.testService.postTestRunResult(createTestRequestDto);
+  }
+
+  @Put('ignoreArea/:variationId')
+  @ApiParam({ name: 'variationId', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  updateIgnoreAreas(
+    @Param('variationId', new ParseUUIDPipe()) variationId: string,
+    @Body() ignoreAreas: IgnoreAreaDto[],
+  ): Promise<[number, TestVariationDto[]]> {
+    return this.testService.updateIgnoreAreas(variationId, ignoreAreas);
   }
 }

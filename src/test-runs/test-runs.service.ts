@@ -11,6 +11,7 @@ import { IgnoreArea } from 'src/tests/ignoreArea.entity';
 import { TestVariation } from 'src/test-variations/testVariation.entity';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
 import { TestRunDto } from 'src/test/dto/test-run.dto';
+import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
 
 @Injectable()
 export class TestRunsService {

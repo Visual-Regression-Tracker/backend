@@ -4,6 +4,8 @@ import { TestRunsService } from 'src/test-runs/test-runs.service';
 import { TestRunDto } from './dto/test-run.dto';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestStatus } from 'src/tests/test.status';
+import { IgnoreAreaDto } from './dto/ignore-area.dto';
+import { TestVariationDto } from './dto/test-variation.dto';
 
 @Injectable()
 export class TestService {
@@ -39,5 +41,12 @@ export class TestService {
 
   async rejectTestRun(testRunId: string): Promise<TestRunDto> {
     return this.testRunsService.reject(testRunId);
+  }
+
+  async updateIgnoreAreas(
+    testRunId: string,
+    ignoreAreas: IgnoreAreaDto[],
+  ): Promise<[number, TestVariationDto[]]> {
+    return this.testVariationService.updateIgnoreAreas(testRunId, ignoreAreas);
   }
 }
