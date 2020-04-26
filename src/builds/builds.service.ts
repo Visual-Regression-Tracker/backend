@@ -6,6 +6,7 @@ import { CreateBuildDto } from './dto/build-create.dto';
 import { Project } from 'src/projects/project.entity';
 import { User } from 'src/users/user.entity';
 import { Test } from 'src/tests/test.entity';
+import { TestRun } from 'src/test-runs/testRun.entity';
 
 @Injectable()
 export class BuildsService {
@@ -17,7 +18,7 @@ export class BuildsService {
   async findById(id: string): Promise<BuildDto> {
     const build = await this.buildModel.findOne({
       where: { id },
-      include: [Project, User, Test],
+      include: [Project, User, Test, TestRun],
       order: [['createdAt', 'DESC']],
     });
     return new BuildDto(build);
