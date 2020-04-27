@@ -33,4 +33,8 @@ export class CreateTestRequestDto {
   @ApiProperty()
   @IsUUID()
   buildId: string;
+
+  @ApiProperty()
+  @IsUUID()
+  projectId: string;
 }

@@ -7,6 +7,7 @@ import {
   Post,
   Param,
   ParseUUIDPipe,
+  Delete,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
@@ -43,5 +44,14 @@ export class ProjectsController {
   @ApiOkResponse({ type: Project })
   create(@Body() createProjectDto: CreateProjectDto): Promise<Project> {
     return this.projectsService.create(createProjectDto);
+  }
+
+  @Delete(':id')
+  @ApiParam({ name: 'id', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: Number })
+  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<number> {
+    return this.projectsService.remove(id);
   }
 }

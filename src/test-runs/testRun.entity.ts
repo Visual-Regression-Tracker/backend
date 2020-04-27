@@ -44,7 +44,7 @@ export class TestRun extends Model<TestRun> {
   })
   buildId: string;
 
-  @BelongsTo(() => Build)
+  @BelongsTo(() => Build, { onDelete: 'CASCADE', hooks: true})
   build: Build;
 
   @ForeignKey(() => TestVariation)
@@ -53,6 +53,6 @@ export class TestRun extends Model<TestRun> {
   })
   testVariationId: string;
 
-  @BelongsTo(() => TestVariation)
+  @BelongsTo(() => TestVariation, { onDelete: 'CASCADE', hooks: true})
   testVariation: TestVariation;
 }

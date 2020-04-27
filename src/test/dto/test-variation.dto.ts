@@ -35,13 +35,18 @@ export class TestVariationDto {
   @IsJSON()
   readonly ignoreAreas: IgnoreAreaDto[];
 
+  @ApiProperty()
+  @IsString()
+  readonly projectId: string;
+
   constructor(testVariation: TestVariationDto) {
-    this.id = testVariation.id
-    this.name = testVariation.name
-    this.baselineName = testVariation.baselineName
-    this.os = testVariation.os
-    this.browser = testVariation.browser
-    this.device = testVariation.device
-    this.ignoreAreas = testVariation.ignoreAreas
+    this.id = testVariation.id;
+    this.name = testVariation.name;
+    this.baselineName = testVariation.baselineName;
+    this.os = testVariation.os;
+    this.browser = testVariation.browser;
+    this.device = testVariation.device;
+    this.ignoreAreas = testVariation.ignoreAreas;
+    this.projectId = testVariation.projectId;
   }
 }

@@ -47,6 +47,6 @@ export class Build extends Model<Build> {
   @BelongsTo(() => User)
   user: User;
 
-  @HasMany(() => TestRun)
+  @HasMany(() => TestRun, { onDelete: 'CASCADE', hooks: true})
   testRuns: TestRun[];
 }

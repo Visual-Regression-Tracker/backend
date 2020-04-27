@@ -14,6 +14,7 @@ export class TestVariationsService {
   async findOrCreate(createTestDto: CreateTestRequestDto): Promise<[TestVariation, boolean]> {
     return this.testVariationModel.findOrCreate({
       where: {
+        projectId: createTestDto.projectId,
         name: createTestDto.name,
         os: createTestDto.os ? createTestDto.os : null,
         browser: createTestDto.browser ? createTestDto.browser : null,

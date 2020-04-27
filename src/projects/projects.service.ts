@@ -29,4 +29,10 @@ export class ProjectsService {
 
     return project.save();
   }
+
+  async remove(id: string): Promise<number> {
+    return this.projectModel.destroy({
+      where: { id },
+    });
+  }
 }

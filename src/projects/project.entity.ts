@@ -1,5 +1,6 @@
 import { Column, Model, Table, HasMany, DataType } from 'sequelize-typescript';
 import { Build } from 'src/builds/build.entity';
+import { TestVariation } from 'src/test-variations/testVariation.entity';
 
 @Table
 export class Project extends Model<Project> {
@@ -13,6 +14,9 @@ export class Project extends Model<Project> {
   @Column
   name: string;
 
-  @HasMany(() => Build)
+  @HasMany(() => Build, { onDelete: 'CASCADE', hooks: true})
   builds: Build[];
+
+  @HasMany(() => TestVariation, { onDelete: 'CASCADE', hooks: true})
+  testVariations: TestVariation[];
 }
