@@ -68,6 +68,7 @@ export class TestRunsService {
     testRun.imageName = imageName;
     testRun.testVariationId = testVariation.id;
     testRun.buildId = createTestRequestDto.buildId;
+    testRun.diffTollerancePercent = createTestRequestDto.diffTollerancePercent;
 
     // compare with baseline
     if (testVariation.baselineName) {
@@ -89,7 +90,7 @@ export class TestRunsService {
         baseline.width,
         baseline.height,
         {
-          threshold: 0.1,
+          threshold: testRun.diffTollerancePercent / 100,
           includeAA: true,
         },
       );
@@ -101,8 +102,9 @@ export class TestRunsService {
       );
       testRun.diffName = diffImageKey;
       testRun.pixelMisMatchCount = pixelMisMatchCount;
+      testRun.diffPercent = (pixelMisMatchCount * 100) / (image.width * image.height);
 
-      if (pixelMisMatchCount > 0) {
+      if (testRun.diffPercent > testRun.diffTollerancePercent) {
         // if there is diff
         testRun.status = TestStatus.unresolved;
       } else {

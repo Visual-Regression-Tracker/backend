@@ -29,6 +29,14 @@ export class TestRunDto {
   readonly pixelMisMatchCount: number;
 
   @ApiProperty()
+  @IsNumber()
+  readonly diffTollerancePercent: number;
+
+  @ApiProperty()
+  @IsNumber()
+  readonly diffPercent: number;
+
+  @ApiProperty()
   @IsString()
   readonly url: string;
 
@@ -38,7 +46,9 @@ export class TestRunDto {
     this.diffName = testRun.diffName;
     this.status = testRun.status;
     this.pixelMisMatchCount = testRun.pixelMisMatchCount;
-    this.testVariation = new TestVariationDto(testRun.testVariation)
+    this.diffTollerancePercent = testRun.diffTollerancePercent;
+    this.diffPercent = testRun.diffPercent;
+    this.testVariation = new TestVariationDto(testRun.testVariation);
     this.url = `${config.app.frontendUrl}/test-run/${testRun.id}`;
   }
 }

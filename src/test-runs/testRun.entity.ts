@@ -1,11 +1,4 @@
-import {
-  Column,
-  Model,
-  Table,
-  BelongsTo,
-  ForeignKey,
-  DataType,
-} from 'sequelize-typescript';
+import { Column, Model, Table, BelongsTo, ForeignKey, DataType } from 'sequelize-typescript';
 import { Build } from '../builds/build.entity';
 import { TestStatus } from './test.status';
 import { TestVariation } from 'src/test-variations/testVariation.entity';
@@ -26,14 +19,20 @@ export class TestRun extends Model<TestRun> {
   diffName: string;
 
   @Column({
-    type: DataType.ENUM(
-      TestStatus.new,
-      TestStatus.unresolved,
-      TestStatus.ok,
-      TestStatus.failed,
-    ),
+    type: DataType.ENUM(TestStatus.new, TestStatus.unresolved, TestStatus.ok, TestStatus.failed),
   })
   status: TestStatus;
+
+  @Column({
+    type: DataType.FLOAT,
+    defaultValue: 1.0,
+  })
+  diffTollerancePercent: number;
+
+  @Column({
+    type: DataType.FLOAT,
+  })
+  diffPercent: number;
 
   @Column
   pixelMisMatchCount: number;
@@ -44,7 +43,7 @@ export class TestRun extends Model<TestRun> {
   })
   buildId: string;
 
-  @BelongsTo(() => Build, { onDelete: 'CASCADE', hooks: true})
+  @BelongsTo(() => Build, { onDelete: 'CASCADE', hooks: true })
   build: Build;
 
   @ForeignKey(() => TestVariation)
@@ -53,6 +52,6 @@ export class TestRun extends Model<TestRun> {
   })
   testVariationId: string;
 
-  @BelongsTo(() => TestVariation, { onDelete: 'CASCADE', hooks: true})
+  @BelongsTo(() => TestVariation, { onDelete: 'CASCADE', hooks: true })
   testVariation: TestVariation;
 }
