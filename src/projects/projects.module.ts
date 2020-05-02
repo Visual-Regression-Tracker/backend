@@ -3,10 +3,11 @@ import { ProjectsService } from './projects.service';
 import { ProjectsController } from './projects.controller';
 import { Project } from './project.entity';
 import { SequelizeModule } from '@nestjs/sequelize';
-import { Build } from 'src/builds/build.entity';
+import { BuildsModule } from 'src/builds/builds.module';
+import { TestVariationsModule } from 'src/test-variations/test-variations.module';
 
 @Module({
-  imports: [SequelizeModule.forFeature([Project])],
+  imports: [SequelizeModule.forFeature([Project]), BuildsModule, TestVariationsModule],
   providers: [ProjectsService],
   controllers: [ProjectsController]
 })

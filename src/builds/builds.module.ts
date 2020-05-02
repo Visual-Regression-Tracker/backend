@@ -9,6 +9,7 @@ import { TestModule } from 'src/test/test.module';
 @Module({
   imports: [SequelizeModule.forFeature([Build]), UsersModule, TestModule],
   providers: [BuildsService],
-  controllers: [BuildsController]
+  controllers: [BuildsController],
+  exports: [BuildsService],
 })
 export class BuildsModule {}
