@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = "***"
+}
+
+model Build {
+  id         String    @default(uuid()) @id
+  number     Int?
+  branchName String?
+  status     String?
+  testRuns   TestRun[]
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id])
+  // userId     String
+  // user       User      @relation(fields: [userId], references: [id])
+  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime  @default(now())
+}
+
+model Project {
+  id             String          @default(uuid()) @id
+  name           String
+  builds         Build[]
+  testVariations TestVariation[]
+  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime        @default(now())
+}
+
+model TestRun {
+  id                    String        @default(uuid()) @id
+  imageName             String
+  diffName              String?
+  diffPercent           Float?
+  diffTollerancePercent Float         @default(1.0)
+  pixelMisMatchCount    Int?
+  status                TestStatus
+  buildId               String
+  build                 Build         @relation(fields: [buildId], references: [id])
+  testVariationId       String
+  testVariation         TestVariation @relation(fields: [testVariationId], references: [id])
+  updatedAt             DateTime      @updatedAt
+  createdAt             DateTime      @default(now())
+}
+
+model TestVariation {
+  id           String    @default(uuid()) @id
+  name         String
+  browser      String?
+  device       String?
+  os           String?
+  viewport     String?
+  baselineName String?
+  ignoreAreas  String    @default("[]")
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id])
+  testRuns     TestRun[]
+  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+}
+
+model User {
+  id        String   @default(uuid()) @id
+  email     String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  apiKey    String   @unique
+  isActive  Boolean  @default(true)
+  builds    Build[]
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+enum TestStatus {
+  failed
+  new
+  ok
+  unresolved
+}

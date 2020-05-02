@@ -1,5 +1,5 @@
-import { User } from './../user.entity';
 import { ApiProperty } from '@nestjs/swagger';
+import { User } from '@prisma/client';
 
 export class UserDto {
   @ApiProperty()

@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
 import { TestRunsService } from './test-runs.service';
-import { SequelizeModule } from '@nestjs/sequelize';
-import { TestRun } from './testRun.entity';
 import { SharedModule } from 'src/shared/shared.module';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Module({
-  imports: [SequelizeModule.forFeature([TestRun]), SharedModule],
-  providers: [TestRunsService],
+  imports: [SharedModule],
+  providers: [TestRunsService, PrismaService],
   exports: [TestRunsService]
 })
 export class TestRunsModule {}

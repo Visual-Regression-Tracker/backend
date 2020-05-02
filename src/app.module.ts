@@ -10,16 +10,17 @@ import { ProjectsModule } from './projects/projects.module';
 import { TestRunsModule } from './test-runs/test-runs.module';
 import { TestVariationsModule } from './test-variations/test-variations.module';
 import { TestModule } from './test/test.module';
+import { PrismaService } from './prisma/prisma.service';
 
 @Module({
   imports: [
     AuthModule,
     UsersModule,
-    SequelizeModule.forRootAsync({
-      imports: [SharedModule],
-      useFactory: (configService: ConfigService) => configService.dbConfig,
-      inject: [ConfigService],
-    }),
+    // SequelizeModule.forRootAsync({
+    //   imports: [SharedModule],
+    //   useFactory: (configService: ConfigService) => configService.dbConfig,
+    //   inject: [ConfigService],
+    // }),
     BuildsModule,
     ProjectsModule,
     TestRunsModule,
@@ -27,5 +28,6 @@ import { TestModule } from './test/test.module';
     TestModule,
   ],
   controllers: [AppController],
+  providers: [PrismaService],
 })
 export class AppModule {}

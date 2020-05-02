@@ -1,44 +1,47 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/sequelize';
-import { Project } from './project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { Build } from 'src/builds/build.entity';
 import { BuildsService } from 'src/builds/builds.service';
-import { TestVariation } from 'src/test-variations/testVariation.entity';
 import { TestVariationsService } from 'src/test-variations/test-variations.service';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { Project } from '@prisma/client';
 
 @Injectable()
 export class ProjectsService {
   constructor(
-    @InjectModel(Project)
-    private projectModel: typeof Project,
+    private prismaService: PrismaService,
     private buildsService: BuildsService,
     private testVariationsService: TestVariationsService,
   ) {}
 
   async findAll(): Promise<Project[]> {
-    return this.projectModel.findAll();
+    return this.prismaService.project.findMany();
   }
 
   async findOneById(id: string): Promise<Project> {
-    return this.projectModel.findOne({
+    return this.prismaService.project.findOne({
       where: { id },
-      include: [Build],
-      order: [['builds', 'createdAt', 'DESC']],
+      include: {
+        builds: true,
+      },
+      // order: [['builds', 'createdAt', 'DESC']],
     });
   }
 
   async create(createProjectDto: CreateProjectDto): Promise<Project> {
-    const project = new Project();
-    project.name = createProjectDto.name;
-
-    return project.save();
+    return this.prismaService.project.create({
+      data: {
+        name: createProjectDto.name,
+      },
+    });
   }
 
-  async remove(id: string): Promise<number> {
-    const project = await this.projectModel.findOne({
+  async remove(id: string): Promise<Project> {
+    const project = await this.prismaService.project.findOne({
       where: { id },
-      include: [Build, TestVariation],
+      include: {
+        builds: true,
+        testVariations: true,
+      },
     });
 
     try {
@@ -52,7 +55,7 @@ export class ProjectsService {
       console.log(err);
     }
 
-    return this.projectModel.destroy({
+    return this.prismaService.project.delete({
       where: { id },
     });
   }

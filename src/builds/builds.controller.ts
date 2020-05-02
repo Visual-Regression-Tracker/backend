@@ -10,11 +10,10 @@ import {
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { BuildDto } from './dto/builds.dto';
-import { ApiOkResponse, ApiBearerAuth, ApiTags, ApiParam, ApiSecurity } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiParam, ApiSecurity } from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
-import { TestRunDto } from 'src/test/dto/test-run.dto';
+import { Build, TestRun } from '@prisma/client';
 
 @Controller('builds')
 @ApiTags('builds')
@@ -23,27 +22,24 @@ export class BuildsController {
 
   @Get(':id')
   @ApiParam({ name: 'id', required: true })
-  @ApiOkResponse({ type: [TestRunDto] })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRunDto[]> {
+  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRun[]> {
     return this.buildsService.findById(id);
   }
 
   @Delete(':id')
   @ApiParam({ name: 'id', required: true })
-  @ApiOkResponse({ type: Number })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<number> {
+  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Build> {
     return this.buildsService.remove(id);
   }
 
   @Post()
-  @ApiOkResponse({ type: BuildDto })
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard)
-  create(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
+  create(@Body() createBuildDto: CreateBuildDto): Promise<Build> {
     return this.buildsService.create(createBuildDto);
   }
 }

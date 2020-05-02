@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { TestVariationsService } from 'src/test-variations/test-variations.service';
 import { TestRunsService } from 'src/test-runs/test-runs.service';
-import { TestRunDto } from './dto/test-run.dto';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { TestVariationDto } from './dto/test-variation.dto';
+import { TestRun, TestVariation } from '@prisma/client';
 
 @Injectable()
 export class TestService {
@@ -13,43 +13,39 @@ export class TestService {
     private testRunsService: TestRunsService,
   ) {}
 
-  async getTestRunsByBuildId(buildId: string): Promise<TestRunDto[]> {
-    const testRuns = await this.testRunsService.getAll(buildId);
+  async getTestRunsByBuildId(buildId: string): Promise<TestRun[]> {
 
-    return testRuns.map(testRun => new TestRunDto(testRun));
+    return this.testRunsService.getAll(buildId);
   }
 
-  async getTestRunById(testRunId: string): Promise<TestRunDto> {
-    const testRun = await this.testRunsService.findOne(testRunId);
-
-    return new TestRunDto(testRun);
+  async getTestRunById(testRunId: string): Promise<TestRun> {
+    return this.testRunsService.findOne(testRunId);
   }
 
-  async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunDto> {
-    const [testVariation] = await this.testVariationService.findOrCreate(createTestRequestDto);
+  async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRun> {
+    const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto);
 
     const testRun = await this.testRunsService.create(testVariation, createTestRequestDto);
 
-    const testRunDetails = await this.testRunsService.findOne(testRun.id);
-    return new TestRunDto(testRunDetails);
+    return this.testRunsService.findOne(testRun.id);
   }
 
-  async deleteTestRun(id: string): Promise<number> {
+  async deleteTestRun(id: string): Promise<TestRun> {
     return this.testRunsService.delete(id);
   }
 
-  async approveTestRun(testRunId: string): Promise<TestRunDto> {
+  async approveTestRun(testRunId: string): Promise<TestRun> {
     return this.testRunsService.approve(testRunId);
   }
 
-  async rejectTestRun(testRunId: string): Promise<TestRunDto> {
+  async rejectTestRun(testRunId: string): Promise<TestRun> {
     return this.testRunsService.reject(testRunId);
   }
 
   async updateIgnoreAreas(
     testRunId: string,
     ignoreAreas: IgnoreAreaDto[],
-  ): Promise<[number, TestVariationDto[]]> {
+  ): Promise<TestVariation> {
     return this.testVariationService.updateIgnoreAreas(testRunId, ignoreAreas);
   }
 }

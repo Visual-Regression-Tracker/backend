@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TestVariationsService } from './test-variations.service';
-import { TestVariation } from './testVariation.entity';
-import { SequelizeModule } from '@nestjs/sequelize';
 import { TestVariationsController } from './test-variations.controller';
 import { TestRunsModule } from 'src/test-runs/test-runs.module';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Module({
-  imports: [SequelizeModule.forFeature([TestVariation]), TestRunsModule],
-  providers: [TestVariationsService],
+  imports: [TestRunsModule],
+  providers: [TestVariationsService, PrismaService],
   controllers: [TestVariationsController],
   exports: [TestVariationsService]
 })

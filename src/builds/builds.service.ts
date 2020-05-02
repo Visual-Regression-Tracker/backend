@@ -1,35 +1,32 @@
 import { Injectable } from '@nestjs/common';
-import { Build } from './build.entity';
 import { InjectModel } from '@nestjs/sequelize';
-import { BuildDto } from './dto/builds.dto';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { TestService } from 'src/test/test.service';
-import { TestRunDto } from 'src/test/dto/test-run.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { Build, TestRun } from '@prisma/client';
 
 @Injectable()
 export class BuildsService {
-  constructor(
-    @InjectModel(Build)
-    private buildModel: typeof Build,
-    private testService: TestService,
-  ) {}
+  constructor(private prismaService: PrismaService, private testService: TestService) {}
 
-  async findById(id: string): Promise<TestRunDto[]> {
+  async findById(id: string): Promise<TestRun[]> {
     return this.testService.getTestRunsByBuildId(id);
   }
 
-  async create(buildDto: CreateBuildDto): Promise<BuildDto> {
-    const build = new Build();
-    build.branchName = buildDto.branchName;
-    build.projectId = buildDto.projectId;
-    build.status = 'new';
-
-    const buildData = await build.save();
-
-    return new BuildDto(buildData);
+  async create(buildDto: CreateBuildDto): Promise<Build> {
+    return this.prismaService.build.create({
+      data: {
+        branchName: buildDto.branchName,
+        project: {
+          connect: {
+            id: buildDto.projectId,
+          },
+        },
+      },
+    });
   }
 
-  async remove(id: string): Promise<number> {
+  async remove(id: string): Promise<Build> {
     const testRuns = await this.findById(id);
 
     try {
@@ -38,7 +35,7 @@ export class BuildsService {
       console.log(err);
     }
 
-    return this.buildModel.destroy({
+    return this.prismaService.build.delete({
       where: { id },
     });
   }

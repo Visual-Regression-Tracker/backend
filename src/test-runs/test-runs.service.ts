@@ -1,54 +1,60 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/sequelize';
-import { TestRun } from './testRun.entity';
 import { PNG } from 'pngjs';
-import { TestStatus } from 'src/test-runs/test.status';
 import Pixelmatch from 'Pixelmatch';
-import { TestVariation } from 'src/test-variations/testVariation.entity';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
-import { TestRunDto } from 'src/test/dto/test-run.dto';
 import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
 import { StaticService } from 'src/shared/static/static.service';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { TestRun, TestStatus, TestVariation, TestRunCreateInput } from '@prisma/client';
 
 @Injectable()
 export class TestRunsService {
-  constructor(
-    @InjectModel(TestRun)
-    private testRunModel: typeof TestRun,
-    private staticService: StaticService,
-  ) {}
+  constructor(private prismaService: PrismaService, private staticService: StaticService) {}
 
   async getAll(buildId: string): Promise<TestRun[]> {
-    return this.testRunModel.findAll({
+    return this.prismaService.testRun.findMany({
       where: { buildId },
-      include: [TestVariation],
-      order: [['createdAt', 'DESC']],
+      include: {
+        testVariation: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
     });
   }
 
   async findOne(id: string): Promise<TestRun> {
-    return this.testRunModel.findOne({
+    return this.prismaService.testRun.findOne({
       where: { id },
-      include: [TestVariation],
+      include: {
+        testVariation: true,
+      },
     });
   }
 
-  async approve(id: string): Promise<TestRunDto> {
+  async approve(id: string): Promise<TestRun> {
     const testRun = await this.findOne(id);
-    testRun.status = TestStatus.ok;
-    testRun.testVariation.baselineName = testRun.imageName;
-
-    const [testData] = await Promise.all([testRun.save(), testRun.testVariation.save()]);
-
-    return new TestRunDto(testData);
+    return this.prismaService.testRun.update({
+      where: { id },
+      include: { testVariation: true },
+      data: {
+        status: TestStatus.ok,
+        testVariation: {
+          update: {
+            baselineName: testRun.imageName,
+          },
+        },
+      },
+    });
   }
 
-  async reject(id: string): Promise<TestRunDto> {
-    const testRun = await this.findOne(id);
-    testRun.status = TestStatus.failed;
-
-    const testData = await testRun.save();
-    return new TestRunDto(testData);
+  async reject(id: string): Promise<TestRun> {
+    return this.prismaService.testRun.update({
+      where: { id },
+      data: {
+        status: TestStatus.failed,
+      },
+    });;
   }
 
   async create(
@@ -62,11 +68,21 @@ export class TestRunsService {
     this.staticService.saveImage(imageName, imageBuffer);
 
     // create test run
-    const testRun = new TestRun();
-    testRun.imageName = imageName;
-    testRun.testVariationId = testVariation.id;
-    testRun.buildId = createTestRequestDto.buildId;
-    testRun.diffTollerancePercent = createTestRequestDto.diffTollerancePercent;
+    const testRun: TestRunCreateInput = {
+      imageName,
+      testVariation: {
+        connect: {
+          id: testVariation.id,
+        },
+      },
+      build: {
+        connect: {
+          id: createTestRequestDto.buildId,
+        },
+      },
+      diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
+      status: TestStatus.new,
+    };
 
     // compare with baseline
     if (testVariation.baselineName) {
@@ -80,8 +96,8 @@ export class TestRunsService {
 
       // compare
       const pixelMisMatchCount = Pixelmatch(
-        this.applyIgnoreAreas(baseline, testVariation.ignoreAreas),
-        this.applyIgnoreAreas(image, testVariation.ignoreAreas),
+        this.applyIgnoreAreas(baseline, JSON.parse(testVariation.ignoreAreas)),
+        this.applyIgnoreAreas(image, JSON.parse(testVariation.ignoreAreas)),
         diff.data,
         baseline.width,
         baseline.height,
@@ -108,10 +124,12 @@ export class TestRunsService {
       // no baseline
       testRun.status = TestStatus.new;
     }
-    return await testRun.save();
+    return this.prismaService.testRun.create({
+      data: testRun,
+    });
   }
 
-  async delete(id: string): Promise<number> {
+  async delete(id: string): Promise<TestRun> {
     const testRun = await this.findOne(id);
 
     try {
@@ -123,7 +141,7 @@ export class TestRunsService {
       console.log(err);
     }
 
-    return this.testRunModel.destroy({
+    return this.prismaService.testRun.delete({
       where: { id },
     });
   }

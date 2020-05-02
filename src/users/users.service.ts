@@ -1,55 +1,44 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { User } from './user.entity';
-import { InjectModel } from '@nestjs/sequelize';
 import { CreateUserDto } from './dto/user-create.dto';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
 import { genSalt, hash } from 'bcryptjs';
 import uuidAPIKey from 'uuid-apikey';
-import { AuthService } from 'src/auth/auth.service';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { User } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    @InjectModel(User)
-    private userModel: typeof User,
-  ) {}
-
-  async findAll(): Promise<User[]> {
-    return this.userModel.findAll();
-  }
+  constructor(private prismaService: PrismaService) {}
 
   findOne(id: string): Promise<User> {
-    return this.userModel.findOne({
-      where: {
-        id,
-      },
-    });
+    return this.prismaService.user.findOne({ where: { id } });
   }
 
   async getUserByApiKey(apiKey: string): Promise<User> {
-    return await this.userModel.findOne({
+    return this.prismaService.user.findOne({
       where: { apiKey },
     });
   }
 
   async getUserByEmail(email: string): Promise<User> {
-    return await this.userModel.findOne({
+    return this.prismaService.user.findOne({
       where: { email },
     });
   }
 
   async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
+    const user = {
+      email: createUserDto.email.trim().toLowerCase(),
+      firstName: createUserDto.firstName,
+      lastName: createUserDto.lastName,
+      apiKey: uuidAPIKey.create({ noDashes: true }).apiKey,
+      password: await hash(createUserDto.password, await genSalt(10)),
+    };
+
     try {
-      const user = new User();
-      user.email = createUserDto.email.trim().toLowerCase();
-      user.firstName = createUserDto.firstName;
-      user.lastName = createUserDto.lastName;
-      user.apiKey = uuidAPIKey.create({ noDashes: true }).apiKey;
-
-      const salt = await genSalt(10);
-      user.password = await hash(createUserDto.password, salt);
-
-      const userData = await user.save();
+      const userData = await this.prismaService.user.create({
+        data: user,
+      });
 
       return new UserLoginResponseDto(userData, null);
     } catch (err) {
