@@ -59,7 +59,7 @@ export class TestRunsService {
     const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
     const imageName = `${Date.now()}.screenshot.png`;
     const image = PNG.sync.read(imageBuffer);
-    this.staticService.saveImage(imageName, imageBuffer)
+    this.staticService.saveImage(imageName, imageBuffer);
 
     // create test run
     const testRun = new TestRun();
@@ -70,7 +70,7 @@ export class TestRunsService {
 
     // compare with baseline
     if (testVariation.baselineName) {
-      const baseline = this.staticService.getImage(testVariation.baselineName)
+      const baseline = this.staticService.getImage(testVariation.baselineName);
 
       const diffImageKey = `${Date.now()}.diff.png`;
       const diff = new PNG({
@@ -92,7 +92,7 @@ export class TestRunsService {
       );
 
       // save diff
-      this.staticService.saveImage(diffImageKey, PNG.sync.write(diff))
+      this.staticService.saveImage(diffImageKey, PNG.sync.write(diff));
       testRun.diffName = diffImageKey;
       testRun.pixelMisMatchCount = pixelMisMatchCount;
       testRun.diffPercent = (pixelMisMatchCount * 100) / (image.width * image.height);
@@ -112,6 +112,17 @@ export class TestRunsService {
   }
 
   async delete(id: string): Promise<number> {
+    const testRun = await this.findOne(id);
+
+    try {
+      Promise.all([
+        this.staticService.deleteImage(testRun.diffName),
+        this.staticService.deleteImage(testRun.imageName),
+      ]);
+    } catch (err) {
+      console.log(err);
+    }
+
     return this.testRunModel.destroy({
       where: { id },
     });
