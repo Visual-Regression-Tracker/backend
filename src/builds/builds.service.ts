@@ -30,6 +30,14 @@ export class BuildsService {
   }
 
   async remove(id: string): Promise<number> {
+    const testRuns = await this.findById(id);
+
+    try {
+      await Promise.all(testRuns.map(testRun => this.testService.deleteTestRun(testRun.id)));
+    } catch (err) {
+      console.log(err);
+    }
+
     return this.buildModel.destroy({
       where: { id },
     });
