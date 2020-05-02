@@ -2,22 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { TestRun } from './testRun.entity';
 import { PNG } from 'pngjs';
-import { writeFileSync, readFileSync } from 'fs';
-import { resolve } from 'path';
 import { TestStatus } from 'src/test-runs/test.status';
-import { ConfigService } from 'src/shared/config/config.service';
 import Pixelmatch from 'Pixelmatch';
 import { TestVariation } from 'src/test-variations/testVariation.entity';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
 import { TestRunDto } from 'src/test/dto/test-run.dto';
 import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
+import { StaticService } from 'src/shared/static/static.service';
 
 @Injectable()
 export class TestRunsService {
   constructor(
     @InjectModel(TestRun)
     private testRunModel: typeof TestRun,
-    private configService: ConfigService,
+    private staticService: StaticService,
   ) {}
 
   async getAll(buildId: string): Promise<TestRun[]> {
@@ -61,7 +59,7 @@ export class TestRunsService {
     const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
     const imageName = `${Date.now()}.screenshot.png`;
     const image = PNG.sync.read(imageBuffer);
-    writeFileSync(resolve(this.configService.imgConfig.uploadPath, imageName), imageBuffer);
+    this.staticService.saveImage(imageName, imageBuffer)
 
     // create test run
     const testRun = new TestRun();
@@ -72,9 +70,7 @@ export class TestRunsService {
 
     // compare with baseline
     if (testVariation.baselineName) {
-      const baseline = PNG.sync.read(
-        readFileSync(resolve(this.configService.imgConfig.uploadPath, testVariation.baselineName)),
-      );
+      const baseline = this.staticService.getImage(testVariation.baselineName)
 
       const diffImageKey = `${Date.now()}.diff.png`;
       const diff = new PNG({
@@ -96,10 +92,7 @@ export class TestRunsService {
       );
 
       // save diff
-      writeFileSync(
-        resolve(this.configService.imgConfig.uploadPath, diffImageKey),
-        PNG.sync.write(diff),
-      );
+      this.staticService.saveImage(diffImageKey, PNG.sync.write(diff))
       testRun.diffName = diffImageKey;
       testRun.pixelMisMatchCount = pixelMisMatchCount;
       testRun.diffPercent = (pixelMisMatchCount * 100) / (image.width * image.height);
