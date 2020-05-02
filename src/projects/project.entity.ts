@@ -14,9 +14,9 @@ export class Project extends Model<Project> {
   @Column
   name: string;
 
-  @HasMany(() => Build, { onDelete: 'CASCADE', hooks: true})
+  @HasMany(() => Build)
   builds: Build[];
 
-  @HasMany(() => TestVariation, { onDelete: 'CASCADE', hooks: true})
+  @HasMany(() => TestVariation)
   testVariations: TestVariation[];
 }

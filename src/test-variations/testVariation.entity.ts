@@ -53,6 +53,6 @@ export class TestVariation extends Model<TestVariation> {
   })
   projectId: string;
 
-  @BelongsTo(() => Project, { onDelete: 'CASCADE', hooks: true})
+  @BelongsTo(() => Project)
   project: Project;
 }
