@@ -116,7 +116,7 @@ export class TestRunsService {
 
     try {
       Promise.all([
-        this.staticService.deleteImage(testRun.diffName),
+        testRun.diffName && this.staticService.deleteImage(testRun.diffName),
         this.staticService.deleteImage(testRun.imageName),
       ]);
     } catch (err) {
