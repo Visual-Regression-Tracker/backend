@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
-import { SequelizeModule } from '@nestjs/sequelize';
 import { SharedModule } from './shared/shared.module';
 import { ConfigService } from './shared/config/config.service';
 import { BuildsModule } from './builds/builds.module';
@@ -16,11 +15,6 @@ import { PrismaService } from './prisma/prisma.service';
   imports: [
     AuthModule,
     UsersModule,
-    // SequelizeModule.forRootAsync({
-    //   imports: [SharedModule],
-    //   useFactory: (configService: ConfigService) => configService.dbConfig,
-    //   inject: [ConfigService],
-    // }),
     BuildsModule,
     ProjectsModule,
     TestRunsModule,

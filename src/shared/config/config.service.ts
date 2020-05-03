@@ -3,9 +3,6 @@ import config from '../../../config';
 
 @Injectable()
 export class ConfigService {
-  get dbConfig() {
-    return config.db;
-  }
 
   get jwtConfig() {
       return config.jwt;

@@ -1,17 +1,4 @@
-import { Dialect } from 'sequelize/types';
-import { SequelizeModuleOptions } from '@nestjs/sequelize';
 import { JwtModuleOptions } from '@nestjs/jwt';
-
-const db: SequelizeModuleOptions = {
-  dialect: 'postgres' as Dialect,
-  host: 'localhost',
-  port: 5432,
-  username: 'postgres',
-  password: 'postgres',
-  database: 'vrt_postgresql',
-  autoLoadModels: true,
-  synchronize: true,
-};
 
 const jwt: JwtModuleOptions = {
   secret: 'jwtPrivateKey',
@@ -28,7 +15,6 @@ const app = {
 }
 
 export const config = {
-  db,
   jwt,
   image,
   app,

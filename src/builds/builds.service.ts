@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/sequelize';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { TestService } from 'src/test/test.service';
 import { PrismaService } from 'src/prisma/prisma.service';
