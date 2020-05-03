@@ -40,6 +40,9 @@ export class TestRunsService {
     const testRun = await this.findOne(id);
     return this.prismaService.testRun.update({
       where: { id },
+      include: {
+        testVariation: true,
+      },
       data: {
         status: TestStatus.ok,
         testVariation: {
