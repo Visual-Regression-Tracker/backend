@@ -8,7 +8,37 @@ import { User } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(private prismaService: PrismaService) {
+    // create default user if there are none in DB
+    this.userList().then(userList => {
+      if (userList.length === 0) {
+        const defaultEmail = 'visual-regression-tracker@example.com';
+        const defaultPassword = '123456';
+
+        this.create({
+          email: defaultEmail,
+          password: defaultPassword,
+          firstName: 'fname',
+          lastName: 'lname'
+        }).then(
+          user => {
+            console.log('#########################');
+            console.log('## CREATING ADMIN USER ##');
+            console.log('#########################');
+            console.log('');
+            console.log(
+              `The user with the email "${defaultEmail}" and password "${defaultPassword}" was created`
+            );
+            console.log(`The Api key is: ${user.apiKey}`);
+          }
+        );
+      }
+    });
+  }
+
+  userList(): Promise<User[]> {
+    return this.prismaService.user.findMany();
+  }
 
   findOne(id: string): Promise<User> {
     return this.prismaService.user.findOne({ where: { id } });
