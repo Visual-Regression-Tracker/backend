@@ -3,7 +3,7 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { BuildsService } from 'src/builds/builds.service';
 import { TestVariationsService } from 'src/test-variations/test-variations.service';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Project } from '@prisma/client';
+import { Project, Build, TestVariation } from '@prisma/client';
 
 @Injectable()
 export class ProjectsService {
@@ -11,17 +11,21 @@ export class ProjectsService {
     private prismaService: PrismaService,
     private buildsService: BuildsService,
     private testVariationsService: TestVariationsService,
-  ) {}
+  ) { }
 
   async findAll(): Promise<Project[]> {
     return this.prismaService.project.findMany();
   }
 
-  async findOneById(id: string): Promise<Project> {
+  async findOneById(id: string): Promise<Project & {
+    builds: Build[];
+    testVariations: TestVariation[];
+  }> {
     return this.prismaService.project.findOne({
       where: { id },
       include: {
         builds: true,
+        testVariations: true,
       },
       // order: [['builds', 'createdAt', 'DESC']],
     });
@@ -36,13 +40,7 @@ export class ProjectsService {
   }
 
   async remove(id: string): Promise<Project> {
-    const project = await this.prismaService.project.findOne({
-      where: { id },
-      include: {
-        builds: true,
-        testVariations: true,
-      },
-    });
+    const project = await this.findOneById(id);
 
     try {
       await Promise.all(

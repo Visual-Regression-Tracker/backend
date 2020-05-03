@@ -15,21 +15,22 @@ import { TestService } from './test.service';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
-import { TestVariationDto } from './dto/test-variation.dto';
 import { TestRun, TestVariation } from '@prisma/client';
 
 @ApiTags('test')
 @Controller('test')
 export class TestController {
-  constructor(private testService: TestService) {}
+  constructor(private testService: TestService) { }
 
   @Get(':testRunId')
   @ApiParam({ name: 'testRunId', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getTestRunsByBuildId(
+  getTestRunDetails(
     @Param('testRunId', new ParseUUIDPipe()) testRunId: string,
-  ): Promise<TestRun> {
+  ): Promise<TestRun & {
+    testVariation: TestVariation;
+  }> {
     return this.testService.getTestRunById(testRunId);
   }
 
@@ -63,7 +64,9 @@ export class TestController {
   @Post()
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard)
-  postTestRun(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRun> {
+  postTestRun(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRun & {
+    testVariation: TestVariation;
+  }> {
     return this.testService.postTestRun(createTestRequestDto);
   }
 

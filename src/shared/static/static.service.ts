@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class StaticService {
-  constructor(private configService: ConfigService) {}
+  constructor(private configService: ConfigService) { }
 
   saveImage(imageName: string, imageBuffer: Buffer) {
     writeFileSync(this.getImagePath(imageName), imageBuffer);
@@ -14,10 +14,6 @@ export class StaticService {
 
   getImage(imageName: string): PNGWithMetadata {
     return PNG.sync.read(readFileSync(this.getImagePath(imageName)));
-  }
-
-  private getImagePath(imageName: string): string {
-    return resolve(this.configService.get('IMG_UPLOAD_FOLDER'), imageName);
   }
 
   async deleteImage(imageName: string): Promise<boolean> {
@@ -29,5 +25,9 @@ export class StaticService {
         resolvePromise(true);
       });
     });
+  }
+
+  private getImagePath(imageName: string): string {
+    return resolve(this.configService.get('IMG_UPLOAD_FOLDER'), imageName);
   }
 }

@@ -5,7 +5,6 @@ import { TestRunsService } from 'src/test-runs/test-runs.service';
 import { StaticService } from 'src/shared/static/static.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TestVariation } from '@prisma/client';
-import { TestVariationDto } from 'src/test/dto/test-variation.dto';
 
 @Injectable()
 export class TestVariationsService {

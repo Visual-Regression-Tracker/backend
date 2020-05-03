@@ -18,7 +18,7 @@ import { Build, TestRun } from '@prisma/client';
 @Controller('builds')
 @ApiTags('builds')
 export class BuildsController {
-  constructor(private buildsService: BuildsService) {}
+  constructor(private buildsService: BuildsService) { }
 
   @Get(':id')
   @ApiParam({ name: 'id', required: true })

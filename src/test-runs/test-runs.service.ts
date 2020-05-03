@@ -9,9 +9,11 @@ import { TestRun, TestStatus, TestVariation, TestRunCreateInput } from '@prisma/
 
 @Injectable()
 export class TestRunsService {
-  constructor(private prismaService: PrismaService, private staticService: StaticService) {}
+  constructor(private prismaService: PrismaService, private staticService: StaticService) { }
 
-  async getAll(buildId: string): Promise<TestRun[]> {
+  async getAll(buildId: string): Promise<(TestRun & {
+    testVariation: TestVariation;
+  })[]> {
     return this.prismaService.testRun.findMany({
       where: { buildId },
       include: {
@@ -23,7 +25,9 @@ export class TestRunsService {
     });
   }
 
-  async findOne(id: string): Promise<TestRun> {
+  async findOne(id: string): Promise<TestRun & {
+    testVariation: TestVariation;
+  }> {
     return this.prismaService.testRun.findOne({
       where: { id },
       include: {
@@ -36,7 +40,6 @@ export class TestRunsService {
     const testRun = await this.findOne(id);
     return this.prismaService.testRun.update({
       where: { id },
-      include: { testVariation: true },
       data: {
         status: TestStatus.ok,
         testVariation: {

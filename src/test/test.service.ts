@@ -3,7 +3,6 @@ import { TestVariationsService } from 'src/test-variations/test-variations.servi
 import { TestRunsService } from 'src/test-runs/test-runs.service';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
-import { TestVariationDto } from './dto/test-variation.dto';
 import { TestRun, TestVariation } from '@prisma/client';
 
 @Injectable()
@@ -11,18 +10,24 @@ export class TestService {
   constructor(
     private testVariationService: TestVariationsService,
     private testRunsService: TestRunsService,
-  ) {}
+  ) { }
 
-  async getTestRunsByBuildId(buildId: string): Promise<TestRun[]> {
+  async getTestRunsByBuildId(buildId: string): Promise<(TestRun & {
+    testVariation: TestVariation;
+  })[]> {
 
     return this.testRunsService.getAll(buildId);
   }
 
-  async getTestRunById(testRunId: string): Promise<TestRun> {
+  async getTestRunById(testRunId: string): Promise<TestRun & {
+    testVariation: TestVariation;
+  }> {
     return this.testRunsService.findOne(testRunId);
   }
 
-  async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRun> {
+  async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRun & {
+    testVariation: TestVariation;
+  }> {
     const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto);
 
     const testRun = await this.testRunsService.create(testVariation, createTestRequestDto);
