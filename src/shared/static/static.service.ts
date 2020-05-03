@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '../config/config.service';
 import { resolve } from 'path';
 import { writeFileSync, readFileSync, unlink } from 'fs';
 import { PNG, PNGWithMetadata } from 'pngjs';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class StaticService {
@@ -17,7 +17,7 @@ export class StaticService {
   }
 
   private getImagePath(imageName: string): string {
-    return resolve(this.configService.imgConfig.uploadPath, imageName);
+    return resolve(this.configService.get('IMG_UPLOAD_FOLDER'), imageName);
   }
 
   async deleteImage(imageName: string): Promise<boolean> {
