@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PNG } from 'pngjs';
-import Pixelmatch from 'Pixelmatch';
+import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
 import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
 import { StaticService } from 'src/shared/static/static.service';
