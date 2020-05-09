@@ -15,6 +15,13 @@ export class BuildsService {
     return this.testService.getTestRunsByBuildId(id);
   }
 
+  async findMany(projectId: string): Promise<Build[]> {
+    return this.prismaService.build.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
   async create(buildDto: CreateBuildDto): Promise<Build> {
     return this.prismaService.build.create({
       data: {

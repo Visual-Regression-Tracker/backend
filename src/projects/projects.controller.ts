@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   UseGuards,
-  Req,
   Body,
   Post,
   Param,
@@ -13,12 +12,13 @@ import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiParam } from '@nestjs/swagger
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { Project } from '@prisma/client';
+import { Project, Build } from '@prisma/client';
+import { BuildsService } from 'src/builds/builds.service';
 
 @Controller('projects')
 @ApiTags('projects')
 export class ProjectsController {
-  constructor(private projectsService: ProjectsService) {}
+  constructor(private projectsService: ProjectsService, private buildsService: BuildsService) {}
 
   @Get()
   @ApiBearerAuth()
@@ -31,8 +31,8 @@ export class ProjectsController {
   @ApiParam({ name: 'id', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<Project> {
-    return this.projectsService.findOneById(id);
+  getBuilds(@Param('id', new ParseUUIDPipe()) id: string): Promise<Build[]> {
+    return this.buildsService.findMany(id);
   }
 
   @Post()
