@@ -9,6 +9,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_LIFE_TIME: ${JWT_LIFE_TIME}
       IMG_UPLOAD_FOLDER: ${IMG_UPLOAD_FOLDER}
+      BODY_PARSER_JSON_LIMIT: ${BODY_PARSER_JSON_LIMIT}
       APP_FRONTEND_URL: ${APP_FRONTEND_URL}
     ports:
       - "${APP_PORT}:3000"
@@ -39,4 +40,3 @@ services:
       - postgres
 volumes:
   postgres:
-    name: vrt-db

@@ -4,11 +4,16 @@ import { setupSwagger } from './swagger';
 import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
+import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: true });
   app.useGlobalPipes(new ValidationPipe());
   setupSwagger(app);
+
+  if (process.env.BODY_PARSER_JSON_LIMIT) {
+    app.use(bodyParser.json({ limit: process.env.BODY_PARSER_JSON_LIMIT }));
+  }
 
   // serve images
   app.use(
