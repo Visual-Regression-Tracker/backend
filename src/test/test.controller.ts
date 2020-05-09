@@ -16,6 +16,7 @@ import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { ApiGuard } from 'src/auth/guards/api.guard';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { TestRun, TestVariation } from '@prisma/client';
+import { TestRunResultDto } from './dto/testRunResult.dto';
 
 @ApiTags('test')
 @Controller('test')
@@ -63,10 +64,9 @@ export class TestController {
 
   @Post()
   @ApiSecurity('api_key')
+  @ApiOkResponse({ type: TestRunResultDto })
   @UseGuards(ApiGuard)
-  postTestRun(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
+  postTestRun(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
     return this.testService.postTestRun(createTestRequestDto);
   }
 

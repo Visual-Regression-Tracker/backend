@@ -4,6 +4,7 @@ import { TestRunsService } from 'src/test-runs/test-runs.service';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { TestRun, TestVariation } from '@prisma/client';
+import { TestRunResultDto } from './dto/testRunResult.dto';
 
 @Injectable()
 export class TestService {
@@ -25,14 +26,12 @@ export class TestService {
     return this.testRunsService.findOne(testRunId);
   }
 
-  async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
+  async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
     const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto);
 
     const testRun = await this.testRunsService.create(testVariation, createTestRequestDto);
 
-    return this.testRunsService.findOne(testRun.id);
+    return new TestRunResultDto(testRun);
   }
 
   async deleteTestRun(id: string): Promise<TestRun> {
