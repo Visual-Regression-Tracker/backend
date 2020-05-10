@@ -1,14 +1,16 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { CreateUserDto } from './dto/user-create.dto';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
-import { genSalt, hash } from 'bcryptjs';
-import uuidAPIKey from 'uuid-apikey';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { User } from '@prisma/client';
+import { UserDto } from './dto/user.dto';
+import { UpdateUserDto } from './dto/user-update.dto';
+import { AuthService } from 'src/auth/auth.service';
+import { UserLoginRequestDto } from './dto/user-login-request.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prismaService: PrismaService) {
+  constructor(private prismaService: PrismaService, private authService: AuthService) {
     // create default user if there are none in DB
     this.userList().then(userList => {
       if (userList.length === 0) {
@@ -40,29 +42,13 @@ export class UsersService {
     return this.prismaService.user.findMany();
   }
 
-  findOne(id: string): Promise<User> {
-    return this.prismaService.user.findOne({ where: { id } });
-  }
-
-  async getUserByApiKey(apiKey: string): Promise<User> {
-    return this.prismaService.user.findOne({
-      where: { apiKey },
-    });
-  }
-
-  async getUserByEmail(email: string): Promise<User> {
-    return this.prismaService.user.findOne({
-      where: { email },
-    });
-  }
-
   async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
     const user = {
       email: createUserDto.email.trim().toLowerCase(),
       firstName: createUserDto.firstName,
       lastName: createUserDto.lastName,
-      apiKey: uuidAPIKey.create({ noDashes: true }).apiKey,
-      password: await hash(createUserDto.password, await genSalt(10)),
+      apiKey: this.authService.generateApiKey(),
+      password: await this.authService.encryptPassword(createUserDto.password),
     };
 
     try {
@@ -81,5 +67,57 @@ export class UsersService {
 
       throw new HttpException(err, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  async get(id: string): Promise<UserDto> {
+    const user = await this.prismaService.user.findOne({ where: { id } })
+    return new UserDto(user)
+  }
+
+  async update(id: string, userDto: UpdateUserDto): Promise<UserLoginResponseDto> {
+    const user = await this.prismaService.user.update({
+      where: { id },
+      data: {
+        email: userDto.email,
+        firstName: userDto.firstName,
+        lastName: userDto.lastName,
+      }
+    })
+    const token = this.authService.signToken(user);
+    return new UserLoginResponseDto(user, token);
+  }
+
+  generateNewApiKey(user: User): string {
+    const newApiKey = this.authService.generateApiKey()
+    this.prismaService.user.update({
+      where: { id: user.id },
+      data: {
+        apiKey: newApiKey
+      }
+    })
+    return newApiKey;
+  }
+
+  async login(userLoginRequestDto: UserLoginRequestDto) {
+    const user = await this.prismaService.user.findOne({
+      where: { email: userLoginRequestDto.email }
+    })
+    if (!user) {
+      throw new HttpException(
+        'Invalid email or password.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const isMatch = this.authService.compare(userLoginRequestDto.password, user.password);
+    if (!isMatch) {
+      throw new HttpException(
+        'Invalid email or password.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const token = this.authService.signToken(user);
+    return new UserLoginResponseDto(user, token);
   }
 }

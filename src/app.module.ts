@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { BuildsModule } from './builds/builds.module';
@@ -21,7 +20,6 @@ import { ConfigModule } from '@nestjs/config';
     TestVariationsModule,
     TestModule,
   ],
-  controllers: [AppController],
   providers: [PrismaService],
 })
 export class AppModule {}

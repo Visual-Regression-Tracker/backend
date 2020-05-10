@@ -5,16 +5,18 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { UsersService } from 'src/users/users.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class ApiGuard implements CanActivate {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly prismaService: PrismaService) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request: Request = context.switchToHttp().getRequest();
     try {
-      const user = await this.usersService.getUserByApiKey(request.header('apiKey'));
+      const user = await this.prismaService.user.findOne({
+        where: { apiKey: request.header('apiKey') }
+      });
       return !!user;
     } catch {
       throw new UnauthorizedException();

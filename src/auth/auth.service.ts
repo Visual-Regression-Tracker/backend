@@ -1,43 +1,30 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { UsersService } from '../users/users.service';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UserLoginRequestDto } from 'src/users/dto/user-login-request.dto';
-import { UserLoginResponseDto } from 'src/users/dto/user-login-response.dto';
-import { compare } from 'bcryptjs';
+import uuidAPIKey from 'uuid-apikey';
+import { compare, genSalt, hash } from 'bcryptjs';
 import { JwtPayload } from './jwt-payload.model';
 import { User } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private usersService: UsersService,
     private jwtService: JwtService,
   ) { }
 
-  async login(userLoginRequestDto: UserLoginRequestDto) {
-    const user = await this.usersService.getUserByEmail(
-      userLoginRequestDto.email,
-    );
-    if (!user) {
-      throw new HttpException(
-        'Invalid email or password.',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    const isMatch = await compare(userLoginRequestDto.password, user.password);
-    if (!isMatch) {
-      throw new HttpException(
-        'Invalid email or password.',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    const token = await this.signToken(user);
-    return new UserLoginResponseDto(user, token);
+  async encryptPassword(password): Promise<string> {
+    const salt = await genSalt(10)
+    return hash(password, salt);
   }
 
-  async signToken(user: User): Promise<string> {
+  generateApiKey(): string {
+    return uuidAPIKey.create({ noDashes: true }).apiKey;
+  }
+
+  compare(password1, password2) {
+    return compare(password1, password2);
+  }
+
+  signToken(user: User): string {
     const payload: JwtPayload = {
       email: user.email,
     };
