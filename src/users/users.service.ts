@@ -24,13 +24,11 @@ export class UsersService {
           lastName: 'lname'
         }).then(
           user => {
-            console.log('#########################');
-            console.log('## CREATING ADMIN USER ##');
-            console.log('#########################');
+            console.log('###########################');
+            console.log('## CREATING DEFAULT USER ##');
+            console.log('###########################');
             console.log('');
-            console.log(
-              `The user with the email "${defaultEmail}" and password "${defaultPassword}" was created`
-            );
+            console.log(`The user with the email "${defaultEmail}" and password "${defaultPassword}" was created`);
             console.log(`The Api key is: ${user.apiKey}`);
           }
         );

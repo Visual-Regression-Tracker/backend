@@ -11,7 +11,23 @@ export class ProjectsService {
     private prismaService: PrismaService,
     private buildsService: BuildsService,
     private testVariationsService: TestVariationsService,
-  ) { }
+  ) {
+    // create default project if there are none in DB
+    this.findAll().then(projects => {
+      if (projects.length === 0) {
+        this.create({
+          name: 'Default project'
+        }).then(project => {
+          console.log('##############################');
+          console.log('## CREATING DEFAULT PROJECT ##');
+          console.log('##############################');
+          console.log('');
+          console.log(`Project name ${project.name}`);
+          console.log(`Project key: ${project.id}`);
+        })
+      }
+    })
+  }
 
   async findAll(): Promise<Project[]> {
     return this.prismaService.project.findMany();
