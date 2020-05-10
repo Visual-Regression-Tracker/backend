@@ -20,8 +20,8 @@ export class AuthService {
     return uuidAPIKey.create({ noDashes: true }).apiKey;
   }
 
-  compare(password1, password2) {
-    return compare(password1, password2);
+  async compare(password1: string, password2: string): Promise<boolean> {
+    return await compare(password1, password2);
   }
 
   signToken(user: User): string {

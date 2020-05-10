@@ -85,15 +85,25 @@ export class UsersService {
     return new UserLoginResponseDto(user, token);
   }
 
-  generateNewApiKey(user: User): string {
+  async generateNewApiKey(user: User): Promise<string> {
     const newApiKey = this.authService.generateApiKey()
-    this.prismaService.user.update({
+    await this.prismaService.user.update({
       where: { id: user.id },
       data: {
         apiKey: newApiKey
       }
     })
     return newApiKey;
+  }
+
+  async changePassword(user: User, newPassword: string): Promise<boolean> {
+    await this.prismaService.user.update({
+      where: { id: user.id },
+      data: {
+        password: await this.authService.encryptPassword(newPassword)
+      }
+    })
+    return true;
   }
 
   async login(userLoginRequestDto: UserLoginRequestDto) {
@@ -107,7 +117,8 @@ export class UsersService {
       );
     }
 
-    const isMatch = this.authService.compare(userLoginRequestDto.password, user.password);
+    const isMatch = await this.authService.compare(userLoginRequestDto.password, user.password);
+
     if (!isMatch) {
       throw new HttpException(
         'Invalid email or password.',

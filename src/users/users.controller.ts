@@ -7,6 +7,8 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { UserDto } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
+import { CurrentUser } from '../shared/current-user.decorator'
+import { User } from '@prisma/client';
 
 @Controller('users')
 @ApiTags('users')
@@ -35,8 +37,16 @@ export class UsersController {
     @ApiOkResponse({ type: String })
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
-    generateNewApiKey(@Request() req): string {
-        return this.usersService.generateNewApiKey(req.user)
+    generateNewApiKey(@CurrentUser() user: User): Promise<string> {
+        return this.usersService.generateNewApiKey(user)
+    }
+
+    @Put('password')
+    @ApiOkResponse({ type: Boolean })
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
+    changePassword(@CurrentUser() user: User, @Body('password') password: string): Promise<boolean> {
+        return this.usersService.changePassword(user, password)
     }
 
     @Get(':id')
