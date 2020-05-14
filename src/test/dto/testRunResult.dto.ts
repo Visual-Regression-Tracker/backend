@@ -1,4 +1,4 @@
-import { TestRun, TestStatus } from '@prisma/client';
+import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 
 export class TestRunResultDto {
   id: string
@@ -10,7 +10,7 @@ export class TestRunResultDto {
   status: TestStatus;
   url: string;
 
-  constructor(testRun: TestRun) {
+  constructor(testRun: TestRun, testVariation: TestVariation) {
     this.id = testRun.id
     this.imageName = testRun.imageName
     this.diffName = testRun.diffName
@@ -18,6 +18,6 @@ export class TestRunResultDto {
     this.diffTollerancePercent = testRun.diffTollerancePercent
     this.pixelMisMatchCount = testRun.pixelMisMatchCount
     this.status = testRun.status
-    this.url = `${process.env.APP_FRONTEND_URL}/test/${this.id}`
+    this.url = `${process.env.APP_FRONTEND_URL}/${testVariation.projectId}?buildId=${testRun.buildId}&testId=${testRun.id}`
   }
 }

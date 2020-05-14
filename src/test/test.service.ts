@@ -31,7 +31,7 @@ export class TestService {
 
     const testRun = await this.testRunsService.create(testVariation, createTestRequestDto);
 
-    return new TestRunResultDto(testRun);
+    return new TestRunResultDto(testRun, testVariation);
   }
 
   async deleteTestRun(id: string): Promise<TestRun> {
