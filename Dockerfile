@@ -1,4 +1,4 @@
-FROM node:12 AS builder
+FROM node:12-alpine AS builder
 
 # Create app directory
 WORKDIR /app
@@ -19,7 +19,7 @@ COPY src ./src
 RUN npm run build
 
 # TODO use node-alpine when supported by prisma2 https://github.com/prisma/prisma2/issues/702
-FROM node:12
+FROM node:12-alpine
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist

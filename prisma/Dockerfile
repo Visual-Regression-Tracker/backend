@@ -1,4 +1,4 @@
-FROM node:12
+FROM node:12-alpine
 
 # Install @prisma/cli for the migration
 RUN npm install -g @prisma/cli --unsafe-perm
