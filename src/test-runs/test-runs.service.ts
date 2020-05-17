@@ -57,6 +57,9 @@ export class TestRunsService {
   async reject(id: string): Promise<TestRun> {
     return this.prismaService.testRun.update({
       where: { id },
+      include: {
+        testVariation: true,
+      },
       data: {
         status: TestStatus.failed,
       },
