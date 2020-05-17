@@ -36,7 +36,9 @@ export class TestRunsService {
     });
   }
 
-  async approve(id: string): Promise<TestRun> {
+  async approve(id: string): Promise<TestRun & {
+    testVariation: TestVariation;
+  }> {
     const testRun = await this.findOne(id);
     return this.prismaService.testRun.update({
       where: { id },
@@ -54,7 +56,9 @@ export class TestRunsService {
     });
   }
 
-  async reject(id: string): Promise<TestRun> {
+  async reject(id: string): Promise<TestRun & {
+    testVariation: TestVariation;
+  }> {
     return this.prismaService.testRun.update({
       where: { id },
       include: {

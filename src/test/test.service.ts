@@ -38,11 +38,15 @@ export class TestService {
     return this.testRunsService.delete(id);
   }
 
-  async approveTestRun(testRunId: string): Promise<TestRun> {
+  async approveTestRun(testRunId: string): Promise<TestRun & {
+    testVariation: TestVariation;
+  }> {
     return this.testRunsService.approve(testRunId);
   }
 
-  async rejectTestRun(testRunId: string): Promise<TestRun> {
+  async rejectTestRun(testRunId: string): Promise<TestRun & {
+    testVariation: TestVariation;
+  }> {
     return this.testRunsService.reject(testRunId);
   }
 
