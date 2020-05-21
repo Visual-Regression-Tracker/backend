@@ -40,6 +40,17 @@ export class TestRunsService {
     testVariation: TestVariation;
   }> {
     const testRun = await this.findOne(id);
+
+    // remove old baseline
+    if (testRun.testVariation.baselineName) {
+      this.staticService.deleteImage(testRun.testVariation.baselineName);
+    }
+
+    // save new baseline
+    const baseline = this.staticService.getImage(testRun.imageName)
+    const imageName = `${Date.now()}.baseline.png`;
+    this.staticService.saveImage(imageName, baseline.data);
+
     return this.prismaService.testRun.update({
       where: { id },
       include: {
@@ -49,7 +60,7 @@ export class TestRunsService {
         status: TestStatus.ok,
         testVariation: {
           update: {
-            baselineName: testRun.imageName,
+            baselineName: imageName,
           },
         },
       },
