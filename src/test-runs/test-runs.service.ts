@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PNG } from 'pngjs';
+import { PNG, PNGWithMetadata } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
 import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
@@ -49,7 +49,7 @@ export class TestRunsService {
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName)
     const imageName = `${Date.now()}.baseline.png`;
-    this.staticService.saveImage(imageName, baseline.data);
+    this.staticService.saveImage(imageName, PNG.sync.write(baseline));
 
     return this.prismaService.testRun.update({
       where: { id },
@@ -108,10 +108,18 @@ export class TestRunsService {
       status: TestStatus.new,
     };
 
-    // compare with baseline
+    // get baseline image
+    let baseline: PNGWithMetadata
     if (testVariation.baselineName) {
-      const baseline = this.staticService.getImage(testVariation.baselineName);
+      try {
+        baseline = this.staticService.getImage(testVariation.baselineName)
+      } catch (ex) {
+        console.log(`Cannot load baseline image: ${testVariation.baselineName}. ${ex}`)
+      }
+    }
 
+    // compare with baseline
+    if (baseline) {
       const diffImageKey = `${Date.now()}.diff.png`;
       const diff = new PNG({
         width: baseline.width,
