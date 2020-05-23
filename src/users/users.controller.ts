@@ -49,24 +49,14 @@ export class UsersController {
         return this.usersService.changePassword(user, password)
     }
 
-    @Get(':id')
-    @ApiParam({ name: 'id', required: true })
-    @ApiOkResponse({ type: UserDto })
-    @ApiBearerAuth()
-    @UseGuards(JwtAuthGuard)
-    get(@Param('id', new ParseUUIDPipe()) id: string): Promise<UserDto> {
-        return this.usersService.get(id);
-    }
-
-    @Put(':id')
-    @ApiParam({ name: 'id', required: true })
+    @Put()
     @ApiOkResponse({ type: UserLoginResponseDto })
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
-    updated(
-        @Param('id', new ParseUUIDPipe()) id: string,
+    update(
+        @CurrentUser() user: User,
         @Body() updateUserDto: UpdateUserDto
     ): Promise<UserLoginResponseDto> {
-        return this.usersService.update(id, updateUserDto);
+        return this.usersService.update(user.id, updateUserDto);
     }
 }
