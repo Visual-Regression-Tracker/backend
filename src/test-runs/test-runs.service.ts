@@ -11,6 +11,12 @@ import { TestRun, TestStatus, TestVariation, TestRunCreateInput } from '@prisma/
 export class TestRunsService {
   constructor(private prismaService: PrismaService, private staticService: StaticService) { }
 
+  async findMany(buildId: string): Promise<TestRun[]> {
+    return this.prismaService.testRun.findMany({
+      where: { buildId },
+    });
+  }
+
   async findOne(id: string): Promise<TestRun & {
     testVariation: TestVariation;
   }> {

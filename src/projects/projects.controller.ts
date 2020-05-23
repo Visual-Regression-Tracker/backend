@@ -18,21 +18,13 @@ import { BuildsService } from 'src/builds/builds.service';
 @Controller('projects')
 @ApiTags('projects')
 export class ProjectsController {
-  constructor(private projectsService: ProjectsService, private buildsService: BuildsService) {}
+  constructor(private projectsService: ProjectsService) {}
 
   @Get()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   getAll(): Promise<Project[]> {
     return this.projectsService.findAll();
-  }
-
-  @Get(':id')
-  @ApiParam({ name: 'id', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  getBuilds(@Param('id', new ParseUUIDPipe()) id: string): Promise<Build[]> {
-    return this.buildsService.findMany(id);
   }
 
   @Post()
