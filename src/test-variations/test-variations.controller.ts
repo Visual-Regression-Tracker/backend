@@ -1,9 +1,10 @@
-import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query } from '@nestjs/common';
+import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query, Put, Body } from '@nestjs/common';
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TestVariationsService } from './test-variations.service';
 import { TestVariation } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
 
 @ApiTags('test-variations')
 @Controller('test-variations')
@@ -20,5 +21,16 @@ export class TestVariationsController {
     return this.prismaService.testVariation.findMany({
       where: { projectId }
     });
+  }
+
+  @Put('ignoreArea/:variationId')
+  @ApiParam({ name: 'variationId', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  updateIgnoreAreas(
+    @Param('variationId', new ParseUUIDPipe()) variationId: string,
+    @Body() ignoreAreas: IgnoreAreaDto[],
+  ): Promise<TestVariation> {
+    return this.testVariations.updateIgnoreAreas(variationId, ignoreAreas);
   }
 }

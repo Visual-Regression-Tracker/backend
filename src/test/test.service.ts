@@ -13,39 +13,11 @@ export class TestService {
     private testRunsService: TestRunsService,
   ) { }
 
-  async getTestRunsByBuildId(buildId: string): Promise<TestRun[]> {
-
-    return this.testRunsService.getAll(buildId);
-  }
-
-  async getTestRunById(testRunId: string): Promise<TestRun> {
-    return this.testRunsService.findOne(testRunId);
-  }
-
   async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
     const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto);
 
     const testRun = await this.testRunsService.create(testVariation, createTestRequestDto);
 
     return new TestRunResultDto(testRun, testVariation);
-  }
-
-  async approveTestRun(testRunId: string): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
-    return this.testRunsService.approve(testRunId);
-  }
-
-  async rejectTestRun(testRunId: string): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
-    return this.testRunsService.reject(testRunId);
-  }
-
-  async updateIgnoreAreas(
-    testRunId: string,
-    ignoreAreas: IgnoreAreaDto[],
-  ): Promise<TestVariation> {
-    return this.testVariationService.updateIgnoreAreas(testRunId, ignoreAreas);
   }
 }

@@ -8,7 +8,7 @@ import { TestVariation } from '@prisma/client';
 export class TestVariationsService {
   constructor(
     private prismaService: PrismaService,
-  ) {}
+  ) { }
 
   async findOrCreate(createTestDto: CreateTestRequestDto): Promise<TestVariation> {
     const data = {

@@ -11,20 +11,6 @@ import { TestRun, TestStatus, TestVariation, TestRunCreateInput } from '@prisma/
 export class TestRunsService {
   constructor(private prismaService: PrismaService, private staticService: StaticService) { }
 
-  async getAll(buildId: string): Promise<(TestRun & {
-    testVariation: TestVariation;
-  })[]> {
-    return this.prismaService.testRun.findMany({
-      where: { buildId },
-      include: {
-        testVariation: true,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
-  }
-
   async findOne(id: string): Promise<TestRun & {
     testVariation: TestVariation;
   }> {
@@ -36,15 +22,8 @@ export class TestRunsService {
     });
   }
 
-  async approve(id: string): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
+  async approve(id: string): Promise<TestRun> {
     const testRun = await this.findOne(id);
-
-    // remove old baseline
-    if (testRun.testVariation.baselineName) {
-      this.staticService.deleteImage(testRun.testVariation.baselineName);
-    }
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName)
@@ -53,10 +32,8 @@ export class TestRunsService {
 
     return this.prismaService.testRun.update({
       where: { id },
-      include: {
-        testVariation: true,
-      },
       data: {
+        baselineName: imageName,
         status: TestStatus.ok,
         testVariation: {
           update: {
@@ -67,14 +44,9 @@ export class TestRunsService {
     });
   }
 
-  async reject(id: string): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
+  async reject(id: string): Promise<TestRun> {
     return this.prismaService.testRun.update({
       where: { id },
-      include: {
-        testVariation: true,
-      },
       data: {
         status: TestStatus.failed,
       },
@@ -183,6 +155,16 @@ export class TestRunsService {
     return this.prismaService.testRun.delete({
       where: { id },
     });
+  }
+
+  async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
+    return this.prismaService.testRun
+      .update({
+        where: { id },
+        data: {
+          ignoreAreas: JSON.stringify(ignoreAreas),
+        },
+      });
   }
 
   private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buffer {

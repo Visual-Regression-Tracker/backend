@@ -23,43 +23,6 @@ import { TestRunResultDto } from './dto/testRunResult.dto';
 export class TestController {
   constructor(private testService: TestService) { }
 
-  @Get(':testRunId')
-  @ApiParam({ name: 'testRunId', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  getTestRunDetails(
-    @Param('testRunId', new ParseUUIDPipe()) testRunId: string,
-  ): Promise<TestRun> {
-    return this.testService.getTestRunById(testRunId);
-  }
-
-  @Get('approve/:testRunId')
-  @ApiParam({ name: 'testRunId', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  approveTestRun(@Param('testRunId', new ParseUUIDPipe()) testRunId: string): Promise<TestRun> {
-    return this.testService.approveTestRun(testRunId);
-  }
-
-  @Get('reject/:testRunId')
-  @ApiParam({ name: 'testRunId', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  rejectTestRun(@Param('testRunId', new ParseUUIDPipe()) testRunId: string): Promise<TestRun> {
-    return this.testService.rejectTestRun(testRunId);
-  }
-
-  @Put('ignoreArea/:variationId')
-  @ApiParam({ name: 'variationId', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  updateIgnoreAreas(
-    @Param('variationId', new ParseUUIDPipe()) variationId: string,
-    @Body() ignoreAreas: IgnoreAreaDto[],
-  ): Promise<TestVariation> {
-    return this.testService.updateIgnoreAreas(variationId, ignoreAreas);
-  }
-
   @Post()
   @ApiSecurity('api_key')
   @ApiOkResponse({ type: TestRunResultDto })
