@@ -104,17 +104,24 @@ export class TestRunsService {
           id: createTestRequestDto.buildId,
         },
       },
+      name: testVariation.name,
+      browser: testVariation.browser,
+      device: testVariation.device,
+      os: testVariation.os,
+      viewport: testVariation.viewport,
+      baselineName: testVariation.baselineName,
+      ignoreAreas: testVariation.ignoreAreas,
       diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
       status: TestStatus.new,
     };
 
     // get baseline image
     let baseline: PNGWithMetadata
-    if (testVariation.baselineName) {
+    if (testRun.baselineName) {
       try {
-        baseline = this.staticService.getImage(testVariation.baselineName)
+        baseline = this.staticService.getImage(testRun.baselineName)
       } catch (ex) {
-        console.log(`Cannot load baseline image: ${testVariation.baselineName}. ${ex}`)
+        console.log(`Cannot load baseline image: ${testRun.baselineName}. ${ex}`)
       }
     }
 
@@ -128,8 +135,8 @@ export class TestRunsService {
 
       // compare
       const pixelMisMatchCount = Pixelmatch(
-        this.applyIgnoreAreas(baseline, JSON.parse(testVariation.ignoreAreas)),
-        this.applyIgnoreAreas(image, JSON.parse(testVariation.ignoreAreas)),
+        this.applyIgnoreAreas(baseline, JSON.parse(testRun.ignoreAreas)),
+        this.applyIgnoreAreas(image, JSON.parse(testRun.ignoreAreas)),
         diff.data,
         baseline.width,
         baseline.height,
