@@ -29,9 +29,7 @@ export class TestController {
   @UseGuards(JwtAuthGuard)
   getTestRunDetails(
     @Param('testRunId', new ParseUUIDPipe()) testRunId: string,
-  ): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
+  ): Promise<TestRun> {
     return this.testService.getTestRunById(testRunId);
   }
 
@@ -68,13 +66,5 @@ export class TestController {
   @UseGuards(ApiGuard)
   postTestRun(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
     return this.testService.postTestRun(createTestRequestDto);
-  }
-
-  @Delete('/:testRunId')
-  @ApiParam({ name: 'testRunId', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  deleteTestRun(@Param('testRunId', new ParseUUIDPipe()) testRunId: string): Promise<TestRun> {
-    return this.testService.deleteTestRun(testRunId);
   }
 }

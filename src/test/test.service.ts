@@ -13,16 +13,12 @@ export class TestService {
     private testRunsService: TestRunsService,
   ) { }
 
-  async getTestRunsByBuildId(buildId: string): Promise<(TestRun & {
-    testVariation: TestVariation;
-  })[]> {
+  async getTestRunsByBuildId(buildId: string): Promise<TestRun[]> {
 
     return this.testRunsService.getAll(buildId);
   }
 
-  async getTestRunById(testRunId: string): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
+  async getTestRunById(testRunId: string): Promise<TestRun> {
     return this.testRunsService.findOne(testRunId);
   }
 
@@ -32,10 +28,6 @@ export class TestService {
     const testRun = await this.testRunsService.create(testVariation, createTestRequestDto);
 
     return new TestRunResultDto(testRun, testVariation);
-  }
-
-  async deleteTestRun(id: string): Promise<TestRun> {
-    return this.testRunsService.delete(id);
   }
 
   async approveTestRun(testRunId: string): Promise<TestRun & {

@@ -5,7 +5,6 @@ import { TestRunsModule } from 'src/test-runs/test-runs.module';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Module({
-  imports: [TestRunsModule],
   providers: [TestVariationsService, PrismaService],
   controllers: [TestVariationsController],
   exports: [TestVariationsService]

@@ -24,8 +24,8 @@ export class BuildsController {
   @ApiParam({ name: 'id', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRun[]> {
-    return this.buildsService.findById(id);
+  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<Build & { testRuns: TestRun[] }> {
+    return this.buildsService.findOne(id);
   }
 
   @Delete(':id')

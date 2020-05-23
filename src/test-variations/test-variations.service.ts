@@ -1,16 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
 import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
-import { TestRunsService } from 'src/test-runs/test-runs.service';
-import { StaticService } from 'src/shared/static/static.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TestVariation } from '@prisma/client';
 
 @Injectable()
 export class TestVariationsService {
   constructor(
-    private testRunsService: TestRunsService,
-    private staticService: StaticService,
     private prismaService: PrismaService,
   ) {}
 
@@ -52,22 +48,6 @@ export class TestVariationsService {
   }
 
   async remove(id: string): Promise<TestVariation> {
-    const testVariation = await this.prismaService.testVariation.findOne({
-      where: { id },
-      include: {
-        testRuns: true,
-      },
-    });
-
-    try {
-      await Promise.all(
-        testVariation.testRuns.map(testRun => this.testRunsService.delete(testRun.id)),
-      );
-      if (testVariation.baselineName) this.staticService.deleteImage(testVariation.baselineName);
-    } catch (err) {
-      console.log(err);
-    }
-
     return this.prismaService.testVariation.delete({
       where: { id },
     });
