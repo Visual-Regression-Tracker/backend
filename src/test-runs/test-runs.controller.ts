@@ -1,9 +1,9 @@
 import { Controller, Delete, UseGuards, Param, ParseUUIDPipe, Put, Body, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { TestRun } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
-import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
+import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
 
 @ApiTags('test-runs')
 @Controller('test-runs')

@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { Build, TestRun } from '@prisma/client';
-import { TestRunsService } from 'src/test-runs/test-runs.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { Build } from '@prisma/client';
+import { TestRunsService } from '../test-runs/test-runs.service';
 
 @Injectable()
 export class BuildsService {
@@ -10,15 +10,6 @@ export class BuildsService {
     private prismaService: PrismaService,
     private testRunsService: TestRunsService
   ) { }
-
-  async findOne(id: string): Promise<Build & { testRuns: TestRun[] }> {
-    return this.prismaService.build.findOne({
-      where: { id },
-      include: {
-        testRuns: true
-      }
-    });
-  }
 
   async findMany(projectId: string): Promise<Build[]> {
     return this.prismaService.build.findMany({
@@ -41,7 +32,12 @@ export class BuildsService {
   }
 
   async remove(id: string): Promise<Build> {
-    const build = await this.findOne(id);
+    const build = await this.prismaService.build.findOne({
+      where: { id },
+      include: {
+        testRuns: true
+      }
+    });
 
     try {
       await Promise.all(

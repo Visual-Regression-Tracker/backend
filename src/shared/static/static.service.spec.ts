@@ -1,12 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StaticService } from './static.service';
+import { ConfigService } from '@nestjs/config';
 
 describe('StaticService', () => {
   let service: StaticService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [StaticService],
+      providers: [
+        StaticService,
+        {
+          provide: ConfigService, useValue: {}
+        }
+      ],
     }).compile();
 
     service = module.get<StaticService>(StaticService);

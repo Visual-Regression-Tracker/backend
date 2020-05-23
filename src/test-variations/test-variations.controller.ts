@@ -2,9 +2,9 @@ import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query, Put, Body } fr
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TestVariationsService } from './test-variations.service';
 import { TestVariation } from '@prisma/client';
-import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
+import { JwtAuthGuard } from '../auth/guards/auth.guard';
+import { PrismaService } from '../prisma/prisma.service';
+import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
 
 @ApiTags('test-variations')
 @Controller('test-variations')

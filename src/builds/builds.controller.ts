@@ -10,11 +10,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
-import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ApiBearerAuth, ApiTags, ApiParam, ApiSecurity, ApiQuery } from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
-import { ApiGuard } from 'src/auth/guards/api.guard';
-import { Build, TestRun } from '@prisma/client';
+import { ApiGuard } from '../auth/guards/api.guard';
+import { Build } from '@prisma/client';
 
 @Controller('builds')
 @ApiTags('builds')

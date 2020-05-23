@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PNG, PNGWithMetadata } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
-import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
-import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
-import { StaticService } from 'src/shared/static/static.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
+import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { StaticService } from '../shared/static/static.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation, TestRunCreateInput } from '@prisma/client';
 
 @Injectable()

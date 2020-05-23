@@ -1,15 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { resolve } from 'path';
-import { writeFileSync, readFileSync, unlink, mkdir } from 'fs';
+import path from 'path';
+import { writeFileSync, readFileSync, unlink, mkdirSync, existsSync } from 'fs';
 import { PNG, PNGWithMetadata } from 'pngjs';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class StaticService {
   constructor(private configService: ConfigService) {
-    mkdir(this.configService.get('IMG_UPLOAD_FOLDER'), { recursive: true }, (err) => {
-      if (err) throw err;
-    });
   }
 
   saveImage(imageName: string, imageBuffer: Buffer) {
@@ -32,6 +29,18 @@ export class StaticService {
   }
 
   private getImagePath(imageName: string): string {
-    return resolve(this.configService.get('IMG_UPLOAD_FOLDER'), imageName);
+    const dir = this.configService.get('IMG_UPLOAD_FOLDER')
+    this.ensureDirectoryExistence(dir)
+    return path.resolve(dir, imageName);
+  }
+
+  private ensureDirectoryExistence(dir: string) {
+    const filePath = path.resolve(dir)
+    if (existsSync(filePath)) {
+      return true;
+    } else {
+      mkdirSync(dir, { recursive: true });
+      this.ensureDirectoryExistence(dir)
+    }
   }
 }

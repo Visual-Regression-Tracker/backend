@@ -1,9 +1,9 @@
-import { Controller, Post, Body, Get, UseGuards, Param, ParseUUIDPipe, Put, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Param, ParseUUIDPipe, Put } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { ApiOkResponse, ApiParam, ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
 import { CreateUserDto } from './dto/user-create.dto';
-import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { UserDto } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';

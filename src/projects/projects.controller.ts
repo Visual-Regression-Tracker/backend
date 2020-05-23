@@ -9,11 +9,10 @@ import {
   Delete,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiParam } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { Project, Build } from '@prisma/client';
-import { BuildsService } from 'src/builds/builds.service';
+import { Project } from '@prisma/client';
 
 @Controller('projects')
 @ApiTags('projects')

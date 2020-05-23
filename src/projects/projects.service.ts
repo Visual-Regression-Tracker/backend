@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { BuildsService } from 'src/builds/builds.service';
-import { TestVariationsService } from 'src/test-variations/test-variations.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { BuildsService } from '../builds/builds.service';
+import { TestVariationsService } from '../test-variations/test-variations.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { Project } from '@prisma/client';
 
 @Injectable()

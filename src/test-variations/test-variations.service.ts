@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
-import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
+import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation } from '@prisma/client';
 
 @Injectable()
