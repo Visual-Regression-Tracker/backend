@@ -6,6 +6,7 @@ import { StaticService } from '../shared/static/static.service';
 import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
 
 const initModule = async ({
+  findOneMock = jest.fn,
   findManyMock = jest.fn().mockReturnValue([]),
   createMock = jest.fn(),
   updateMock = jest.fn()
@@ -17,6 +18,7 @@ const initModule = async ({
       {
         provide: PrismaService, useValue: {
           testVariation: {
+            findOne: findOneMock,
             findMany: findManyMock,
             create: createMock,
             update: updateMock,
@@ -49,6 +51,30 @@ const dataAllFields: CreateTestRequestDto = {
 
 describe('TestVariationsService', () => {
   let service: TestVariationsService;
+
+  describe('getDetails', () => {
+    it('can find one', async () => {
+      const id = 'test id'
+      const findOneMock = jest.fn()
+      service = await initModule({ findOneMock })
+
+      await service.getDetails(id)
+
+      expect(findOneMock).toHaveBeenCalledWith({
+        where: { id },
+        include: {
+          baselines: {
+            include: {
+              testRun: true,
+            },
+            orderBy: {
+              createdAt: 'desc'
+            }
+          },
+        }
+      })
+    })
+  })
 
   describe('findOrCreate', () => {
 
