@@ -76,12 +76,12 @@ model TestVariation {
 model Baseline {
   id              String        @default(uuid()) @id
   baselineName    String
+  testVariationId String
+  testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
+  testRunId       String?
+  testRun         TestRun?      @relation(fields: [testRunId], references: [id])
   updatedAt       DateTime      @updatedAt
   createdAt       DateTime      @default(now())
-  testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
-  testVariationId String
-  testRunId       String
-  testRun         TestRun       @relation(fields: [testRunId], references: [id])
 }
 
 model User {

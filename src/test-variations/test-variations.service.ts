@@ -3,11 +3,13 @@ import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation, Baseline } from '@prisma/client';
+import { StaticService } from 'src/shared/static/static.service';
 
 @Injectable()
 export class TestVariationsService {
   constructor(
     private prismaService: PrismaService,
+    private staticService: StaticService,
   ) { }
 
   async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
@@ -64,6 +66,22 @@ export class TestVariationsService {
   }
 
   async remove(id: string): Promise<TestVariation> {
+    const variation = await this.getDetails(id)
+
+    // clear history
+    try {
+      await Promise.all(
+        variation.baselines.map(baseline => Promise.all([
+          this.staticService.deleteImage(baseline.baselineName),
+          this.prismaService.baseline.delete({
+            where: { id: baseline.id }
+          })
+        ]))
+      )
+    } catch (err) {
+      console.log(err)
+    }
+
     return this.prismaService.testVariation.delete({
       where: { id },
     });

@@ -78,8 +78,8 @@ model Baseline {
   baselineName    String
   testVariationId String
   testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
-  testRunId       String
-  testRun         TestRun       @relation(fields: [testRunId], references: [id])
+  testRunId       String?
+  testRun         TestRun?      @relation(fields: [testRunId], references: [id])
   updatedAt       DateTime      @updatedAt
   createdAt       DateTime      @default(now())
 }
