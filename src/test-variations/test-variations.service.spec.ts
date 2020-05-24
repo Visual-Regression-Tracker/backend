@@ -3,10 +3,12 @@ import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { StaticService } from '../shared/static/static.service';
+import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
 
 const initModule = async ({
   findManyMock = jest.fn().mockReturnValue([]),
   createMock = jest.fn(),
+  updateMock = jest.fn()
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -16,7 +18,8 @@ const initModule = async ({
         provide: PrismaService, useValue: {
           testVariation: {
             findMany: findManyMock,
-            create: createMock
+            create: createMock,
+            update: updateMock,
           }
         }
       },
@@ -111,6 +114,33 @@ describe('TestVariationsService', () => {
         },
       })
       expect(result).toBe(data)
+    })
+  })
+
+  describe('updateIgnoreAreas', () => {
+    it('can update', async () => {
+      const id = 'test id'
+      const ignoreAreas: IgnoreAreaDto[] = [
+        {
+          x: 1,
+          y: 2.3,
+          width: 442.1,
+          height: 32.0
+        }
+      ]
+      const updateMock = jest.fn()
+      service = await initModule({ updateMock })
+
+      await service.updateIgnoreAreas(id, ignoreAreas)
+
+      expect(updateMock).toBeCalledWith({
+        where: {
+          id
+        },
+        data: {
+          ignoreAreas: JSON.stringify(ignoreAreas)
+        }
+      })
     })
   })
 });
