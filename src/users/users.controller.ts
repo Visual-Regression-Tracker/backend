@@ -1,9 +1,9 @@
-import { Controller, Post, Body, Get, UseGuards, Param, ParseUUIDPipe, Put, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Param, ParseUUIDPipe, Put } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { ApiOkResponse, ApiParam, ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
 import { CreateUserDto } from './dto/user-create.dto';
-import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { UserDto } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
@@ -49,24 +49,14 @@ export class UsersController {
         return this.usersService.changePassword(user, password)
     }
 
-    @Get(':id')
-    @ApiParam({ name: 'id', required: true })
-    @ApiOkResponse({ type: UserDto })
-    @ApiBearerAuth()
-    @UseGuards(JwtAuthGuard)
-    get(@Param('id', new ParseUUIDPipe()) id: string): Promise<UserDto> {
-        return this.usersService.get(id);
-    }
-
-    @Put(':id')
-    @ApiParam({ name: 'id', required: true })
+    @Put()
     @ApiOkResponse({ type: UserLoginResponseDto })
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
-    updated(
-        @Param('id', new ParseUUIDPipe()) id: string,
+    update(
+        @CurrentUser() user: User,
         @Body() updateUserDto: UpdateUserDto
     ): Promise<UserLoginResponseDto> {
-        return this.usersService.update(id, updateUserDto);
+        return this.usersService.update(user.id, updateUserDto);
     }
 }

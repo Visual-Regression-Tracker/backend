@@ -1,27 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PNG, PNGWithMetadata } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
-import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
-import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
-import { StaticService } from 'src/shared/static/static.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
+import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { StaticService } from '../shared/static/static.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation, TestRunCreateInput } from '@prisma/client';
 
 @Injectable()
 export class TestRunsService {
   constructor(private prismaService: PrismaService, private staticService: StaticService) { }
 
-  async getAll(buildId: string): Promise<(TestRun & {
-    testVariation: TestVariation;
-  })[]> {
+  async findMany(buildId: string): Promise<TestRun[]> {
     return this.prismaService.testRun.findMany({
       where: { buildId },
-      include: {
-        testVariation: true,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
     });
   }
 
@@ -36,27 +28,35 @@ export class TestRunsService {
     });
   }
 
-  async approve(id: string): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
+  async approve(id: string): Promise<TestRun> {
     const testRun = await this.findOne(id);
-
-    // remove old baseline
-    if (testRun.testVariation.baselineName) {
-      this.staticService.deleteImage(testRun.testVariation.baselineName);
-    }
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName)
     const imageName = `${Date.now()}.baseline.png`;
     this.staticService.saveImage(imageName, PNG.sync.write(baseline));
 
+    // add in baseline history
+    await this.prismaService.baseline.create({
+      data: {
+        baselineName: imageName,
+        testRun: {
+          connect: {
+            id: testRun.id
+          }
+        },
+        testVariation: {
+          connect: {
+            id: testRun.testVariationId
+          }
+        },
+      }
+    })
+
     return this.prismaService.testRun.update({
       where: { id },
-      include: {
-        testVariation: true,
-      },
       data: {
+        baselineName: imageName,
         status: TestStatus.ok,
         testVariation: {
           update: {
@@ -67,14 +67,9 @@ export class TestRunsService {
     });
   }
 
-  async reject(id: string): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
+  async reject(id: string): Promise<TestRun> {
     return this.prismaService.testRun.update({
       where: { id },
-      include: {
-        testVariation: true,
-      },
       data: {
         status: TestStatus.failed,
       },
@@ -104,17 +99,24 @@ export class TestRunsService {
           id: createTestRequestDto.buildId,
         },
       },
+      name: testVariation.name,
+      browser: testVariation.browser,
+      device: testVariation.device,
+      os: testVariation.os,
+      viewport: testVariation.viewport,
+      baselineName: testVariation.baselineName,
+      ignoreAreas: testVariation.ignoreAreas,
       diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
       status: TestStatus.new,
     };
 
     // get baseline image
     let baseline: PNGWithMetadata
-    if (testVariation.baselineName) {
+    if (testRun.baselineName) {
       try {
-        baseline = this.staticService.getImage(testVariation.baselineName)
+        baseline = this.staticService.getImage(testRun.baselineName)
       } catch (ex) {
-        console.log(`Cannot load baseline image: ${testVariation.baselineName}. ${ex}`)
+        console.log(`Cannot load baseline image: ${testRun.baselineName}. ${ex}`)
       }
     }
 
@@ -128,8 +130,8 @@ export class TestRunsService {
 
       // compare
       const pixelMisMatchCount = Pixelmatch(
-        this.applyIgnoreAreas(baseline, JSON.parse(testVariation.ignoreAreas)),
-        this.applyIgnoreAreas(image, JSON.parse(testVariation.ignoreAreas)),
+        this.applyIgnoreAreas(baseline, JSON.parse(testRun.ignoreAreas)),
+        this.applyIgnoreAreas(image, JSON.parse(testRun.ignoreAreas)),
         diff.data,
         baseline.width,
         baseline.height,
@@ -176,6 +178,16 @@ export class TestRunsService {
     return this.prismaService.testRun.delete({
       where: { id },
     });
+  }
+
+  async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
+    return this.prismaService.testRun
+      .update({
+        where: { id },
+        data: {
+          ignoreAreas: JSON.stringify(ignoreAreas),
+        },
+      });
   }
 
   private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buffer {

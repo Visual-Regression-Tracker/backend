@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { ProjectsController } from './projects.controller';
-import { BuildsModule } from 'src/builds/builds.module';
-import { TestVariationsModule } from 'src/test-variations/test-variations.module';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { BuildsModule } from '../builds/builds.module';
+import { TestVariationsModule } from '../test-variations/test-variations.module';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Module({
   imports: [BuildsModule, TestVariationsModule],

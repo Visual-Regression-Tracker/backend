@@ -1,11 +1,11 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { CreateUserDto } from './dto/user-create.dto';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { User } from '@prisma/client';
 import { UserDto } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
-import { AuthService } from 'src/auth/auth.service';
+import { AuthService } from '../auth/auth.service';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
 
 @Injectable()
@@ -67,8 +67,12 @@ export class UsersService {
     }
   }
 
+  async findOne(id: string): Promise<User> {
+    return this.prismaService.user.findOne({ where: { id } })
+  }
+
   async get(id: string): Promise<UserDto> {
-    const user = await this.prismaService.user.findOne({ where: { id } })
+    const user = await this.findOne(id)
     return new UserDto(user)
   }
 

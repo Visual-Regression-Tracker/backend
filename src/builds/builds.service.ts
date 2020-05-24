@@ -1,19 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
-import { TestService } from 'src/test/test.service';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { Build, TestRun, TestVariation } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { Build } from '@prisma/client';
+import { TestRunsService } from '../test-runs/test-runs.service';
 
 @Injectable()
 export class BuildsService {
   constructor(
     private prismaService: PrismaService,
-    private testService: TestService
+    private testRunsService: TestRunsService
   ) { }
-
-  async findById(id: string): Promise<(TestRun & { testVariation: TestVariation; })[]> {
-    return this.testService.getTestRunsByBuildId(id);
-  }
 
   async findMany(projectId: string): Promise<Build[]> {
     return this.prismaService.build.findMany({
@@ -36,11 +32,16 @@ export class BuildsService {
   }
 
   async remove(id: string): Promise<Build> {
-    const testRuns = await this.findById(id);
+    const build = await this.prismaService.build.findOne({
+      where: { id },
+      include: {
+        testRuns: true
+      }
+    });
 
     try {
       await Promise.all(
-        testRuns.map((testRun) => this.testService.deleteTestRun(testRun.id))
+        build.testRuns.map((testRun) => this.testRunsService.delete(testRun.id))
       );
     } catch (err) {
       console.log(err);

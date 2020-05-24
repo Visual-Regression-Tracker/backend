@@ -7,25 +7,26 @@ import {
   Param,
   ParseUUIDPipe,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
-import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { ApiBearerAuth, ApiTags, ApiParam, ApiSecurity } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/auth.guard';
+import { ApiBearerAuth, ApiTags, ApiParam, ApiSecurity, ApiQuery } from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
-import { ApiGuard } from 'src/auth/guards/api.guard';
-import { Build, TestRun } from '@prisma/client';
+import { ApiGuard } from '../auth/guards/api.guard';
+import { Build } from '@prisma/client';
 
 @Controller('builds')
 @ApiTags('builds')
 export class BuildsController {
   constructor(private buildsService: BuildsService) { }
 
-  @Get(':id')
-  @ApiParam({ name: 'id', required: true })
+  @Get()
+  @ApiQuery({ name: 'projectId', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRun[]> {
-    return this.buildsService.findById(id);
+  get(@Query('projectId', new ParseUUIDPipe()) projectId: string): Promise<Build[]> {
+    return this.buildsService.findMany(projectId);
   }
 
   @Delete(':id')
