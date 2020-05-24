@@ -36,6 +36,23 @@ export class TestRunsService {
     const imageName = `${Date.now()}.baseline.png`;
     this.staticService.saveImage(imageName, PNG.sync.write(baseline));
 
+    // add in baseline history
+    await this.prismaService.baseline.create({
+      data: {
+        baselineName: imageName,
+        testRun: {
+          connect: {
+            id: testRun.id
+          }
+        },
+        testVariation: {
+          connect: {
+            id: testRun.testVariationId
+          }
+        },
+      }
+    })
+
     return this.prismaService.testRun.update({
       where: { id },
       data: {
