@@ -3,7 +3,7 @@ import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation, Baseline } from '@prisma/client';
-import { StaticService } from 'src/shared/static/static.service';
+import { StaticService } from '../shared/static/static.service';
 
 @Injectable()
 export class TestVariationsService {

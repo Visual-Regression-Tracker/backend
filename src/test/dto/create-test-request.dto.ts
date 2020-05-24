@@ -13,22 +13,22 @@ export class CreateTestRequestDto {
   @ApiProperty()
   @IsOptional()
   @IsString()
-  os: string;
+  os?: string;
 
   @ApiProperty()
   @IsOptional()
   @IsString()
-  browser: string;
+  browser?: string;
 
   @ApiProperty()
   @IsOptional()
   @IsString()
-  viewport: string;
+  viewport?: string;
 
   @ApiProperty()
   @IsOptional()
   @IsString()
-  device: string;
+  device?: string;
 
   @ApiProperty()
   @IsUUID()
@@ -41,5 +41,5 @@ export class CreateTestRequestDto {
   @ApiProperty()
   @IsOptional()
   @IsNumber()
-  diffTollerancePercent: number;
+  diffTollerancePercent?: number;
 }
