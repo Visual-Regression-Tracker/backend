@@ -2,13 +2,29 @@ import { Injectable } from '@nestjs/common';
 import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation } from '@prisma/client';
+import { TestVariation, Baseline } from '@prisma/client';
 
 @Injectable()
 export class TestVariationsService {
   constructor(
     private prismaService: PrismaService,
   ) { }
+
+  async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
+    return this.prismaService.testVariation.findOne({
+      where: { id },
+      include: {
+        baselines: {
+          include: {
+            testRun: true,
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        },
+      },
+    });
+  }
 
   async findOrCreate(createTestDto: CreateTestRequestDto): Promise<TestVariation> {
     const data = {

@@ -1,7 +1,7 @@
 import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query, Put, Body } from '@nestjs/common';
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TestVariationsService } from './test-variations.service';
-import { TestVariation } from '@prisma/client';
+import { TestVariation, Baseline } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
@@ -21,6 +21,16 @@ export class TestVariationsController {
     return this.prismaService.testVariation.findMany({
       where: { projectId }
     });
+  }
+
+  @Get(':id')
+  @ApiQuery({ name: 'id', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  getDetails(
+    @Param('id', new ParseUUIDPipe()) id,
+  ): Promise<TestVariation & { baselines: Baseline[] }> {
+    return this.testVariations.getDetails(id);
   }
 
   @Put('ignoreArea/:variationId')
