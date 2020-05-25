@@ -33,8 +33,7 @@ export class TestRunsService {
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName)
-    const imageName = `${Date.now()}.baseline.png`;
-    this.staticService.saveImage(imageName, PNG.sync.write(baseline));
+    const imageName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
     // add in baseline history
     await this.prismaService.baseline.create({
@@ -82,84 +81,46 @@ export class TestRunsService {
   ): Promise<TestRun> {
     // save image
     const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
-    const imageName = `${Date.now()}.screenshot.png`;
-    const image = PNG.sync.read(imageBuffer);
-    this.staticService.saveImage(imageName, imageBuffer);
+    const imageName = this.staticService.saveImage('screenshot', imageBuffer);
 
-    // create test run
-    const testRun: TestRunCreateInput = {
-      imageName,
-      testVariation: {
-        connect: {
-          id: testVariation.id,
-        },
-      },
-      build: {
-        connect: {
-          id: createTestRequestDto.buildId,
-        },
-      },
-      name: testVariation.name,
-      browser: testVariation.browser,
-      device: testVariation.device,
-      os: testVariation.os,
-      viewport: testVariation.viewport,
-      baselineName: testVariation.baselineName,
-      ignoreAreas: testVariation.ignoreAreas,
-      diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
-      status: TestStatus.new,
-    };
+    let diff: DiffResult
 
-    // get baseline image
-    let baseline: PNGWithMetadata
-    if (testRun.baselineName) {
-      try {
-        baseline = this.staticService.getImage(testRun.baselineName)
-      } catch (ex) {
-        console.log(`Cannot load baseline image: ${testRun.baselineName}. ${ex}`)
+    if (testVariation.baselineName) {
+      let baseline: PNGWithMetadata
+      baseline = this.staticService.getImage(testVariation.baselineName)
+
+      if (baseline) {
+        const image = this.staticService.getImage(imageName);
+        diff = this.getDiff(baseline, image, createTestRequestDto.diffTollerancePercent, testVariation.ignoreAreas)
       }
     }
 
-    // compare with baseline
-    if (baseline) {
-      const diffImageKey = `${Date.now()}.diff.png`;
-      const diff = new PNG({
-        width: baseline.width,
-        height: baseline.height,
-      });
-
-      // compare
-      const pixelMisMatchCount = Pixelmatch(
-        this.applyIgnoreAreas(baseline, JSON.parse(testRun.ignoreAreas)),
-        this.applyIgnoreAreas(image, JSON.parse(testRun.ignoreAreas)),
-        diff.data,
-        baseline.width,
-        baseline.height,
-        {
-          threshold: testRun.diffTollerancePercent / 100,
-          includeAA: true,
-        },
-      );
-
-      // save diff
-      this.staticService.saveImage(diffImageKey, PNG.sync.write(diff));
-      testRun.diffName = diffImageKey;
-      testRun.pixelMisMatchCount = pixelMisMatchCount;
-      testRun.diffPercent = (pixelMisMatchCount * 100) / (image.width * image.height);
-
-      if (testRun.diffPercent > testRun.diffTollerancePercent) {
-        // if there is diff
-        testRun.status = TestStatus.unresolved;
-      } else {
-        // if ther is NO diff
-        testRun.status = TestStatus.ok;
-      }
-    } else {
-      // no baseline
-      testRun.status = TestStatus.new;
-    }
     return this.prismaService.testRun.create({
-      data: testRun,
+      data: {
+        imageName,
+        testVariation: {
+          connect: {
+            id: testVariation.id,
+          },
+        },
+        build: {
+          connect: {
+            id: createTestRequestDto.buildId,
+          },
+        },
+        name: testVariation.name,
+        browser: testVariation.browser,
+        device: testVariation.device,
+        os: testVariation.os,
+        viewport: testVariation.viewport,
+        baselineName: testVariation.baselineName,
+        ignoreAreas: testVariation.ignoreAreas,
+        diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
+        diffName: diff && diff.imageName,
+        pixelMisMatchCount: diff && diff.pixelMisMatchCount,
+        diffPercent: diff && diff.diffPercent,
+        status: diff ? diff.status : TestStatus.new,
+      },
     });
   }
 
@@ -190,6 +151,49 @@ export class TestRunsService {
       });
   }
 
+  getDiff(baseline: PNG, image: PNG, diffTollerancePercent: number, ignoreAreas: string): DiffResult {
+    const result: DiffResult = {
+      status: null,
+      imageName: null,
+      pixelMisMatchCount: null,
+      diffPercent: null,
+      isSameDimension: baseline.width === image.width && baseline.height === image.height,
+    }
+
+    if (result.isSameDimension) {
+      const diff = new PNG({
+        width: baseline.width,
+        height: baseline.height,
+      });
+
+      // compare
+      result.pixelMisMatchCount = Pixelmatch(
+        this.applyIgnoreAreas(baseline, JSON.parse(ignoreAreas)),
+        this.applyIgnoreAreas(image, JSON.parse(ignoreAreas)),
+        diff.data,
+        baseline.width,
+        baseline.height,
+        {
+          threshold: diffTollerancePercent / 100,
+          includeAA: true,
+        },
+      );
+      result.diffPercent = (result.pixelMisMatchCount * 100) / (image.width * image.height);
+
+      if (result.diffPercent > diffTollerancePercent) {
+        // save diff
+        result.imageName = this.staticService.saveImage('diff', PNG.sync.write(diff));;
+        result.status = TestStatus.unresolved;
+      } else {
+        result.status = TestStatus.ok;
+      }
+    } else {
+      // diff dimensions
+      result.status = TestStatus.unresolved;
+    }
+    return result
+  }
+
   private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buffer {
     ignoreAreas.forEach(area => {
       for (let y = area.y; y < area.y + area.height; y++) {
@@ -204,4 +208,12 @@ export class TestRunsService {
     });
     return image.data;
   }
+}
+
+interface DiffResult {
+  status: TestStatus,
+  imageName: string,
+  pixelMisMatchCount: number,
+  diffPercent: number,
+  isSameDimension: boolean,
 }

@@ -9,12 +9,20 @@ export class StaticService {
   constructor(private configService: ConfigService) {
   }
 
-  saveImage(imageName: string, imageBuffer: Buffer) {
+  saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): string {
+    const imageName = `${Date.now()}.${type}.png`
     writeFileSync(this.getImagePath(imageName), imageBuffer);
+    return imageName
   }
 
   getImage(imageName: string): PNGWithMetadata {
-    return PNG.sync.read(readFileSync(this.getImagePath(imageName)));
+    let image: PNGWithMetadata
+    try {
+      image = PNG.sync.read(readFileSync(this.getImagePath(imageName)))
+    } catch (ex) {
+      console.log(`Cannot image: ${imageName}. ${ex}`)
+    }
+    return image;
   }
 
   async deleteImage(imageName: string): Promise<boolean> {
