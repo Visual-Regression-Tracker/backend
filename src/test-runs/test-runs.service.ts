@@ -5,11 +5,12 @@ import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
 import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestRun, TestStatus, TestVariation, TestRunCreateInput } from '@prisma/client';
+import { TestRun, TestStatus, TestVariation } from '@prisma/client';
+import { DiffResult } from './diffResult';
 
 @Injectable()
 export class TestRunsService {
-  constructor(private prismaService: PrismaService, private staticService: StaticService) { }
+  constructor(private prismaService: PrismaService, private staticService: StaticService) {}
 
   async findMany(buildId: string): Promise<TestRun[]> {
     return this.prismaService.testRun.findMany({
@@ -17,9 +18,13 @@ export class TestRunsService {
     });
   }
 
-  async findOne(id: string): Promise<TestRun & {
-    testVariation: TestVariation;
-  }> {
+  async findOne(
+    id: string
+  ): Promise<
+    TestRun & {
+      testVariation: TestVariation;
+    }
+  > {
     return this.prismaService.testRun.findOne({
       where: { id },
       include: {
@@ -32,7 +37,7 @@ export class TestRunsService {
     const testRun = await this.findOne(id);
 
     // save new baseline
-    const baseline = this.staticService.getImage(testRun.imageName)
+    const baseline = this.staticService.getImage(testRun.imageName);
     const imageName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
     // add in baseline history
@@ -41,16 +46,16 @@ export class TestRunsService {
         baselineName: imageName,
         testRun: {
           connect: {
-            id: testRun.id
-          }
+            id: testRun.id,
+          },
         },
         testVariation: {
           connect: {
-            id: testRun.testVariationId
-          }
+            id: testRun.testVariationId,
+          },
         },
-      }
-    })
+      },
+    });
 
     return this.prismaService.testRun.update({
       where: { id },
@@ -72,26 +77,23 @@ export class TestRunsService {
       data: {
         status: TestStatus.failed,
       },
-    });;
+    });
   }
 
-  async create(
-    testVariation: TestVariation,
-    createTestRequestDto: CreateTestRequestDto,
-  ): Promise<TestRun> {
+  async create(testVariation: TestVariation, createTestRequestDto: CreateTestRequestDto): Promise<TestRun> {
     // save image
     const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
     const imageName = this.staticService.saveImage('screenshot', imageBuffer);
 
-    let diff: DiffResult
+    let diff: DiffResult;
 
     if (testVariation.baselineName) {
-      let baseline: PNGWithMetadata
-      baseline = this.staticService.getImage(testVariation.baselineName)
+      let baseline: PNGWithMetadata;
+      baseline = this.staticService.getImage(testVariation.baselineName);
 
       if (baseline) {
         const image = this.staticService.getImage(imageName);
-        diff = this.getDiff(baseline, image, createTestRequestDto.diffTollerancePercent, testVariation.ignoreAreas)
+        diff = this.getDiff(baseline, image, createTestRequestDto.diffTollerancePercent, testVariation.ignoreAreas);
       }
     }
 
@@ -142,13 +144,12 @@ export class TestRunsService {
   }
 
   async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
-    return this.prismaService.testRun
-      .update({
-        where: { id },
-        data: {
-          ignoreAreas: JSON.stringify(ignoreAreas),
-        },
-      });
+    return this.prismaService.testRun.update({
+      where: { id },
+      data: {
+        ignoreAreas: JSON.stringify(ignoreAreas),
+      },
+    });
   }
 
   getDiff(baseline: PNG, image: PNG, diffTollerancePercent: number, ignoreAreas: string): DiffResult {
@@ -158,7 +159,7 @@ export class TestRunsService {
       pixelMisMatchCount: null,
       diffPercent: null,
       isSameDimension: baseline.width === image.width && baseline.height === image.height,
-    }
+    };
 
     if (result.isSameDimension) {
       const diff = new PNG({
@@ -176,13 +177,13 @@ export class TestRunsService {
         {
           threshold: diffTollerancePercent / 100,
           includeAA: true,
-        },
+        }
       );
       result.diffPercent = (result.pixelMisMatchCount * 100) / (image.width * image.height);
 
       if (result.diffPercent > diffTollerancePercent) {
         // save diff
-        result.imageName = this.staticService.saveImage('diff', PNG.sync.write(diff));;
+        result.imageName = this.staticService.saveImage('diff', PNG.sync.write(diff));
         result.status = TestStatus.unresolved;
       } else {
         result.status = TestStatus.ok;
@@ -191,7 +192,7 @@ export class TestRunsService {
       // diff dimensions
       result.status = TestStatus.unresolved;
     }
-    return result
+    return result;
   }
 
   private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buffer {
@@ -208,12 +209,4 @@ export class TestRunsService {
     });
     return image.data;
   }
-}
-
-interface DiffResult {
-  status: TestStatus,
-  imageName: string,
-  pixelMisMatchCount: number,
-  diffPercent: number,
-  isSameDimension: boolean,
 }
