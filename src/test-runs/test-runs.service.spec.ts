@@ -4,14 +4,20 @@ import { TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../shared/static/static.service';
 import { PNG } from 'pngjs';
-import { TestStatus } from '@prisma/client';
+import { TestStatus, TestRun } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
 import { DiffResult } from './diffResult';
 
 jest.mock('pixelmatch');
 
-const initService = async ({ testRunCreateMock = jest.fn(), getImageMock = jest.fn(), saveImageMock = jest.fn() }) => {
+const initService = async ({
+  testRunUpdateMock = jest.fn(),
+  testRunFindOneMock = jest.fn(),
+  testRunCreateMock = jest.fn(),
+  getImageMock = jest.fn(),
+  saveImageMock = jest.fn(),
+}) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       TestRunsService,
@@ -19,7 +25,9 @@ const initService = async ({ testRunCreateMock = jest.fn(), getImageMock = jest.
         provide: PrismaService,
         useValue: {
           testRun: {
+            findOne: testRunFindOneMock,
             create: testRunCreateMock,
+            update: testRunUpdateMock,
           },
         },
       },
@@ -37,6 +45,100 @@ const initService = async ({ testRunCreateMock = jest.fn(), getImageMock = jest.
 };
 describe('TestRunsService', () => {
   let service: TestRunsService;
+
+  it('findOne', async () => {
+    const id = 'some id';
+    const testRunFindOneMock = jest.fn();
+    service = await initService({
+      testRunFindOneMock,
+    });
+
+    service.findOne(id);
+
+    expect(testRunFindOneMock).toHaveBeenCalledWith({
+      where: { id },
+      include: {
+        testVariation: true,
+      },
+    });
+  });
+
+  it('reject', async () => {
+    const id = 'some id';
+    const testRunUpdateMock = jest.fn();
+    service = await initService({
+      testRunUpdateMock,
+    });
+
+    service.reject(id);
+
+    expect(testRunUpdateMock).toHaveBeenCalledWith({
+      where: { id },
+      data: {
+        status: TestStatus.failed,
+      },
+    });
+  });
+
+  describe('approve', () => {
+    it('can approve', async () => {
+      const testRun = {
+        id: 'id',
+        imageName: 'imageName',
+        diffTollerancePercent: 12,
+        status: TestStatus.new,
+        buildId: 'buildId',
+        testVariationId: 'testVariationId',
+        updatedAt: new Date(),
+        createdAt: new Date(),
+        name: 'test run name',
+        ignoreAreas: '[]',
+      };
+      const testRunUpdateMock = jest.fn();
+      const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
+      const baselineName = 'some baseline name';
+      const saveImageMock = jest.fn().mockReturnValueOnce(baselineName);
+      const getImageMock = jest.fn().mockReturnValueOnce(
+        new PNG({
+          width: 10,
+          height: 10,
+        })
+      );
+      service = await initService({
+        testRunUpdateMock,
+        saveImageMock,
+        getImageMock,
+      });
+      service.findOne = testRunFindOneMock;
+
+      await service.approve(testRun.id);
+
+      expect(testRunFindOneMock).toHaveBeenCalledWith(testRun.id);
+      expect(getImageMock).toHaveBeenCalledWith(testRun.imageName);
+      expect(saveImageMock).toHaveBeenCalledTimes(1);
+      expect(testRunUpdateMock).toHaveBeenCalledWith({
+        where: { id: testRun.id },
+        data: {
+          status: TestStatus.approved,
+          testVariation: {
+            update: {
+              baselineName,
+              baselines: {
+                create: {
+                  baselineName,
+                  testRun: {
+                    connect: {
+                      id: testRun.id,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+  });
 
   describe('create', () => {
     const initCreateTestRequestDto: CreateTestRequestDto = {
