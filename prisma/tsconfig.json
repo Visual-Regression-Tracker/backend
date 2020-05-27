@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+      "module": "commonjs",
+      "declaration": true,
+      "removeComments": true,
+      "emitDecoratorMetadata": true,
+      "experimentalDecorators": true,
+      "target": "es2018",
+      "sourceMap": true,
+      "baseUrl": "./",
+      "incremental": true,
+      "skipLibCheck": true,
+      "esModuleInterop": true
+    },
+    "exclude": ["node_modules"]
+  }
+  

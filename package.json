@@ -1,6 +1,6 @@
 {
   "name": "vrt-backend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "",
   "author": "",
   "private": true,
@@ -19,8 +19,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "docker:build_api": "npm run test && npm run test:e2e && docker build -t visualregressiontracker/api:$npm_package_version -f ./Dockerfile . && docker push visualregressiontracker/api:$npm_package_version",
-    "docker:build_migration": "docker build -t visualregressiontracker/migration:1.0.0 -f ./prisma/Dockerfile ./prisma"
+    "docker:build_api": "npm run test && npm run test:e2e && docker build -t visualregressiontracker/api:$npm_package_version -f ./Dockerfile . && docker push visualregressiontracker/api:$npm_package_version"
   },
   "dependencies": {
     "@nestjs/common": "^7.0.0",
@@ -30,7 +29,7 @@
     "@nestjs/passport": "^7.0.0",
     "@nestjs/platform-express": "^7.0.0",
     "@nestjs/swagger": "^4.5.1",
-    "@prisma/client": "^2.0.0-beta.5",
+    "@prisma/client": "^2.0.0-beta.6",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.2.3",
     "class-validator": "^0.11.1",
@@ -52,7 +51,7 @@
     "@nestjs/cli": "^7.0.0",
     "@nestjs/schematics": "^7.0.0",
     "@nestjs/testing": "^7.0.0",
-    "@prisma/cli": "^2.0.0-beta.5",
+    "@prisma/cli": "^2.0.0-beta.6",
     "@types/bcryptjs": "^2.4.2",
     "@types/express": "^4.17.3",
     "@types/jest": "25.1.4",

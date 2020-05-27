@@ -10,31 +10,7 @@ import { UserLoginRequestDto } from './dto/user-login-request.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prismaService: PrismaService, private authService: AuthService) {
-    // create default user if there are none in DB
-    this.userList().then(userList => {
-      if (userList.length === 0) {
-        const defaultEmail = 'visual-regression-tracker@example.com';
-        const defaultPassword = '123456';
-
-        this.create({
-          email: defaultEmail,
-          password: defaultPassword,
-          firstName: 'fname',
-          lastName: 'lname'
-        }).then(
-          user => {
-            console.log('###########################');
-            console.log('## CREATING DEFAULT USER ##');
-            console.log('###########################');
-            console.log('');
-            console.log(`The user with the email "${defaultEmail}" and password "${defaultPassword}" was created`);
-            console.log(`The Api key is: ${user.apiKey}`);
-          }
-        );
-      }
-    });
-  }
+  constructor(private prismaService: PrismaService, private authService: AuthService) {}
 
   userList(): Promise<User[]> {
     return this.prismaService.user.findMany();
@@ -57,10 +33,7 @@ export class UsersService {
       return new UserLoginResponseDto(userData, null);
     } catch (err) {
       if (err.original.constraint === 'user_email_key') {
-        throw new HttpException(
-          `User with email '${err.errors[0].value}' already exists`,
-          HttpStatus.CONFLICT,
-        );
+        throw new HttpException(`User with email '${err.errors[0].value}' already exists`, HttpStatus.CONFLICT);
       }
 
       throw new HttpException(err, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -68,12 +41,12 @@ export class UsersService {
   }
 
   async findOne(id: string): Promise<User> {
-    return this.prismaService.user.findOne({ where: { id } })
+    return this.prismaService.user.findOne({ where: { id } });
   }
 
   async get(id: string): Promise<UserDto> {
-    const user = await this.findOne(id)
-    return new UserDto(user)
+    const user = await this.findOne(id);
+    return new UserDto(user);
   }
 
   async update(id: string, userDto: UpdateUserDto): Promise<UserLoginResponseDto> {
@@ -83,20 +56,20 @@ export class UsersService {
         email: userDto.email,
         firstName: userDto.firstName,
         lastName: userDto.lastName,
-      }
-    })
+      },
+    });
     const token = this.authService.signToken(user);
     return new UserLoginResponseDto(user, token);
   }
 
   async generateNewApiKey(user: User): Promise<string> {
-    const newApiKey = this.authService.generateApiKey()
+    const newApiKey = this.authService.generateApiKey();
     await this.prismaService.user.update({
       where: { id: user.id },
       data: {
-        apiKey: newApiKey
-      }
-    })
+        apiKey: newApiKey,
+      },
+    });
     return newApiKey;
   }
 
@@ -104,30 +77,24 @@ export class UsersService {
     await this.prismaService.user.update({
       where: { id: user.id },
       data: {
-        password: await this.authService.encryptPassword(newPassword)
-      }
-    })
+        password: await this.authService.encryptPassword(newPassword),
+      },
+    });
     return true;
   }
 
   async login(userLoginRequestDto: UserLoginRequestDto) {
     const user = await this.prismaService.user.findOne({
-      where: { email: userLoginRequestDto.email }
-    })
+      where: { email: userLoginRequestDto.email },
+    });
     if (!user) {
-      throw new HttpException(
-        'Invalid email or password.',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST);
     }
 
     const isMatch = await this.authService.compare(userLoginRequestDto.password, user.password);
 
     if (!isMatch) {
-      throw new HttpException(
-        'Invalid email or password.',
-        HttpStatus.BAD_REQUEST,
-      );
+      throw new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST);
     }
 
     const token = this.authService.signToken(user);
