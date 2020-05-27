@@ -38,6 +38,11 @@ jobs:
         postgresql user: postgres
         postgresql password: postgres
         
+    - name: Wait untill DB started (workaround of https://github.com/Harmon758/postgresql-action/issues/7)
+      uses: jakejarvis/wait-action@v0.1.0
+      with:
+        time: '10s'
+      
     - name: Apply DB migrations
       run: npx prisma migrate up -c --experimental
     
