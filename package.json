@@ -19,8 +19,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "docker:build_api": "npm run test && npm run test:e2e && docker build -t visualregressiontracker/api:$npm_package_version -f ./Dockerfile . && docker push visualregressiontracker/api:$npm_package_version",
-    "docker:build_migration": "docker build -t visualregressiontracker/migration:1.0.0 -f ./prisma/Dockerfile ./prisma"
+    "docker:build_api": "npm run test && npm run test:e2e && docker build -t visualregressiontracker/api:$npm_package_version -f ./Dockerfile . && docker push visualregressiontracker/api:$npm_package_version"
   },
   "dependencies": {
     "@nestjs/common": "^7.0.0",

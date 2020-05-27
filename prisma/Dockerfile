@@ -1,10 +1,13 @@
 FROM node:12-alpine
 
-# Install @prisma/cli for the migration
-RUN npm install -g @prisma/cli --unsafe-perm
+WORKDIR /app
 
-# Copy schema and migration folder
-COPY schema.prisma /schema.prisma
-COPY migrations/ /migrations/
+COPY . .
 
-CMD [ "prisma", "migrate", "up", "-c", "--experimental"]
+RUN npm ci 
+
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+CMD ["sh"]
