@@ -40,3 +40,6 @@ jobs:
         
     - name: Apply DB migrations
       run: npx prisma migrate up -c --experimental
+    
+    - name: Run e2e tests
+      run: npm run test:e2e
