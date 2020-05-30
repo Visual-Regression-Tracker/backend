@@ -3,7 +3,7 @@ import uuidAPIKey from 'uuid-apikey';
 import { genSalt, hash } from 'bcryptjs';
 
 const prisma = new PrismaClient({
-  log: ['query'],
+  // log: ['query'],
 });
 
 async function seed() {
@@ -21,7 +21,7 @@ async function createDefaultUser() {
   const userList = await prisma.user.findMany();
   console.log(userList);
   if (userList.length === 0) {
-    const defaultEmail = 'visual-regression-tracker1@example.com';
+    const defaultEmail = 'visual-regression-tracker@example.com';
     const defaultPassword = '123456';
     const salt = await genSalt(10);
     await prisma.user
