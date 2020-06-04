@@ -340,7 +340,7 @@ describe('TestRunsService', () => {
 
       expect(result).toStrictEqual({
         status: undefined,
-        diffName: undefined,
+        diffName: null,
         pixelMisMatchCount: undefined,
         diffPercent: undefined,
         isSameDimension: undefined,
@@ -362,7 +362,7 @@ describe('TestRunsService', () => {
 
       expect(result).toStrictEqual({
         status: TestStatus.unresolved,
-        diffName: undefined,
+        diffName: null,
         pixelMisMatchCount: undefined,
         diffPercent: undefined,
         isSameDimension: false,
@@ -385,7 +385,7 @@ describe('TestRunsService', () => {
 
       expect(result).toStrictEqual({
         status: TestStatus.ok,
-        diffName: undefined,
+        diffName: null,
         pixelMisMatchCount: 0,
         diffPercent: 0,
         isSameDimension: true,
@@ -411,7 +411,7 @@ describe('TestRunsService', () => {
       expect(saveImageMock).toHaveBeenCalledTimes(0);
       expect(result).toStrictEqual({
         status: TestStatus.ok,
-        diffName: undefined,
+        diffName: null,
         pixelMisMatchCount,
         diffPercent: 1.5,
         isSameDimension: true,
