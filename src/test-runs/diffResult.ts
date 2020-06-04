@@ -2,7 +2,7 @@ import { TestStatus } from '@prisma/client';
 
 export interface DiffResult {
   status: TestStatus;
-  imageName: string;
+  diffName: string;
   pixelMisMatchCount: number;
   diffPercent: number;
   isSameDimension: boolean;
