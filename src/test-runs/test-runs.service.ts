@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PNG, PNGWithMetadata } from 'pngjs';
+import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
