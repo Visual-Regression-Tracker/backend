@@ -8,12 +8,15 @@ import { TestStatus, TestRun } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
 import { DiffResult } from './diffResult';
+import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
 
 jest.mock('pixelmatch');
 
 const initService = async ({
+  testRunDeleteMock = jest.fn(),
   testRunUpdateMock = jest.fn(),
   testRunFindOneMock = jest.fn(),
+  testRunFindManyMock = jest.fn(),
   testRunCreateMock = jest.fn(),
   getImageMock = jest.fn(),
   saveImageMock = jest.fn(),
@@ -26,6 +29,8 @@ const initService = async ({
         provide: PrismaService,
         useValue: {
           testRun: {
+            delete: testRunDeleteMock,
+            findMany: testRunFindManyMock,
             findOne: testRunFindOneMock,
             create: testRunCreateMock,
             update: testRunUpdateMock,
@@ -237,67 +242,6 @@ describe('TestRunsService', () => {
       });
     });
 
-    // it('with deleted baseline', async () => {
-    //   const testRun = {
-    //     id: 'id',
-    //     imageName: 'imageName',
-    //     baselineName: 'baselineName',
-    //     diffTollerancePercent: 12,
-    //     ignoreAreas: '[]',
-    //     diffName: null,
-    //   };
-    //   const testVariation = {
-    //     id: '123',
-    //     projectId: 'project Id',
-    //     name: 'Test name',
-    //     baselineName: 'baselineName',
-    //     os: 'OS',
-    //     browser: 'browser',
-    //     viewport: 'viewport',
-    //     device: 'device',
-    //     ignoreAreas: '[]',
-    //     createdAt: new Date(),
-    //     updatedAt: new Date(),
-    //   };
-    //   const createTestRequestDto = initCreateTestRequestDto;
-    //   const testRunCreateMock = jest.fn().mockResolvedValueOnce(testRun);
-    //   const imageName = 'image name';
-    //   const saveImageMock = jest.fn().mockReturnValueOnce(imageName);
-    //   const getImageMock = jest.fn().mockReturnValueOnce(null);
-    //   service = await initService({ testRunCreateMock, saveImageMock, getImageMock });
-
-    //   await service.create(testVariation, createTestRequestDto);
-
-    //   expect(getImageMock).toHaveBeenCalledWith(testVariation.baselineName);
-    //   expect(testRunCreateMock).toHaveBeenCalledWith({
-    //     data: {
-    //       imageName,
-    //       testVariation: {
-    //         connect: {
-    //           id: testVariation.id,
-    //         },
-    //       },
-    //       build: {
-    //         connect: {
-    //           id: createTestRequestDto.buildId,
-    //         },
-    //       },
-    //       name: testVariation.name,
-    //       browser: testVariation.browser,
-    //       device: testVariation.device,
-    //       os: testVariation.os,
-    //       viewport: testVariation.viewport,
-    //       baselineName: testVariation.baselineName,
-    //       ignoreAreas: testVariation.ignoreAreas,
-    //       diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
-    //       diffName: undefined,
-    //       pixelMisMatchCount: undefined,
-    //       diffPercent: undefined,
-    //       status: TestStatus.new,
-    //     },
-    //   });
-    // });
-
     it('with baseline', async () => {
       const testRun = {
         id: 'id',
@@ -395,11 +339,11 @@ describe('TestRunsService', () => {
       const result = service.getDiff(baseline, image, 0, '[]');
 
       expect(result).toStrictEqual({
-        status: null,
-        diffName: null,
-        pixelMisMatchCount: null,
-        diffPercent: null,
-        isSameDimension: false,
+        status: undefined,
+        diffName: undefined,
+        pixelMisMatchCount: undefined,
+        diffPercent: undefined,
+        isSameDimension: undefined,
       });
     });
 
@@ -418,9 +362,9 @@ describe('TestRunsService', () => {
 
       expect(result).toStrictEqual({
         status: TestStatus.unresolved,
-        diffName: null,
-        pixelMisMatchCount: null,
-        diffPercent: null,
+        diffName: undefined,
+        pixelMisMatchCount: undefined,
+        diffPercent: undefined,
         isSameDimension: false,
       });
     });
@@ -441,7 +385,7 @@ describe('TestRunsService', () => {
 
       expect(result).toStrictEqual({
         status: TestStatus.ok,
-        diffName: null,
+        diffName: undefined,
         pixelMisMatchCount: 0,
         diffPercent: 0,
         isSameDimension: true,
@@ -467,7 +411,7 @@ describe('TestRunsService', () => {
       expect(saveImageMock).toHaveBeenCalledTimes(0);
       expect(result).toStrictEqual({
         status: TestStatus.ok,
-        diffName: null,
+        diffName: undefined,
         pixelMisMatchCount,
         diffPercent: 1.5,
         isSameDimension: true,
@@ -593,6 +537,63 @@ describe('TestRunsService', () => {
         diffName: diff.diffName,
         pixelMisMatchCount: diff.pixelMisMatchCount,
         diffPercent: diff.diffPercent,
+      },
+    });
+  });
+
+  it('findMany', async () => {
+    const buildId = 'some id';
+    const testRunFindManyMock = jest.fn();
+    service = await initService({
+      testRunFindManyMock,
+    });
+
+    await service.findMany(buildId);
+
+    expect(testRunFindManyMock).toHaveBeenCalledWith({
+      where: { buildId },
+    });
+  });
+
+  it('delete', async () => {
+    const id = 'some id';
+    const testRun = {
+      diffName: 'diffName',
+      imageName: 'imageName',
+    };
+    const findOneMock = jest.fn().mockResolvedValueOnce(testRun);
+    const deleteImageMock = jest.fn();
+    const testRunDeleteMock = jest.fn();
+    service = await initService({
+      deleteImageMock,
+      testRunDeleteMock,
+    });
+    service.findOne = findOneMock;
+
+    await service.delete(id);
+
+    expect(findOneMock).toHaveBeenCalledWith(id);
+    expect(deleteImageMock).toHaveBeenNthCalledWith(1, testRun.diffName);
+    expect(deleteImageMock).toHaveBeenNthCalledWith(2, testRun.imageName);
+    expect(testRunDeleteMock).toHaveBeenCalledWith({
+      where: { id },
+    });
+  });
+
+  it('updateIgnoreAreas', async () => {
+    const id = 'some id';
+    const ignoreAreas: IgnoreAreaDto[] = [{ x: 1, y: 2, width: 10, height: 20 }];
+    const testRunUpdateMock = jest.fn();
+    service = await initService({
+      testRunUpdateMock,
+    });
+
+    await service.updateIgnoreAreas(id, ignoreAreas);
+
+    expect(testRunUpdateMock).toHaveBeenCalledWith({
+      where: { id },
+      data: {
+        ignoreAreas: JSON.stringify(ignoreAreas),
       },
     });
   });

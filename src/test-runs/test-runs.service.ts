@@ -141,14 +141,10 @@ export class TestRunsService {
   async delete(id: string): Promise<TestRun> {
     const testRun = await this.findOne(id);
 
-    try {
-      Promise.all([
-        testRun.diffName && this.staticService.deleteImage(testRun.diffName),
-        this.staticService.deleteImage(testRun.imageName),
-      ]);
-    } catch (err) {
-      console.log(err);
-    }
+    Promise.all([
+      this.staticService.deleteImage(testRun.diffName),
+      this.staticService.deleteImage(testRun.imageName),
+    ]);
 
     return this.prismaService.testRun.delete({
       where: { id },
@@ -166,11 +162,11 @@ export class TestRunsService {
 
   getDiff(baseline: PNG, image: PNG, diffTollerancePercent: number, ignoreAreas: string): DiffResult {
     const result: DiffResult = {
-      status: null,
-      diffName: null,
-      pixelMisMatchCount: null,
-      diffPercent: null,
-      isSameDimension: false,
+      status: undefined,
+      diffName: undefined,
+      pixelMisMatchCount: undefined,
+      diffPercent: undefined,
+      isSameDimension: undefined,
     };
 
     if (baseline) {

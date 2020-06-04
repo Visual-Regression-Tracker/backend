@@ -15,6 +15,7 @@ export class StaticService {
   }
 
   getImage(imageName: string): PNGWithMetadata {
+    if (!imageName) return;
     let image: PNGWithMetadata;
     try {
       image = PNG.sync.read(readFileSync(this.getImagePath(imageName)));
