@@ -6,15 +6,15 @@ import { TestRunsService } from '../test-runs/test-runs.service';
 
 @Injectable()
 export class BuildsService {
-  constructor(
-    private prismaService: PrismaService,
-    private testRunsService: TestRunsService
-  ) { }
+  constructor(private prismaService: PrismaService, private testRunsService: TestRunsService) {}
 
   async findMany(projectId: string): Promise<Build[]> {
     return this.prismaService.build.findMany({
       where: { projectId },
-      orderBy: { createdAt: 'desc' }
+      include: {
+        testRuns: true,
+      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -35,14 +35,12 @@ export class BuildsService {
     const build = await this.prismaService.build.findOne({
       where: { id },
       include: {
-        testRuns: true
-      }
+        testRuns: true,
+      },
     });
 
     try {
-      await Promise.all(
-        build.testRuns.map((testRun) => this.testRunsService.delete(testRun.id))
-      );
+      await Promise.all(build.testRuns.map(testRun => this.testRunsService.delete(testRun.id)));
     } catch (err) {
       console.log(err);
     }
