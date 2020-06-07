@@ -7,10 +7,15 @@ import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
+import { EventsGateway } from 'src/events/events.gateway';
 
 @Injectable()
 export class TestRunsService {
-  constructor(private prismaService: PrismaService, private staticService: StaticService) {}
+  constructor(
+    private prismaService: PrismaService,
+    private staticService: StaticService,
+    private eventsGateway: EventsGateway
+  ) {}
 
   async findMany(buildId: string): Promise<TestRun[]> {
     return this.prismaService.testRun.findMany({
@@ -135,7 +140,9 @@ export class TestRunsService {
       testVariation.ignoreAreas
     );
 
-    return this.saveDiffResult(testRun.id, diffResult);
+    const testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
+    this.eventsGateway.newTestRun(testRunWithResult);
+    return testRunWithResult;
   }
 
   async delete(id: string): Promise<TestRun> {
