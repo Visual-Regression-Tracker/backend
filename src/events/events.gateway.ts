@@ -19,10 +19,6 @@ export class EventsGateway {
     this.server.emit('build_created', build);
   }
 
-  buildUpdated(build: BuildDto) {
-    this.server.emit('build_updated', build);
-  }
-
   newTestRun(testRun: TestRun) {
     this.server.emit('testRun_created', testRun);
   }
