@@ -3,32 +3,46 @@ import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Build } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
+import { EventsGateway } from '../events/events.gateway';
+import { BuildDto } from './dto/build.dto';
 
 @Injectable()
 export class BuildsService {
-  constructor(private prismaService: PrismaService, private testRunsService: TestRunsService) {}
+  constructor(
+    private prismaService: PrismaService,
+    private testRunsService: TestRunsService,
+    private eventsGateway: EventsGateway
+  ) {}
 
-  async findMany(projectId: string): Promise<Build[]> {
-    return this.prismaService.build.findMany({
+  async findMany(projectId: string): Promise<BuildDto[]> {
+    const buildList = await this.prismaService.build.findMany({
       where: { projectId },
       include: {
         testRuns: true,
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return buildList.map(build => new BuildDto(build));
   }
 
-  async create(buildDto: CreateBuildDto): Promise<Build> {
-    return this.prismaService.build.create({
+  async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
+    const build = await this.prismaService.build.create({
       data: {
-        branchName: buildDto.branchName,
+        branchName: createBuildDto.branchName,
         project: {
           connect: {
-            id: buildDto.projectId,
+            id: createBuildDto.projectId,
           },
         },
       },
+      include: {
+        testRuns: true,
+      },
     });
+    const buildDto = new BuildDto(build);
+    this.eventsGateway.buildCreated(buildDto);
+    return buildDto;
   }
 
   async remove(id: string): Promise<Build> {
