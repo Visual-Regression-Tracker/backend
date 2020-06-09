@@ -155,7 +155,7 @@ describe('TestRunsService', () => {
     });
   });
 
-  describe('create', () => {
+  it('create', async () => {
     const initCreateTestRequestDto: CreateTestRequestDto = {
       buildId: 'buildId',
       projectId: 'projectId',
@@ -177,177 +177,90 @@ describe('TestRunsService', () => {
       status: TestStatus.unresolved,
     };
 
-    it('no baseline', async () => {
-      const testRun = {
-        id: 'id',
-        imageName: 'imageName',
-        baselineName: null,
-        diffTollerancePercent: 1,
-        ignoreAreas: '[]',
-        diffName: null,
-      };
+    const testRun = {
+      id: 'id',
+      imageName: 'imageName',
+      baselineName: 'baselineName',
+      diffTollerancePercent: 1,
+      ignoreAreas: '[]',
+      diffName: null,
+    };
+    const testVariation = {
+      id: '123',
+      projectId: 'project Id',
+      name: 'Test name',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      ignoreAreas: '[]',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const createTestRequestDto = initCreateTestRequestDto;
+    const testRunCreateMock = jest.fn().mockResolvedValueOnce(testRun);
+    const imageName = 'image name';
+    const saveImageMock = jest.fn().mockReturnValueOnce(imageName);
+    const image = 'image';
+    const baseline = 'baseline';
+    const getImageMock = jest
+      .fn()
+      .mockReturnValueOnce(baseline)
+      .mockReturnValueOnce(image);
+    const eventNewTestRunMock = jest.fn();
+    service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventNewTestRunMock });
+    const diffResult: DiffResult = {
+      status: TestStatus.unresolved,
+      diffName: 'diff image name',
+      pixelMisMatchCount: 11,
+      diffPercent: 22,
+      isSameDimension: true,
+    };
+    const getDiffMock = jest.fn().mockReturnValueOnce(diffResult);
+    service.getDiff = getDiffMock;
+    const saveDiffResultMock = jest.fn();
+    service.saveDiffResult = saveDiffResultMock.mockResolvedValueOnce(testRunWithResult);
 
-      const testVariation = {
-        id: '123',
-        projectId: 'project Id',
-        name: 'Test name',
-        baselineName: null,
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        ignoreAreas: '[]',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const diffResult: DiffResult = {
-        status: null,
-        diffName: null,
-        pixelMisMatchCount: null,
-        diffPercent: null,
-        isSameDimension: false,
-      };
-      const createTestRequestDto = initCreateTestRequestDto;
-      const testRunCreateMock = jest.fn().mockResolvedValueOnce(testRun);
-      const imageName = 'image name';
-      const saveImageMock = jest.fn().mockReturnValueOnce(imageName);
-      const image = 'image';
-      const baseline = null;
-      const getImageMock = jest
-        .fn()
-        .mockReturnValueOnce(baseline)
-        .mockReturnValueOnce(image);
-      const eventNewTestRunMock = jest.fn();
-      service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventNewTestRunMock });
-      const getDiffMock = jest.fn().mockReturnValueOnce(diffResult);
-      service.getDiff = getDiffMock;
-      const saveDiffResultMock = jest.fn().mockResolvedValueOnce(testRunWithResult);
-      service.saveDiffResult = saveDiffResultMock;
+    const result = await service.create(testVariation, createTestRequestDto);
 
-      const result = await service.create(testVariation, createTestRequestDto);
-
-      expect(saveImageMock).toHaveBeenCalledWith('screenshot', Buffer.from(createTestRequestDto.imageBase64, 'base64'));
-      expect(getImageMock).toHaveBeenNthCalledWith(1, testVariation.baselineName);
-      expect(getImageMock).toHaveBeenNthCalledWith(2, imageName);
-      expect(getDiffMock).toHaveBeenCalledWith(baseline, image, testRun.diffTollerancePercent, testRun.ignoreAreas);
-      expect(saveDiffResultMock).toHaveBeenCalledWith(testRun.id, diffResult);
-      expect(testRunCreateMock).toHaveBeenCalledWith({
-        data: {
-          imageName,
-          testVariation: {
-            connect: {
-              id: testVariation.id,
-            },
+    expect(saveImageMock).toHaveBeenCalledWith('screenshot', Buffer.from(createTestRequestDto.imageBase64, 'base64'));
+    expect(service.getDiff).toHaveBeenCalledWith(
+      baseline,
+      image,
+      createTestRequestDto.diffTollerancePercent,
+      testVariation.ignoreAreas
+    );
+    expect(getImageMock).toHaveBeenNthCalledWith(1, testVariation.baselineName);
+    expect(getImageMock).toHaveBeenNthCalledWith(2, imageName);
+    expect(testRunCreateMock).toHaveBeenCalledWith({
+      data: {
+        imageName,
+        testVariation: {
+          connect: {
+            id: testVariation.id,
           },
-          build: {
-            connect: {
-              id: createTestRequestDto.buildId,
-            },
-          },
-          name: testVariation.name,
-          browser: testVariation.browser,
-          device: testVariation.device,
-          os: testVariation.os,
-          viewport: testVariation.viewport,
-          baselineName: testVariation.baselineName,
-          ignoreAreas: testVariation.ignoreAreas,
-          diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
-          diffName: undefined,
-          pixelMisMatchCount: undefined,
-          diffPercent: undefined,
-          status: TestStatus.new,
         },
-      });
-      expect(eventNewTestRunMock).toHaveBeenCalledWith(testRunWithResult);
-      expect(result).toBe(testRunWithResult);
-    });
-
-    it('with baseline', async () => {
-      const testRun = {
-        id: 'id',
-        imageName: 'imageName',
-        baselineName: 'baselineName',
-        diffTollerancePercent: 1,
-        ignoreAreas: '[]',
-        diffName: null,
-      };
-      const testVariation = {
-        id: '123',
-        projectId: 'project Id',
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        ignoreAreas: '[]',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const createTestRequestDto = initCreateTestRequestDto;
-      const testRunCreateMock = jest.fn().mockResolvedValueOnce(testRun);
-      const imageName = 'image name';
-      const saveImageMock = jest.fn().mockReturnValueOnce(imageName);
-      const image = 'image';
-      const baseline = 'baseline';
-      const getImageMock = jest
-        .fn()
-        .mockReturnValueOnce(baseline)
-        .mockReturnValueOnce(image);
-      const eventNewTestRunMock = jest.fn();
-      service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventNewTestRunMock });
-      const diffResult: DiffResult = {
-        status: TestStatus.unresolved,
-        diffName: 'diff image name',
-        pixelMisMatchCount: 11,
-        diffPercent: 22,
-        isSameDimension: true,
-      };
-      const getDiffMock = jest.fn().mockReturnValueOnce(diffResult);
-      service.getDiff = getDiffMock;
-      const saveDiffResultMock = jest.fn();
-      service.saveDiffResult = saveDiffResultMock.mockResolvedValueOnce(testRunWithResult);
-
-      const result = await service.create(testVariation, createTestRequestDto);
-
-      expect(saveImageMock).toHaveBeenCalledWith('screenshot', Buffer.from(createTestRequestDto.imageBase64, 'base64'));
-      expect(service.getDiff).toHaveBeenCalledWith(
-        baseline,
-        image,
-        createTestRequestDto.diffTollerancePercent,
-        testVariation.ignoreAreas
-      );
-      expect(getImageMock).toHaveBeenNthCalledWith(1, testVariation.baselineName);
-      expect(getImageMock).toHaveBeenNthCalledWith(2, imageName);
-      expect(testRunCreateMock).toHaveBeenCalledWith({
-        data: {
-          imageName,
-          testVariation: {
-            connect: {
-              id: testVariation.id,
-            },
+        build: {
+          connect: {
+            id: createTestRequestDto.buildId,
           },
-          build: {
-            connect: {
-              id: createTestRequestDto.buildId,
-            },
-          },
-          name: testVariation.name,
-          browser: testVariation.browser,
-          device: testVariation.device,
-          os: testVariation.os,
-          viewport: testVariation.viewport,
-          baselineName: testVariation.baselineName,
-          ignoreAreas: testVariation.ignoreAreas,
-          diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
-          status: TestStatus.new,
         },
-      });
-      expect(getDiffMock).toHaveBeenCalledWith(baseline, image, testRun.diffTollerancePercent, testRun.ignoreAreas);
-      expect(saveDiffResultMock).toHaveBeenCalledWith(testRun.id, diffResult);
-      expect(eventNewTestRunMock).toHaveBeenCalledWith(testRunWithResult);
-      expect(result).toBe(testRunWithResult);
+        name: testVariation.name,
+        browser: testVariation.browser,
+        device: testVariation.device,
+        os: testVariation.os,
+        viewport: testVariation.viewport,
+        baselineName: testVariation.baselineName,
+        ignoreAreas: testVariation.ignoreAreas,
+        diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
+        status: TestStatus.new,
+      },
     });
+    expect(getDiffMock).toHaveBeenCalledWith(baseline, image, testRun.diffTollerancePercent, testRun.ignoreAreas);
+    expect(saveDiffResultMock).toHaveBeenCalledWith(testRun.id, diffResult);
+    expect(eventNewTestRunMock).toHaveBeenCalledWith(testRunWithResult);
+    expect(result).toBe(testRunWithResult);
   });
 
   describe('getDiff', () => {
