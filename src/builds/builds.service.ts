@@ -3,7 +3,7 @@ import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Build } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
-import { EventsGateway } from 'src/events/events.gateway';
+import { EventsGateway } from '../events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 
 @Injectable()
@@ -13,17 +13,6 @@ export class BuildsService {
     private testRunsService: TestRunsService,
     private eventsGateway: EventsGateway
   ) {}
-
-  async findOne(projectId: string): Promise<BuildDto> {
-    const build = await this.prismaService.build.findOne({
-      where: { id: projectId },
-      include: {
-        testRuns: true,
-      },
-    });
-
-    return new BuildDto(build);
-  }
 
   async findMany(projectId: string): Promise<BuildDto[]> {
     const buildList = await this.prismaService.build.findMany({
@@ -51,7 +40,7 @@ export class BuildsService {
         testRuns: true,
       },
     });
-    const buildDto = new BuildDto(build)
+    const buildDto = new BuildDto(build);
     this.eventsGateway.buildCreated(buildDto);
     return buildDto;
   }

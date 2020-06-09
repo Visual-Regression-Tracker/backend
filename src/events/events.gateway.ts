@@ -1,14 +1,7 @@
-import {
-  SubscribeMessage,
-  WebSocketGateway,
-  MessageBody,
-  ConnectedSocket,
-  WebSocketServer,
-  WsResponse,
-} from '@nestjs/websockets';
-import { Socket, Server } from 'socket.io';
+import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import { Server } from 'socket.io';
 import { TestRun } from '@prisma/client';
-import { BuildDto } from 'src/builds/dto/build.dto';
+import { BuildDto } from '../builds/dto/build.dto';
 
 @WebSocketGateway(4201)
 export class EventsGateway {

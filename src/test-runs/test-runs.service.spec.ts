@@ -4,11 +4,12 @@ import { TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../shared/static/static.service';
 import { PNG } from 'pngjs';
-import { TestStatus, TestRun } from '@prisma/client';
+import { TestStatus } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
-import { CreateTestRequestDto } from 'src/test/dto/create-test-request.dto';
+import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { DiffResult } from './diffResult';
-import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
+import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { EventsGateway } from '../events/events.gateway';
 
 jest.mock('pixelmatch');
 
@@ -21,6 +22,7 @@ const initService = async ({
   getImageMock = jest.fn(),
   saveImageMock = jest.fn(),
   deleteImageMock = jest.fn(),
+  eventNewTestRunMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -43,6 +45,12 @@ const initService = async ({
           getImage: getImageMock,
           saveImage: saveImageMock,
           deleteImage: deleteImageMock,
+        },
+      },
+      {
+        provide: EventsGateway,
+        useValue: {
+          newTestRun: eventNewTestRunMock,
         },
       },
     ],
@@ -159,6 +167,15 @@ describe('TestRunsService', () => {
       device: 'device',
       diffTollerancePercent: 1,
     };
+    const testRunWithResult = {
+      id: 'id',
+      imageName: 'imageName',
+      baselineName: 'baselineName',
+      diffTollerancePercent: 1,
+      ignoreAreas: '[]',
+      diffName: 'diffName',
+      status: TestStatus.unresolved,
+    };
 
     it('no baseline', async () => {
       const testRun = {
@@ -200,13 +217,14 @@ describe('TestRunsService', () => {
         .fn()
         .mockReturnValueOnce(baseline)
         .mockReturnValueOnce(image);
-      service = await initService({ testRunCreateMock, saveImageMock, getImageMock });
+      const eventNewTestRunMock = jest.fn();
+      service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventNewTestRunMock });
       const getDiffMock = jest.fn().mockReturnValueOnce(diffResult);
       service.getDiff = getDiffMock;
-      const saveDiffResultMock = jest.fn();
+      const saveDiffResultMock = jest.fn().mockResolvedValueOnce(testRunWithResult);
       service.saveDiffResult = saveDiffResultMock;
 
-      await service.create(testVariation, createTestRequestDto);
+      const result = await service.create(testVariation, createTestRequestDto);
 
       expect(saveImageMock).toHaveBeenCalledWith('screenshot', Buffer.from(createTestRequestDto.imageBase64, 'base64'));
       expect(getImageMock).toHaveBeenNthCalledWith(1, testVariation.baselineName);
@@ -240,6 +258,8 @@ describe('TestRunsService', () => {
           status: TestStatus.new,
         },
       });
+      expect(eventNewTestRunMock).toHaveBeenCalledWith(testRunWithResult);
+      expect(result).toBe(testRunWithResult);
     });
 
     it('with baseline', async () => {
@@ -274,7 +294,8 @@ describe('TestRunsService', () => {
         .fn()
         .mockReturnValueOnce(baseline)
         .mockReturnValueOnce(image);
-      service = await initService({ testRunCreateMock, saveImageMock, getImageMock });
+      const eventNewTestRunMock = jest.fn();
+      service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventNewTestRunMock });
       const diffResult: DiffResult = {
         status: TestStatus.unresolved,
         diffName: 'diff image name',
@@ -285,9 +306,9 @@ describe('TestRunsService', () => {
       const getDiffMock = jest.fn().mockReturnValueOnce(diffResult);
       service.getDiff = getDiffMock;
       const saveDiffResultMock = jest.fn();
-      service.saveDiffResult = saveDiffResultMock;
+      service.saveDiffResult = saveDiffResultMock.mockResolvedValueOnce(testRunWithResult);
 
-      await service.create(testVariation, createTestRequestDto);
+      const result = await service.create(testVariation, createTestRequestDto);
 
       expect(saveImageMock).toHaveBeenCalledWith('screenshot', Buffer.from(createTestRequestDto.imageBase64, 'base64'));
       expect(service.getDiff).toHaveBeenCalledWith(
@@ -324,6 +345,8 @@ describe('TestRunsService', () => {
       });
       expect(getDiffMock).toHaveBeenCalledWith(baseline, image, testRun.diffTollerancePercent, testRun.ignoreAreas);
       expect(saveDiffResultMock).toHaveBeenCalledWith(testRun.id, diffResult);
+      expect(eventNewTestRunMock).toHaveBeenCalledWith(testRunWithResult);
+      expect(result).toBe(testRunWithResult);
     });
   });
 

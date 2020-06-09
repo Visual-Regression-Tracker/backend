@@ -7,7 +7,7 @@ import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
-import { EventsGateway } from 'src/events/events.gateway';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class TestRunsService {
