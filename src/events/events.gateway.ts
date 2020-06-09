@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 import { TestRun } from '@prisma/client';
 import { BuildDto } from '../builds/dto/build.dto';
 
-@WebSocketGateway(4201)
+@WebSocketGateway()
 export class EventsGateway {
   @WebSocketServer()
   server: Server;
