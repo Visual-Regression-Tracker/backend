@@ -136,7 +136,7 @@ export class TestRunsService {
     const diffResult = this.getDiff(
       baseline,
       image,
-      createTestRequestDto.diffTollerancePercent,
+      testRun.diffTollerancePercent,
       testVariation.ignoreAreas
     );
 
