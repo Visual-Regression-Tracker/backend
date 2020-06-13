@@ -165,7 +165,7 @@ describe('TestRunsService', () => {
       browser: 'browser',
       viewport: 'viewport',
       device: 'device',
-      diffTollerancePercent: 1,
+      diffTollerancePercent: undefined,
     };
     const testRunWithResult = {
       id: 'id',
@@ -228,7 +228,7 @@ describe('TestRunsService', () => {
     expect(service.getDiff).toHaveBeenCalledWith(
       baseline,
       image,
-      createTestRequestDto.diffTollerancePercent,
+      testRun.diffTollerancePercent,
       testVariation.ignoreAreas
     );
     expect(getImageMock).toHaveBeenNthCalledWith(1, testVariation.baselineName);
