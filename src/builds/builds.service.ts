@@ -36,9 +36,6 @@ export class BuildsService {
           },
         },
       },
-      include: {
-        testRuns: true,
-      },
     });
     const buildDto = new BuildDto(build);
     this.eventsGateway.buildCreated(buildDto);
@@ -53,11 +50,7 @@ export class BuildsService {
       },
     });
 
-    try {
-      await Promise.all(build.testRuns.map(testRun => this.testRunsService.delete(testRun.id)));
-    } catch (err) {
-      console.log(err);
-    }
+    await Promise.all(build.testRuns.map(testRun => this.testRunsService.delete(testRun.id)));
 
     return this.prismaService.build.delete({
       where: { id },
