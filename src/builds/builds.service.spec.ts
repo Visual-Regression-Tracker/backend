@@ -140,9 +140,6 @@ describe('BuildsService', () => {
           },
         },
       },
-      include: {
-        testRuns: true,
-      },
     });
     expect(eventsBuildCreatedMock).toHaveBeenCalledWith(buildDto);
     expect(result).toBe(buildDto);

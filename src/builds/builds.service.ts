@@ -36,9 +36,6 @@ export class BuildsService {
           },
         },
       },
-      include: {
-        testRuns: true,
-      },
     });
     const buildDto = new BuildDto(build);
     this.eventsGateway.buildCreated(buildDto);
