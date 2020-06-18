@@ -44,6 +44,10 @@ export class UsersService {
     return this.prismaService.user.findOne({ where: { id } });
   }
 
+  async delete(id: string): Promise<User> {
+    return this.prismaService.user.delete({ where: { id } });
+  }
+
   async get(id: string): Promise<UserDto> {
     const user = await this.findOne(id);
     return new UserDto(user);
