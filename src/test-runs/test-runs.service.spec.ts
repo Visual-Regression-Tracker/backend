@@ -195,6 +195,7 @@ describe('TestRunsService', () => {
       viewport: 'viewport',
       device: 'device',
       ignoreAreas: '[]',
+      comment: 'some comment',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -253,6 +254,7 @@ describe('TestRunsService', () => {
         viewport: testVariation.viewport,
         baselineName: testVariation.baselineName,
         ignoreAreas: testVariation.ignoreAreas,
+        comment: testVariation.comment,
         diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
         status: TestStatus.new,
       },

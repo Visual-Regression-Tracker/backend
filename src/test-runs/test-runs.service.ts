@@ -125,6 +125,7 @@ export class TestRunsService {
         viewport: testVariation.viewport,
         baselineName: testVariation.baselineName,
         ignoreAreas: testVariation.ignoreAreas,
+        comment: testVariation.comment,
         diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
         status: TestStatus.new,
       },
