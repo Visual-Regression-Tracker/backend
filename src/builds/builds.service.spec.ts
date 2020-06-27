@@ -84,6 +84,7 @@ describe('BuildsService', () => {
         viewport: '1800x1600',
         baselineName: null,
         ignoreAreas: '[]',
+        comment: 'some comment',
       },
     ],
   };
