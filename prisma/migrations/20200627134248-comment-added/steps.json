@@ -1,0 +1,19 @@
+{
+  "version": "0.3.14-fixed",
+  "steps": [
+    {
+      "tag": "CreateField",
+      "model": "TestRun",
+      "field": "comment",
+      "type": "String",
+      "arity": "Optional"
+    },
+    {
+      "tag": "CreateField",
+      "model": "TestVariation",
+      "field": "comment",
+      "type": "String",
+      "arity": "Optional"
+    }
+  ]
+}
