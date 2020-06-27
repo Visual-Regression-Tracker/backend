@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../events/events.gateway';
+import { CommentDto } from 'src/shared/dto/comment.dto';
 
 @Injectable()
 export class TestRunsService {
@@ -160,11 +161,11 @@ export class TestRunsService {
     });
   }
 
-  async updateComment(id: string, comment: string): Promise<TestRun> {
+  async updateComment(id: string, commentDto: CommentDto): Promise<TestRun> {
     return this.prismaService.testRun.update({
       where: { id },
       data: {
-        comment,
+        comment: commentDto.comment,
       },
     });
   }

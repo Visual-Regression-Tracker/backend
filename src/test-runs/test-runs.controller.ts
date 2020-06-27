@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { TestRun } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { CommentDto } from '../shared/dto/comment.dto';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
@@ -65,7 +66,7 @@ export class TestRunsController {
   @ApiParam({ name: 'testRunId', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  updateComment(@Param('testRunId', new ParseUUIDPipe()) testRunId: string, @Body() comment: string): Promise<TestRun> {
-    return this.testRunsService.updateComment(testRunId, comment);
+  updateComment(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: CommentDto): Promise<TestRun> {
+    return this.testRunsService.updateComment(id, body);
   }
 }

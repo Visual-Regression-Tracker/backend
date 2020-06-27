@@ -5,6 +5,7 @@ import { TestVariation, Baseline } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { CommentDto } from '../shared/dto/comment.dto';
 
 @ApiTags('test-variations')
 @Controller('test-variations')
@@ -40,14 +41,11 @@ export class TestVariationsController {
     return this.testVariations.updateIgnoreAreas(variationId, ignoreAreas);
   }
 
-  @Put('comment/:testRunId')
-  @ApiParam({ name: 'testRunId', required: true })
+  @Put('comment/:id')
+  @ApiParam({ name: 'id', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  updateComment(
-    @Param('testRunId', new ParseUUIDPipe()) testRunId: string,
-    @Body() comment: string
-  ): Promise<TestVariation> {
-    return this.testVariations.updateComment(testRunId, comment);
+  updateComment(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: CommentDto): Promise<TestVariation> {
+    return this.testVariations.updateComment(id, body);
   }
 }

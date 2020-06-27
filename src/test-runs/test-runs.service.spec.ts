@@ -10,6 +10,7 @@ import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { DiffResult } from './diffResult';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
 import { EventsGateway } from '../events/events.gateway';
+import { CommentDto } from '../shared/dto/comment.dto';
 
 jest.mock('pixelmatch');
 
@@ -538,18 +539,20 @@ describe('TestRunsService', () => {
 
   it('updateComment', async () => {
     const id = 'some id';
-    const comment = 'random comment';
+    const commentDto: CommentDto = {
+      comment: 'random comment',
+    };
     const testRunUpdateMock = jest.fn();
     service = await initService({
       testRunUpdateMock,
     });
 
-    await service.updateComment(id, comment);
+    await service.updateComment(id, commentDto);
 
     expect(testRunUpdateMock).toHaveBeenCalledWith({
       where: { id },
       data: {
-        comment,
+        comment: commentDto.comment,
       },
     });
   });

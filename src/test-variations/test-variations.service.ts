@@ -4,6 +4,7 @@ import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation, Baseline } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
+import { CommentDto } from '../shared/dto/comment.dto';
 
 @Injectable()
 export class TestVariationsService {
@@ -61,11 +62,11 @@ export class TestVariationsService {
     });
   }
 
-  async updateComment(id: string, comment: string): Promise<TestVariation> {
+  async updateComment(id: string, commentDto: CommentDto): Promise<TestVariation> {
     return this.prismaService.testVariation.update({
       where: { id },
       data: {
-        comment,
+        comment: commentDto.comment,
       },
     });
   }

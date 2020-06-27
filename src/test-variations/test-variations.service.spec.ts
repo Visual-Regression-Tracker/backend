@@ -5,6 +5,7 @@ import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { StaticService } from '../shared/static/static.service';
 import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
 import { TestVariation, Baseline } from '@prisma/client';
+import { CommentDto } from '../shared/dto/comment.dto';
 
 const initModule = async ({
   imageDeleteMock = jest.fn(),
@@ -237,18 +238,20 @@ describe('TestVariationsService', () => {
 
   it('updateComment', async () => {
     const id = 'some id';
-    const comment = 'random comment';
+    const commentDto: CommentDto = {
+      comment: 'random comment',
+    };
     const variationUpdateMock = jest.fn();
     service = await initModule({
       variationUpdateMock,
     });
 
-    await service.updateComment(id, comment);
+    await service.updateComment(id, commentDto);
 
     expect(variationUpdateMock).toHaveBeenCalledWith({
       where: { id },
       data: {
-        comment,
+        comment: commentDto.comment,
       },
     });
   });
