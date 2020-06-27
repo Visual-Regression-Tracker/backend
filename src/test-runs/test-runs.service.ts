@@ -134,12 +134,7 @@ export class TestRunsService {
     const baseline = this.staticService.getImage(testRun.baselineName);
     const image = this.staticService.getImage(imageName);
 
-    const diffResult = this.getDiff(
-      baseline,
-      image,
-      testRun.diffTollerancePercent,
-      testVariation.ignoreAreas
-    );
+    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, testVariation.ignoreAreas);
 
     const testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
     this.eventsGateway.newTestRun(testRunWithResult);
@@ -161,6 +156,15 @@ export class TestRunsService {
       where: { id },
       data: {
         ignoreAreas: JSON.stringify(ignoreAreas),
+      },
+    });
+  }
+
+  async updateComment(id: string, comment: string): Promise<TestRun> {
+    return this.prismaService.testRun.update({
+      where: { id },
+      data: {
+        comment,
       },
     });
   }

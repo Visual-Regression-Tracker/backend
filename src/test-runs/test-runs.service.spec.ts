@@ -535,4 +535,22 @@ describe('TestRunsService', () => {
       },
     });
   });
+
+  it('updateComment', async () => {
+    const id = 'some id';
+    const comment = 'random comment';
+    const testRunUpdateMock = jest.fn();
+    service = await initService({
+      testRunUpdateMock,
+    });
+
+    await service.updateComment(id, comment);
+
+    expect(testRunUpdateMock).toHaveBeenCalledWith({
+      where: { id },
+      data: {
+        comment,
+      },
+    });
+  });
 });

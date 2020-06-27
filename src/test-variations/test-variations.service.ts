@@ -7,10 +7,7 @@ import { StaticService } from '../shared/static/static.service';
 
 @Injectable()
 export class TestVariationsService {
-  constructor(
-    private prismaService: PrismaService,
-    private staticService: StaticService,
-  ) { }
+  constructor(private prismaService: PrismaService, private staticService: StaticService) {}
 
   async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
     return this.prismaService.testVariation.findOne({
@@ -21,8 +18,8 @@ export class TestVariationsService {
             testRun: true,
           },
           orderBy: {
-            createdAt: 'desc'
-          }
+            createdAt: 'desc',
+          },
         },
       },
     });
@@ -56,30 +53,40 @@ export class TestVariationsService {
   }
 
   async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestVariation> {
-    return this.prismaService.testVariation
-      .update({
-        where: { id },
-        data: {
-          ignoreAreas: JSON.stringify(ignoreAreas),
-        },
-      });
+    return this.prismaService.testVariation.update({
+      where: { id },
+      data: {
+        ignoreAreas: JSON.stringify(ignoreAreas),
+      },
+    });
+  }
+
+  async updateComment(id: string, comment: string): Promise<TestVariation> {
+    return this.prismaService.testVariation.update({
+      where: { id },
+      data: {
+        comment,
+      },
+    });
   }
 
   async remove(id: string): Promise<TestVariation> {
-    const variation = await this.getDetails(id)
+    const variation = await this.getDetails(id);
 
     // clear history
     try {
       await Promise.all(
-        variation.baselines.map(baseline => Promise.all([
-          this.staticService.deleteImage(baseline.baselineName),
-          this.prismaService.baseline.delete({
-            where: { id: baseline.id }
-          })
-        ]))
-      )
+        variation.baselines.map(baseline =>
+          Promise.all([
+            this.staticService.deleteImage(baseline.baselineName),
+            this.prismaService.baseline.delete({
+              where: { id: baseline.id },
+            }),
+          ])
+        )
+      );
     } catch (err) {
-      console.log(err)
+      console.log(err);
     }
 
     return this.prismaService.testVariation.delete({

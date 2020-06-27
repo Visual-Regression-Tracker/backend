@@ -13,18 +13,20 @@ const initModule = async ({
   variationCreateMock = jest.fn(),
   variationUpdateMock = jest.fn(),
   variationDeleteMock = jest.fn(),
-  baselineDeleteMock = jest.fn()
+  baselineDeleteMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       TestVariationsService,
       {
-        provide: StaticService, useValue: {
-          deleteImage: imageDeleteMock
-        }
+        provide: StaticService,
+        useValue: {
+          deleteImage: imageDeleteMock,
+        },
       },
       {
-        provide: PrismaService, useValue: {
+        provide: PrismaService,
+        useValue: {
           testVariation: {
             findOne: variationFindOneMock,
             findMany: variationFindManyMock,
@@ -33,22 +35,22 @@ const initModule = async ({
             delete: variationDeleteMock,
           },
           baseline: {
-            delete: baselineDeleteMock
-          }
-        }
+            delete: baselineDeleteMock,
+          },
+        },
       },
     ],
   }).compile();
 
   return module.get<TestVariationsService>(TestVariationsService);
-}
+};
 
 const dataRequiredFields: CreateTestRequestDto = {
   buildId: 'buildId',
   projectId: 'projectId',
   name: 'Test name',
-  imageBase64: 'Image'
-}
+  imageBase64: 'Image',
+};
 
 const dataAllFields: CreateTestRequestDto = {
   buildId: 'buildId',
@@ -59,18 +61,18 @@ const dataAllFields: CreateTestRequestDto = {
   browser: 'browser',
   viewport: 'viewport',
   device: 'device',
-}
+};
 
 describe('TestVariationsService', () => {
   let service: TestVariationsService;
 
   describe('getDetails', () => {
     it('can find one', async () => {
-      const id = 'test id'
-      const variationFindOneMock = jest.fn()
-      service = await initModule({ variationFindOneMock })
+      const id = 'test id';
+      const variationFindOneMock = jest.fn();
+      service = await initModule({ variationFindOneMock });
 
-      await service.getDetails(id)
+      await service.getDetails(id);
 
       expect(variationFindOneMock).toHaveBeenCalledWith({
         where: { id },
@@ -80,22 +82,21 @@ describe('TestVariationsService', () => {
               testRun: true,
             },
             orderBy: {
-              createdAt: 'desc'
-            }
+              createdAt: 'desc',
+            },
           },
-        }
-      })
-    })
-  })
+        },
+      });
+    });
+  });
 
   describe('findOrCreate', () => {
-
     it('can find by required fields', async () => {
-      const data = dataRequiredFields
-      const variationFindManyMock = jest.fn()
-      service = await initModule({ variationFindManyMock: variationFindManyMock.mockResolvedValueOnce([data]) })
+      const data = dataRequiredFields;
+      const variationFindManyMock = jest.fn();
+      service = await initModule({ variationFindManyMock: variationFindManyMock.mockResolvedValueOnce([data]) });
 
-      const result = await service.findOrCreate(data)
+      const result = await service.findOrCreate(data);
 
       expect(variationFindManyMock).toHaveBeenCalledWith({
         where: {
@@ -106,16 +107,16 @@ describe('TestVariationsService', () => {
           viewport: null,
           device: null,
         },
-      })
-      expect(result).toBe(data)
-    })
+      });
+      expect(result).toBe(data);
+    });
 
     it('can find by all fields', async () => {
-      const data = dataAllFields
-      const variationFindManyMock = jest.fn()
-      service = await initModule({ variationFindManyMock: variationFindManyMock.mockResolvedValueOnce([data]) })
+      const data = dataAllFields;
+      const variationFindManyMock = jest.fn();
+      service = await initModule({ variationFindManyMock: variationFindManyMock.mockResolvedValueOnce([data]) });
 
-      const result = await service.findOrCreate(data)
+      const result = await service.findOrCreate(data);
 
       expect(variationFindManyMock).toHaveBeenCalledWith({
         where: {
@@ -126,16 +127,16 @@ describe('TestVariationsService', () => {
           viewport: data.viewport,
           device: data.device,
         },
-      })
-      expect(result).toBe(data)
-    })
+      });
+      expect(result).toBe(data);
+    });
 
     it('can create if not found', async () => {
-      const data = dataAllFields
-      const variationCreateMock = jest.fn()
-      service = await initModule({ variationCreateMock: variationCreateMock.mockResolvedValueOnce(data) })
+      const data = dataAllFields;
+      const variationCreateMock = jest.fn();
+      service = await initModule({ variationCreateMock: variationCreateMock.mockResolvedValueOnce(data) });
 
-      const result = await service.findOrCreate(data)
+      const result = await service.findOrCreate(data);
 
       expect(variationCreateMock).toHaveBeenCalledWith({
         data: {
@@ -147,44 +148,44 @@ describe('TestVariationsService', () => {
           project: {
             connect: {
               id: data.projectId,
-            }
-          }
+            },
+          },
         },
-      })
-      expect(result).toBe(data)
-    })
-  })
+      });
+      expect(result).toBe(data);
+    });
+  });
 
   describe('updateIgnoreAreas', () => {
     it('can update', async () => {
-      const id = 'test id'
+      const id = 'test id';
       const ignoreAreas: IgnoreAreaDto[] = [
         {
           x: 1,
           y: 2.3,
           width: 442.1,
-          height: 32.0
-        }
-      ]
-      const variationUpdateMock = jest.fn()
-      service = await initModule({ variationUpdateMock })
+          height: 32.0,
+        },
+      ];
+      const variationUpdateMock = jest.fn();
+      service = await initModule({ variationUpdateMock });
 
-      await service.updateIgnoreAreas(id, ignoreAreas)
+      await service.updateIgnoreAreas(id, ignoreAreas);
 
       expect(variationUpdateMock).toBeCalledWith({
         where: {
-          id
+          id,
         },
         data: {
-          ignoreAreas: JSON.stringify(ignoreAreas)
-        }
-      })
-    })
-  })
+          ignoreAreas: JSON.stringify(ignoreAreas),
+        },
+      });
+    });
+  });
 
   describe('remove', () => {
     it('can remove', async () => {
-      const id = 'test id'
+      const id = 'test id';
       const variation: TestVariation & {
         baselines: Baseline[];
       } = {
@@ -197,6 +198,7 @@ describe('TestVariationsService', () => {
         viewport: 'viewport',
         device: 'device',
         ignoreAreas: '[]',
+        comment: 'some comment',
         createdAt: new Date(),
         updatedAt: new Date(),
         baselines: [
@@ -208,31 +210,46 @@ describe('TestVariationsService', () => {
             createdAt: new Date(),
             updatedAt: new Date(),
           },
-        ]
-      }
-      const variationFindOneMock = jest.fn()
-      const variationDeleteMock = jest.fn()
-      const imageDeleteMock = jest.fn()
-      const baselineDeleteMock = jest.fn()
-      service = await initModule(
-        {
-          variationFindOneMock: variationFindOneMock.mockResolvedValueOnce(variation),
-          variationDeleteMock,
-          imageDeleteMock,
-          baselineDeleteMock
-        })
+        ],
+      };
+      const variationFindOneMock = jest.fn();
+      const variationDeleteMock = jest.fn();
+      const imageDeleteMock = jest.fn();
+      const baselineDeleteMock = jest.fn();
+      service = await initModule({
+        variationFindOneMock: variationFindOneMock.mockResolvedValueOnce(variation),
+        variationDeleteMock,
+        imageDeleteMock,
+        baselineDeleteMock,
+      });
 
-      await service.remove(id)
+      await service.remove(id);
 
-      expect(imageDeleteMock).toHaveBeenCalledWith(
-        variation.baselines[0].baselineName
-      )
+      expect(imageDeleteMock).toHaveBeenCalledWith(variation.baselines[0].baselineName);
       expect(baselineDeleteMock).toHaveBeenCalledWith({
-        where: { id: variation.baselines[0].id }
-      })
+        where: { id: variation.baselines[0].id },
+      });
       expect(variationDeleteMock).toHaveBeenCalledWith({
-        where: { id: variation.id }
-      })
-    })
-  })
+        where: { id: variation.id },
+      });
+    });
+  });
+
+  it('updateComment', async () => {
+    const id = 'some id';
+    const comment = 'random comment';
+    const variationUpdateMock = jest.fn();
+    service = await initModule({
+      variationUpdateMock,
+    });
+
+    await service.updateComment(id, comment);
+
+    expect(variationUpdateMock).toHaveBeenCalledWith({
+      where: { id },
+      data: {
+        comment,
+      },
+    });
+  });
 });
