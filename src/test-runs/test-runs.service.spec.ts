@@ -10,6 +10,7 @@ import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
 import { DiffResult } from './diffResult';
 import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
 import { EventsGateway } from '../events/events.gateway';
+import { CommentDto } from '../shared/dto/comment.dto';
 
 jest.mock('pixelmatch');
 
@@ -195,6 +196,7 @@ describe('TestRunsService', () => {
       viewport: 'viewport',
       device: 'device',
       ignoreAreas: '[]',
+      comment: 'some comment',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -253,6 +255,7 @@ describe('TestRunsService', () => {
         viewport: testVariation.viewport,
         baselineName: testVariation.baselineName,
         ignoreAreas: testVariation.ignoreAreas,
+        comment: testVariation.comment,
         diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
         status: TestStatus.new,
       },
@@ -530,6 +533,26 @@ describe('TestRunsService', () => {
       where: { id },
       data: {
         ignoreAreas: JSON.stringify(ignoreAreas),
+      },
+    });
+  });
+
+  it('updateComment', async () => {
+    const id = 'some id';
+    const commentDto: CommentDto = {
+      comment: 'random comment',
+    };
+    const testRunUpdateMock = jest.fn();
+    service = await initService({
+      testRunUpdateMock,
+    });
+
+    await service.updateComment(id, commentDto);
+
+    expect(testRunUpdateMock).toHaveBeenCalledWith({
+      where: { id },
+      data: {
+        comment: commentDto.comment,
       },
     });
   });

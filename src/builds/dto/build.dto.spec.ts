@@ -53,7 +53,9 @@ describe('BuildDto', () => {
   });
 
   it('passed', () => {
-    const build = {
+    const build: Build & {
+      testRuns: TestRun[];
+    } = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
       number: null,
       branchName: 'develop',
@@ -82,6 +84,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: 'some comment1',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -102,6 +105,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: 'some comment2',
         },
       ],
     };
@@ -154,6 +158,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: 'some comment',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -174,6 +179,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: 'some comment1',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -194,6 +200,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: 'some comment2',
         },
       ],
     };
@@ -246,6 +253,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: 'some comment1',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -266,6 +274,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: 'some comment2',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -286,6 +295,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: null,
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -306,6 +316,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: 'some comment',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -326,6 +337,7 @@ describe('BuildDto', () => {
           viewport: '1800x1600',
           baselineName: null,
           ignoreAreas: '[]',
+          comment: 'some comment',
         },
       ],
     };

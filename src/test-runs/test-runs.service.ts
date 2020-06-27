@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../events/events.gateway';
+import { CommentDto } from 'src/shared/dto/comment.dto';
 
 @Injectable()
 export class TestRunsService {
@@ -125,6 +126,7 @@ export class TestRunsService {
         viewport: testVariation.viewport,
         baselineName: testVariation.baselineName,
         ignoreAreas: testVariation.ignoreAreas,
+        comment: testVariation.comment,
         diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
         status: TestStatus.new,
       },
@@ -133,12 +135,7 @@ export class TestRunsService {
     const baseline = this.staticService.getImage(testRun.baselineName);
     const image = this.staticService.getImage(imageName);
 
-    const diffResult = this.getDiff(
-      baseline,
-      image,
-      testRun.diffTollerancePercent,
-      testVariation.ignoreAreas
-    );
+    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, testVariation.ignoreAreas);
 
     const testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
     this.eventsGateway.newTestRun(testRunWithResult);
@@ -160,6 +157,15 @@ export class TestRunsService {
       where: { id },
       data: {
         ignoreAreas: JSON.stringify(ignoreAreas),
+      },
+    });
+  }
+
+  async updateComment(id: string, commentDto: CommentDto): Promise<TestRun> {
+    return this.prismaService.testRun.update({
+      where: { id },
+      data: {
+        comment: commentDto.comment,
       },
     });
   }
