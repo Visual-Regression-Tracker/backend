@@ -1,22 +1,22 @@
 version: "3.7"
 services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_LIFE_TIME: ${JWT_LIFE_TIME}
-      IMG_UPLOAD_FOLDER: ${IMG_UPLOAD_FOLDER}
-      BODY_PARSER_JSON_LIMIT: ${BODY_PARSER_JSON_LIMIT}
-      APP_FRONTEND_URL: ${APP_FRONTEND_URL}
-    ports:
-      - "${APP_PORT}:3000"
-    expose:
-      - "${APP_PORT}"
-    depends_on:
-      - postgres
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+  #     JWT_SECRET: ${JWT_SECRET}
+  #     JWT_LIFE_TIME: ${JWT_LIFE_TIME}
+  #     IMG_UPLOAD_FOLDER: ${IMG_UPLOAD_FOLDER}
+  #     BODY_PARSER_JSON_LIMIT: ${BODY_PARSER_JSON_LIMIT}
+  #     APP_FRONTEND_URL: ${APP_FRONTEND_URL}
+  #   ports:
+  #     - "${APP_PORT}:3000"
+  #   expose:
+  #     - "${APP_PORT}"
+  #   depends_on:
+  #     - postgres
   postgres:
     image: postgres:12
     restart: always
@@ -30,13 +30,13 @@ services:
       - "${POSTGRES_PORT}"
     volumes:
       - postgres:/var/lib/postgresql/data
-  migration:
-    build:
-      context: prisma
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
-    depends_on:
-      - postgres
+  # migration:
+  #   build:
+  #     context: prisma
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+  #   depends_on:
+  #     - postgres
 volumes:
   postgres:
