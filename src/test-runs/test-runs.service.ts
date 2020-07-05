@@ -8,15 +8,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../events/events.gateway';
-import { CommentDto } from 'src/shared/dto/comment.dto';
+import { CommentDto } from '../shared/dto/comment.dto';
+import { BuildDto } from '../builds/dto/build.dto';
 
 @Injectable()
 export class TestRunsService {
   constructor(
     private prismaService: PrismaService,
     private staticService: StaticService,
-    private eventsGateway: EventsGateway
-  ) {}
+    private eventsGateway: EventsGateway,
+  ) { }
 
   async findMany(buildId: string): Promise<TestRun[]> {
     return this.prismaService.testRun.findMany({
@@ -39,6 +40,19 @@ export class TestRunsService {
     });
   }
 
+  async emitUpdateBuildEvent(buildId: string) {
+    const build = await this.prismaService.build.findOne({
+      where: {
+        id: buildId
+      },
+      include: {
+        testRuns: true
+      }
+    })
+    const buildDto = new BuildDto(build)
+    this.eventsGateway.buildUpdated(buildDto)
+  }
+
   async approve(id: string): Promise<TestRun> {
     const testRun = await this.findOne(id);
 
@@ -46,7 +60,7 @@ export class TestRunsService {
     const baseline = this.staticService.getImage(testRun.imageName);
     const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
-    return this.prismaService.testRun.update({
+    const testRunUpdated = await this.prismaService.testRun.update({
       where: { id },
       data: {
         status: TestStatus.approved,
@@ -67,15 +81,21 @@ export class TestRunsService {
         },
       },
     });
+
+    this.emitUpdateBuildEvent(testRun.buildId)
+    return testRunUpdated;
   }
 
   async reject(id: string): Promise<TestRun> {
-    return this.prismaService.testRun.update({
+    const testRun = await this.prismaService.testRun.update({
       where: { id },
       data: {
         status: TestStatus.failed,
       },
     });
+
+    this.emitUpdateBuildEvent(testRun.buildId)
+    return testRun;
   }
 
   async saveDiffResult(id: string, diffResult: DiffResult): Promise<TestRun> {
