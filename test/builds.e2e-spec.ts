@@ -45,10 +45,10 @@ describe('Builds (e2e)', () => {
   });
 
   describe('POST /', () => {
-    it('201', () => {
+    it('201 by id', () => {
       const createBuildDto: CreateBuildDto = {
         branchName: 'branchName',
-        projectId: project.id,
+        project: project.id,
       };
       return requestWithApiKey(app, 'post', '/builds', createBuildDto, user.apiKey)
         .expect(201)
@@ -61,10 +61,34 @@ describe('Builds (e2e)', () => {
         });
     });
 
+    it('201 by name', () => {
+      const createBuildDto: CreateBuildDto = {
+        branchName: 'branchName',
+        project: project.name,
+      };
+      return requestWithApiKey(app, 'post', '/builds', createBuildDto, user.apiKey)
+        .expect(201)
+        .expect(res => {
+          expect(res.body.projectId).toBe(project.id);
+          expect(res.body.branchName).toBe(createBuildDto.branchName);
+          expect(res.body.failedCount).toBe(0);
+          expect(res.body.passedCount).toBe(0);
+          expect(res.body.unresolvedCount).toBe(0);
+        });
+    });
+    
+    it('404', () => {
+      const createBuildDto: CreateBuildDto = {
+        branchName: 'branchName',
+        project: 'random',
+      };
+      return requestWithApiKey(app, 'post', '/builds', createBuildDto, user.apiKey).expect(404);
+    });
+
     it('403', () => {
       const createBuildDto: CreateBuildDto = {
         branchName: 'branchName',
-        projectId: project.id,
+        project: project.id,
       };
       return requestWithApiKey(app, 'post', '/builds', createBuildDto, '').expect(403);
     });
@@ -72,7 +96,7 @@ describe('Builds (e2e)', () => {
 
   describe('GET /', () => {
     it('200', async () => {
-      const build = await buildsService.create({ projectId: project.id, branchName: 'develop' });
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
 
       return requestWithAuth(app, 'get', `/builds?projectId=${project.id}`, {}, user.token)
         .expect(200)
@@ -88,13 +112,13 @@ describe('Builds (e2e)', () => {
 
   describe('DELETE /', () => {
     it('200', async () => {
-      const build = await buildsService.create({ projectId: project.id, branchName: 'develop' });
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
 
       return requestWithAuth(app, 'delete', `/builds/${build.id}`, {}, user.token).expect(200);
     });
 
     it('401', async () => {
-      const build = await buildsService.create({ projectId: project.id, branchName: 'develop' });
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
 
       return requestWithAuth(app, 'delete', `/builds/${build.id}`, {}, '').expect(401);
     });

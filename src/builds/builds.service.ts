@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Build } from '@prisma/client';
@@ -27,12 +27,22 @@ export class BuildsService {
   }
 
   async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
+    const projects = await this.prismaService.project.findMany({
+      where: {
+        OR: [{ id: createBuildDto.project }, { name: createBuildDto.project }],
+      },
+    });
+
+    if (projects.length <= 0) {
+      throw new HttpException(`Project not found`, HttpStatus.NOT_FOUND);
+    }
+
     const build = await this.prismaService.build.create({
       data: {
         branchName: createBuildDto.branchName,
         project: {
           connect: {
-            id: createBuildDto.projectId,
+            id: projects[0].id,
           },
         },
       },
