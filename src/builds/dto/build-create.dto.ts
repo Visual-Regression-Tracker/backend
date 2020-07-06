@@ -4,7 +4,6 @@ import { IsString, IsUUID, IsOptional } from 'class-validator';
 export class CreateBuildDto {
   @ApiProperty()
   @IsString()
-  @IsOptional()
   readonly branchName: string;
 
   @ApiProperty()
