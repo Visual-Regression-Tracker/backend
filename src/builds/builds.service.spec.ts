@@ -4,9 +4,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../events/events.gateway';
 import { CreateBuildDto } from './dto/build-create.dto';
-import { Build, TestRun } from '@prisma/client';
+import { Build, TestRun, Project } from '@prisma/client';
 import { mocked } from 'ts-jest/utils';
 import { BuildDto } from './dto/build.dto';
+import { HttpException, HttpStatus } from '@nestjs/common';
 
 jest.mock('./dto/build.dto');
 
@@ -17,6 +18,7 @@ const initService = async ({
   buildDeleteMock = jest.fn(),
   testRunDeleteMock = jest.fn(),
   eventsBuildCreatedMock = jest.fn(),
+  projectFindManyMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -24,6 +26,9 @@ const initService = async ({
       {
         provide: PrismaService,
         useValue: {
+          project: {
+            findMany: projectFindManyMock,
+          },
           build: {
             findMany: buildFindManyMock,
             create: buildCreateMock,
@@ -119,30 +124,54 @@ describe('BuildsService', () => {
     expect(result).toEqual([buildDto]);
   });
 
-  it('create', async () => {
+  describe('create', () => {
     const createBuildDto: CreateBuildDto = {
       branchName: 'branchName',
-      projectId: 'projectId',
+      project: 'project id or name',
     };
-    const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
-    const eventsBuildCreatedMock = jest.fn();
-    mocked(BuildDto).mockReturnValueOnce(buildDto);
-    service = await initService({ buildCreateMock, eventsBuildCreatedMock });
 
-    const result = await service.create(createBuildDto);
+    it('should create', async () => {
+      const project: Project = {
+        id: 'project id',
+        name: 'name',
+        updatedAt: new Date(),
+        createdAt: new Date(),
+      };
+      const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
+      const projectFindManyMock = jest.fn().mockResolvedValueOnce([project]);
+      const eventsBuildCreatedMock = jest.fn();
+      mocked(BuildDto).mockReturnValueOnce(buildDto);
+      service = await initService({ buildCreateMock, eventsBuildCreatedMock, projectFindManyMock });
 
-    expect(buildCreateMock).toHaveBeenCalledWith({
-      data: {
-        branchName: createBuildDto.branchName,
-        project: {
-          connect: {
-            id: createBuildDto.projectId,
+      const result = await service.create(createBuildDto);
+
+      expect(projectFindManyMock).toHaveBeenCalledWith({
+        where: {
+          OR: [{ id: createBuildDto.project }, { name: createBuildDto.project }],
+        },
+      });
+      expect(buildCreateMock).toHaveBeenCalledWith({
+        data: {
+          branchName: createBuildDto.branchName,
+          project: {
+            connect: {
+              id: project.id,
+            },
           },
         },
-      },
+      });
+      expect(eventsBuildCreatedMock).toHaveBeenCalledWith(buildDto);
+      expect(result).toBe(buildDto);
     });
-    expect(eventsBuildCreatedMock).toHaveBeenCalledWith(buildDto);
-    expect(result).toBe(buildDto);
+
+    it('should throw exception if not found', async () => {
+      const projectFindManyMock = jest.fn().mockResolvedValueOnce([]);
+      service = await initService({ projectFindManyMock });
+
+      await expect(service.create(createBuildDto)).rejects.toThrowError(
+        new HttpException('Project not found', HttpStatus.NOT_FOUND)
+      );
+    });
   });
 
   it('delete', async () => {
