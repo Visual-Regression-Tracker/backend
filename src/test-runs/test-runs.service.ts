@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
-import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
-import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { CreateTestRequestDto } from './dto/create-test-request.dto';
+import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation } from '@prisma/client';
@@ -10,10 +10,13 @@ import { DiffResult } from './diffResult';
 import { EventsGateway } from '../events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BuildDto } from '../builds/dto/build.dto';
+import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
+import { TestVariationsService } from '../test-variations/test-variations.service';
 
 @Injectable()
 export class TestRunsService {
   constructor(
+    private testVariationService: TestVariationsService,
     private prismaService: PrismaService,
     private staticService: StaticService,
     private eventsGateway: EventsGateway,
@@ -38,6 +41,14 @@ export class TestRunsService {
         testVariation: true,
       },
     });
+  }
+
+  async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
+    const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto);
+
+    const testRun = await this.create(testVariation, createTestRequestDto);
+
+    return new TestRunResultDto(testRun, testVariation);
   }
 
   async emitUpdateBuildEvent(buildId: string) {

@@ -5,7 +5,6 @@ import { BuildsModule } from './builds/builds.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TestRunsModule } from './test-runs/test-runs.module';
 import { TestVariationsModule } from './test-variations/test-variations.module';
-import { TestModule } from './test/test.module';
 import { PrismaService } from './prisma/prisma.service';
 import { ConfigModule } from '@nestjs/config';
 
@@ -18,7 +17,6 @@ import { ConfigModule } from '@nestjs/config';
     ProjectsModule,
     TestRunsModule,
     TestVariationsModule,
-    TestModule,
   ],
   providers: [PrismaService],
 })

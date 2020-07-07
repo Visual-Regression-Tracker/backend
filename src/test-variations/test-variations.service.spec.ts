@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
+import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { StaticService } from '../shared/static/static.service';
-import { IgnoreAreaDto } from 'src/test/dto/ignore-area.dto';
+import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { TestVariation, Baseline } from '@prisma/client';
 import { CommentDto } from '../shared/dto/comment.dto';
 
