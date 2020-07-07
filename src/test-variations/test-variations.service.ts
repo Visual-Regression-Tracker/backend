@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
-import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
+import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation, Baseline } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';

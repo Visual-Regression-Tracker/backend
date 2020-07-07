@@ -6,12 +6,13 @@ import { StaticService } from '../shared/static/static.service';
 import { PNG } from 'pngjs';
 import { TestStatus, Build, TestRun } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
-import { CreateTestRequestDto } from '../test/dto/create-test-request.dto';
+import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { DiffResult } from './diffResult';
-import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { EventsGateway } from '../events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BuildDto } from '../builds/dto/build.dto';
+import { TestVariationsService } from '../test-variations/test-variations.service';
 
 jest.mock('pixelmatch');
 
@@ -43,7 +44,7 @@ const initService = async ({
           },
           build: {
             findOne: buildFindOneMock,
-          }
+          },
         },
       },
       {
@@ -58,8 +59,12 @@ const initService = async ({
         provide: EventsGateway,
         useValue: {
           newTestRun: eventNewTestRunMock,
-          buildUpdated: eventBuildUpdatedMock
+          buildUpdated: eventBuildUpdatedMock,
         },
+      },
+      {
+        provide: TestVariationsService,
+        useValue: {},
       },
     ],
   }).compile();
@@ -113,7 +118,7 @@ describe('TestRunsService', () => {
         status: TestStatus.failed,
       },
     });
-    expect(service.emitUpdateBuildEvent).toBeCalledWith(testRun.buildId)
+    expect(service.emitUpdateBuildEvent).toBeCalledWith(testRun.buildId);
   });
 
   describe('approve', () => {
@@ -174,7 +179,7 @@ describe('TestRunsService', () => {
           },
         },
       });
-      expect(service.emitUpdateBuildEvent).toBeCalledWith(testRun.buildId)
+      expect(service.emitUpdateBuildEvent).toBeCalledWith(testRun.buildId);
     });
   });
 
@@ -615,23 +620,23 @@ describe('TestRunsService', () => {
         },
       ],
     };
-    const buildFindOneMock = jest.fn().mockResolvedValueOnce(build)
-    const eventBuildUpdatedMock = jest.fn()
+    const buildFindOneMock = jest.fn().mockResolvedValueOnce(build);
+    const eventBuildUpdatedMock = jest.fn();
     service = await initService({
       buildFindOneMock,
       eventBuildUpdatedMock,
     });
 
-    await service.emitUpdateBuildEvent(build.id)
+    await service.emitUpdateBuildEvent(build.id);
 
     expect(buildFindOneMock).toHaveBeenCalledWith({
       where: {
-        id: build.id
+        id: build.id,
       },
       include: {
-        testRuns: true
-      }
-    })
-    expect(eventBuildUpdatedMock).toHaveBeenCalledWith(new BuildDto(build))
-  })
+        testRuns: true,
+      },
+    });
+    expect(eventBuildUpdatedMock).toHaveBeenCalledWith(new BuildDto(build));
+  });
 });

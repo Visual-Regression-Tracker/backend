@@ -4,7 +4,7 @@ import { TestVariationsService } from './test-variations.service';
 import { TestVariation, Baseline } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
-import { IgnoreAreaDto } from '../test/dto/ignore-area.dto';
+import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { CommentDto } from '../shared/dto/comment.dto';
 
 @ApiTags('test-variations')
