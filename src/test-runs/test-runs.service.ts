@@ -146,7 +146,9 @@ export class TestRunsService {
     await this.staticService.deleteImage(testRun.diffName);
 
     const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, testRun.ignoreAreas);
-    return this.saveDiffResult(id, diffResult);
+    const updatedTestRun = await this.saveDiffResult(id, diffResult);
+    this.emitUpdateBuildEvent(testRun.buildId);
+    return updatedTestRun;
   }
 
   async create(testVariation: TestVariation, createTestRequestDto: CreateTestRequestDto): Promise<TestRun> {

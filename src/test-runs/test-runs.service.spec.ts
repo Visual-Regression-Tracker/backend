@@ -414,9 +414,10 @@ describe('TestRunsService', () => {
     });
   });
 
-  it('calculate no diff', async () => {
+  it('recalculateDiff', async () => {
     const testRun = {
       id: 'id',
+      buildId: 'buildId',
       imageName: 'imageName',
       baselineName: 'baselineName',
       diffTollerancePercent: 12,
@@ -443,6 +444,7 @@ describe('TestRunsService', () => {
     });
     service.findOne = testRunFindOneMock;
     service.getDiff = getDiffMock;
+    service.emitUpdateBuildEvent = jest.fn();
 
     await service.recalculateDiff(testRun.id);
 
@@ -456,6 +458,7 @@ describe('TestRunsService', () => {
       testRun.diffTollerancePercent,
       testRun.ignoreAreas
     );
+    expect(service.emitUpdateBuildEvent).toBeCalledWith(testRun.buildId);
   });
 
   describe('saveDiffResult', () => {
@@ -478,32 +481,32 @@ describe('TestRunsService', () => {
         },
       });
     });
-  });
 
-  it('with results', async () => {
-    const diff: DiffResult = {
-      status: TestStatus.unresolved,
-      diffName: 'diff image name',
-      pixelMisMatchCount: 11,
-      diffPercent: 22,
-      isSameDimension: true,
-    };
-    const id = 'some id';
-    const testRunUpdateMock = jest.fn();
-    service = await initService({
-      testRunUpdateMock,
-    });
-
-    await service.saveDiffResult(id, diff);
-
-    expect(testRunUpdateMock).toHaveBeenCalledWith({
-      where: { id },
-      data: {
-        status: diff.status,
-        diffName: diff.diffName,
-        pixelMisMatchCount: diff.pixelMisMatchCount,
-        diffPercent: diff.diffPercent,
-      },
+    it('with results', async () => {
+      const diff: DiffResult = {
+        status: TestStatus.unresolved,
+        diffName: 'diff image name',
+        pixelMisMatchCount: 11,
+        diffPercent: 22,
+        isSameDimension: true,
+      };
+      const id = 'some id';
+      const testRunUpdateMock = jest.fn();
+      service = await initService({
+        testRunUpdateMock,
+      });
+  
+      await service.saveDiffResult(id, diff);
+  
+      expect(testRunUpdateMock).toHaveBeenCalledWith({
+        where: { id },
+        data: {
+          status: diff.status,
+          diffName: diff.diffName,
+          pixelMisMatchCount: diff.pixelMisMatchCount,
+          diffPercent: diff.diffPercent,
+        },
+      });
     });
   });
 
