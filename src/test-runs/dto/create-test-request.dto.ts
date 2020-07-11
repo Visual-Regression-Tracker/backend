@@ -1,34 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsBase64, IsUUID, IsNumber } from 'class-validator';
+import { IsOptional, IsBase64, IsUUID, IsNumber } from 'class-validator';
+import { BaselineDataDto } from '../../shared/dto/baseline-data.dto';
 
-export class CreateTestRequestDto {
-  @ApiProperty()
-  @IsString()
-  name: string;
-
+export class CreateTestRequestDto extends BaselineDataDto {
   @ApiProperty()
   @IsBase64()
   imageBase64: string;
-
-  @ApiProperty()
-  @IsOptional()
-  @IsString()
-  os?: string;
-
-  @ApiProperty()
-  @IsOptional()
-  @IsString()
-  browser?: string;
-
-  @ApiProperty()
-  @IsOptional()
-  @IsString()
-  viewport?: string;
-
-  @ApiProperty()
-  @IsOptional()
-  @IsString()
-  device?: string;
 
   @ApiProperty()
   @IsUUID()
