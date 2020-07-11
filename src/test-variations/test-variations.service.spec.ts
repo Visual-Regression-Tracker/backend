@@ -6,6 +6,7 @@ import { StaticService } from '../shared/static/static.service';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { TestVariation, Baseline } from '@prisma/client';
 import { CommentDto } from '../shared/dto/comment.dto';
+import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 
 const initModule = async ({
   imageDeleteMock = jest.fn(),
@@ -97,7 +98,7 @@ describe('TestVariationsService', () => {
       const variationFindManyMock = jest.fn();
       service = await initModule({ variationFindManyMock: variationFindManyMock.mockResolvedValueOnce([data]) });
 
-      const result = await service.findOrCreate(data);
+      const result = await service.findOrCreate(data.projectId, convertBaselineDataToQuery(data));
 
       expect(variationFindManyMock).toHaveBeenCalledWith({
         where: {
@@ -117,7 +118,7 @@ describe('TestVariationsService', () => {
       const variationFindManyMock = jest.fn();
       service = await initModule({ variationFindManyMock: variationFindManyMock.mockResolvedValueOnce([data]) });
 
-      const result = await service.findOrCreate(data);
+      const result = await service.findOrCreate(data.projectId, convertBaselineDataToQuery(data));
 
       expect(variationFindManyMock).toHaveBeenCalledWith({
         where: {
@@ -137,7 +138,7 @@ describe('TestVariationsService', () => {
       const variationCreateMock = jest.fn();
       service = await initModule({ variationCreateMock: variationCreateMock.mockResolvedValueOnce(data) });
 
-      const result = await service.findOrCreate(data);
+      const result = await service.findOrCreate(data.projectId, convertBaselineDataToQuery(data));
 
       expect(variationCreateMock).toHaveBeenCalledWith({
         data: {

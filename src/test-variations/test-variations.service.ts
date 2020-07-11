@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation, Baseline } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
 import { CommentDto } from '../shared/dto/comment.dto';
+import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 
 @Injectable()
 export class TestVariationsService {
@@ -26,26 +26,19 @@ export class TestVariationsService {
     });
   }
 
-  async findOrCreate(createTestDto: CreateTestRequestDto): Promise<TestVariation> {
-    const data = {
-      name: createTestDto.name,
-      os: createTestDto.os ? createTestDto.os : null,
-      browser: createTestDto.browser ? createTestDto.browser : null,
-      viewport: createTestDto.viewport ? createTestDto.viewport : null,
-      device: createTestDto.device ? createTestDto.device : null,
-    };
+  async findOrCreate(projectId: string, baselineData: BaselineDataDto): Promise<TestVariation> {
     let [testVariation] = await this.prismaService.testVariation.findMany({
       where: {
-        projectId: createTestDto.projectId,
-        ...data,
+        projectId,
+        ...baselineData,
       },
     });
 
     if (!testVariation) {
       testVariation = await this.prismaService.testVariation.create({
         data: {
-          project: { connect: { id: createTestDto.projectId } },
-          ...data,
+          project: { connect: { id: projectId } },
+          ...baselineData,
         },
       });
     }

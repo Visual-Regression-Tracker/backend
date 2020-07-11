@@ -12,6 +12,7 @@ import { CommentDto } from '../shared/dto/comment.dto';
 import { BuildDto } from '../builds/dto/build.dto';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
+import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 
 @Injectable()
 export class TestRunsService {
@@ -19,8 +20,8 @@ export class TestRunsService {
     private testVariationService: TestVariationsService,
     private prismaService: PrismaService,
     private staticService: StaticService,
-    private eventsGateway: EventsGateway,
-  ) { }
+    private eventsGateway: EventsGateway
+  ) {}
 
   async findMany(buildId: string): Promise<TestRun[]> {
     return this.prismaService.testRun.findMany({
@@ -44,8 +45,24 @@ export class TestRunsService {
   }
 
   async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
-    const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto);
+    const baselineData = convertBaselineDataToQuery(createTestRequestDto);
 
+    // creates variatioin if does not exist
+    const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto.projectId, baselineData);
+
+    // delete previous test run if exists
+    let [previousTestRun] = await this.prismaService.testRun.findMany({
+      where: {
+        buildId: createTestRequestDto.buildId,
+        ...baselineData,
+      },
+    });
+
+    if (!!previousTestRun) {
+      await this.delete(previousTestRun.id);
+    }
+
+    // create test run result
     const testRun = await this.create(testVariation, createTestRequestDto);
 
     return new TestRunResultDto(testRun, testVariation);
@@ -54,14 +71,14 @@ export class TestRunsService {
   async emitUpdateBuildEvent(buildId: string) {
     const build = await this.prismaService.build.findOne({
       where: {
-        id: buildId
+        id: buildId,
       },
       include: {
-        testRuns: true
-      }
-    })
-    const buildDto = new BuildDto(build)
-    this.eventsGateway.buildUpdated(buildDto)
+        testRuns: true,
+      },
+    });
+    const buildDto = new BuildDto(build);
+    this.eventsGateway.buildUpdated(buildDto);
   }
 
   async approve(id: string): Promise<TestRun> {
@@ -93,7 +110,7 @@ export class TestRunsService {
       },
     });
 
-    this.emitUpdateBuildEvent(testRun.buildId)
+    this.emitUpdateBuildEvent(testRun.buildId);
     return testRunUpdated;
   }
 
@@ -105,7 +122,7 @@ export class TestRunsService {
       },
     });
 
-    this.emitUpdateBuildEvent(testRun.buildId)
+    this.emitUpdateBuildEvent(testRun.buildId);
     return testRun;
   }
 
