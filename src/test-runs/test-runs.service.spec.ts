@@ -7,14 +7,17 @@ import { PNG } from 'pngjs';
 import { TestStatus, Build, TestRun, TestVariation } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
+import { TestRunResultDto } from './dto/testRunResult.dto';
 import { DiffResult } from './diffResult';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { EventsGateway } from '../events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BuildDto } from '../builds/dto/build.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
+import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 
 jest.mock('pixelmatch');
+jest.mock('./dto/testRunResult.dto');
 
 const initService = async ({
   testRunDeleteMock = jest.fn(),
@@ -30,6 +33,7 @@ const initService = async ({
   buildFindOneMock = jest.fn(),
   testVariationCreateMock = jest.fn(),
   baselineCreateMock = jest.fn(),
+  testVariationFindOrCreateMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -72,7 +76,9 @@ const initService = async ({
       },
       {
         provide: TestVariationsService,
-        useValue: {},
+        useValue: {
+          findOrCreate: testVariationFindOrCreateMock,
+        },
       },
     ],
   }).compile();
@@ -788,5 +794,81 @@ describe('TestRunsService', () => {
       },
     });
     expect(eventBuildUpdatedMock).toHaveBeenCalledWith(new BuildDto(build));
+  });
+
+  it('postTestRun', async () => {
+    const createTestRequestDto: CreateTestRequestDto = {
+      buildId: 'buildId',
+      projectId: 'projectId',
+      name: 'Test name',
+      imageBase64: 'Image',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      branchName: 'develop',
+    };
+    const testVariation: TestVariation = {
+      id: '123',
+      projectId: 'project Id',
+      name: 'Test name',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      branchName: 'master',
+    };
+    const testRun: TestRun = {
+      id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
+      imageName: '1592423768112.screenshot.png',
+      diffName: 'diffName',
+      diffPercent: 12,
+      diffTollerancePercent: 1,
+      pixelMisMatchCount: 123,
+      status: 'new',
+      buildId: '146e7a8d-89f0-4565-aa2c-e61efabb0afd',
+      testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      name: 'ss2f77',
+      browser: 'chromium',
+      device: null,
+      os: null,
+      viewport: '1800x1600',
+      baselineName: null,
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      baselineBranchName: 'master',
+      branchName: 'develop',
+    };
+    const testVariationFindOrCreateMock = jest.fn().mockResolvedValueOnce(testVariation);
+    const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
+    const deleteMock = jest.fn();
+    const createMock = jest.fn().mockResolvedValueOnce(testRun);
+    const service = await initService({
+      testVariationFindOrCreateMock,
+      testRunFindManyMock,
+    });
+    service.delete = deleteMock;
+    service.create = createMock;
+    const baselineData = convertBaselineDataToQuery(createTestRequestDto);
+
+    await service.postTestRun(createTestRequestDto);
+
+    expect(testVariationFindOrCreateMock).toHaveBeenCalledWith(createTestRequestDto.projectId, baselineData);
+    expect(testRunFindManyMock).toHaveBeenCalledWith({
+      where: {
+        buildId: createTestRequestDto.buildId,
+        ...baselineData,
+      },
+    });
+    expect(deleteMock).toHaveBeenCalledWith(testRun.id);
+    expect(createMock).toHaveBeenCalledWith(testVariation, createTestRequestDto);
+    expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
   });
 });
