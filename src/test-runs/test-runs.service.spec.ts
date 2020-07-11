@@ -4,7 +4,7 @@ import { TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../shared/static/static.service';
 import { PNG } from 'pngjs';
-import { TestStatus, Build, TestRun } from '@prisma/client';
+import { TestStatus, Build, TestRun, TestVariation } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { DiffResult } from './diffResult';
@@ -28,6 +28,8 @@ const initService = async ({
   eventNewTestRunMock = jest.fn(),
   eventBuildUpdatedMock = jest.fn(),
   buildFindOneMock = jest.fn(),
+  testVariationCreateMock = jest.fn(),
+  baselineCreateMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -44,6 +46,12 @@ const initService = async ({
           },
           build: {
             findOne: buildFindOneMock,
+          },
+          testVariation: {
+            create: testVariationCreateMock,
+          },
+          baseline: {
+            create: baselineCreateMock,
           },
         },
       },
@@ -122,10 +130,14 @@ describe('TestRunsService', () => {
   });
 
   describe('approve', () => {
-    it('can approve', async () => {
-      const testRun = {
+    it('should approve the same branch', async () => {
+      const testRun: TestRun = {
         id: 'id',
         imageName: 'imageName',
+        diffName: 'diffName',
+        baselineName: 'baselineName',
+        diffPercent: 1,
+        pixelMisMatchCount: 10,
         diffTollerancePercent: 12,
         status: TestStatus.new,
         buildId: 'buildId',
@@ -134,6 +146,13 @@ describe('TestRunsService', () => {
         createdAt: new Date(),
         name: 'test run name',
         ignoreAreas: '[]',
+        browser: 'browser',
+        device: 'device',
+        os: 'os',
+        viewport: 'viewport',
+        branchName: 'master',
+        baselineBranchName: 'master',
+        comment: 'some comment',
       };
       const testRunUpdateMock = jest.fn();
       const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
@@ -181,6 +200,128 @@ describe('TestRunsService', () => {
       });
       expect(service.emitUpdateBuildEvent).toBeCalledWith(testRun.buildId);
     });
+
+    it('should approve different branch', async () => {
+      const testRun: TestRun & {
+        testVariation: TestVariation;
+      } = {
+        id: 'id',
+        imageName: 'imageName',
+        diffName: 'diffName',
+        baselineName: 'baselineName',
+        diffPercent: 1,
+        pixelMisMatchCount: 10,
+        diffTollerancePercent: 12,
+        status: TestStatus.new,
+        buildId: 'buildId',
+        testVariationId: 'testVariationId',
+        updatedAt: new Date(),
+        createdAt: new Date(),
+        name: 'test run name',
+        ignoreAreas: '[]',
+        browser: 'browser',
+        device: 'device',
+        os: 'os',
+        viewport: 'viewport',
+        branchName: 'develop',
+        baselineBranchName: 'master',
+        comment: 'some comment',
+        testVariation: {
+          id: '123',
+          projectId: 'project Id',
+          name: 'Test name',
+          baselineName: 'baselineName',
+          os: 'OS',
+          browser: 'browser',
+          viewport: 'viewport',
+          device: 'device',
+          ignoreAreas: '[]',
+          comment: 'some comment',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          branchName: 'master',
+        },
+      };
+      const newTestVariation: TestVariation = {
+        id: '124',
+        projectId: 'project Id',
+        name: 'Test name',
+        baselineName: 'baselineName',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        ignoreAreas: '[]',
+        comment: 'some comment',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        branchName: 'develop',
+      };
+      const testRunUpdateMock = jest.fn();
+      const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
+      const baselineName = 'some baseline name';
+      const saveImageMock = jest.fn().mockReturnValueOnce(baselineName);
+      const getImageMock = jest.fn().mockReturnValueOnce(
+        new PNG({
+          width: 10,
+          height: 10,
+        })
+      );
+      const testVariationCreateMock = jest.fn().mockResolvedValueOnce(newTestVariation);
+      const baselineCreateMock = jest.fn();
+      service = await initService({
+        testRunUpdateMock,
+        saveImageMock,
+        getImageMock,
+        testVariationCreateMock,
+        baselineCreateMock,
+      });
+      service.findOne = testRunFindOneMock;
+      service.emitUpdateBuildEvent = jest.fn();
+
+      await service.approve(testRun.id);
+
+      expect(testRunFindOneMock).toHaveBeenCalledWith(testRun.id);
+      expect(getImageMock).toHaveBeenCalledWith(testRun.imageName);
+      expect(saveImageMock).toHaveBeenCalledTimes(1);
+      expect(testVariationCreateMock).toBeCalledWith({
+        data: {
+          project: { connect: { id: testRun.testVariation.projectId } },
+          baselineName,
+          name: testRun.name,
+          browser: testRun.browser,
+          device: testRun.device,
+          os: testRun.os,
+          viewport: testRun.viewport,
+          ignoreAreas: testRun.ignoreAreas,
+          comment: testRun.comment,
+          branchName: testRun.branchName,
+        },
+      });
+      expect(baselineCreateMock).toHaveBeenCalledWith({
+        data: {
+          baselineName,
+          testVariation: {
+            connect: { id: newTestVariation.id },
+          },
+          testRun: {
+            connect: {
+              id: testRun.id,
+            },
+          },
+        },
+      });
+      expect(testRunUpdateMock).toHaveBeenCalledWith({
+        where: { id: testRun.id },
+        data: {
+          status: TestStatus.approved,
+          testVariation: {
+            connect: { id: newTestVariation.id },
+          },
+        },
+      });
+      expect(service.emitUpdateBuildEvent).toBeCalledWith(testRun.buildId);
+    });
   });
 
   it('create', async () => {
@@ -194,6 +335,7 @@ describe('TestRunsService', () => {
       viewport: 'viewport',
       device: 'device',
       diffTollerancePercent: undefined,
+      branchName: 'develop',
     };
     const testRunWithResult = {
       id: 'id',
@@ -226,6 +368,7 @@ describe('TestRunsService', () => {
       comment: 'some comment',
       createdAt: new Date(),
       updatedAt: new Date(),
+      branchName: 'master',
     };
     const createTestRequestDto = initCreateTestRequestDto;
     const testRunCreateMock = jest.fn().mockResolvedValueOnce(testRun);
@@ -283,6 +426,8 @@ describe('TestRunsService', () => {
         baselineName: testVariation.baselineName,
         ignoreAreas: testVariation.ignoreAreas,
         comment: testVariation.comment,
+        baselineBranchName: testVariation.branchName,
+        branchName: createTestRequestDto.branchName,
         diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
         status: TestStatus.new,
       },
@@ -495,9 +640,9 @@ describe('TestRunsService', () => {
       service = await initService({
         testRunUpdateMock,
       });
-  
+
       await service.saveDiffResult(id, diff);
-  
+
       expect(testRunUpdateMock).toHaveBeenCalledWith({
         where: { id },
         data: {
@@ -620,6 +765,8 @@ describe('TestRunsService', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment',
+          baselineBranchName: 'master',
+          branchName: 'develop',
         },
       ],
     };

@@ -83,7 +83,6 @@ export class TestRunsService {
 
   async approve(id: string): Promise<TestRun> {
     const testRun = await this.findOne(id);
-    // const project = await this.prismaService.project.findOne({ where: { id: testRun.testVariation.projectId } });
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName);
