@@ -25,11 +25,16 @@ export class BaselineDataDto {
   @IsOptional()
   @IsString()
   device?: string;
+
+  @ApiProperty()
+  @IsString()
+  branchName: string;
 }
 
 export const convertBaselineDataToQuery = (data: BaselineDataDto) => {
   return {
     name: data.name,
+    branchName: data.branchName,
     os: data.os ? data.os : null,
     browser: data.browser ? data.browser : null,
     device: data.device ? data.device : null,

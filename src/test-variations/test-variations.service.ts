@@ -27,23 +27,42 @@ export class TestVariationsService {
   }
 
   async findOrCreate(projectId: string, baselineData: BaselineDataDto): Promise<TestVariation> {
-    let [testVariation] = await this.prismaService.testVariation.findMany({
-      where: {
-        projectId,
+    const project = await this.prismaService.project.findOne({ where: { id: projectId } });
+
+    let [[mainBranchTestVariation], [currentBranchTestVariation]] = await Promise.all([
+      // search main branch variation
+      this.prismaService.testVariation.findMany({
+        where: {
+          projectId,
+          name: baselineData.name,
+          os: baselineData.os,
+          device: baselineData.device,
+          browser: baselineData.browser,
+          viewport: baselineData.viewport,
+          branchName: project.mainBranchName,
+        },
+      }),
+      // search current branch variation
+      this.prismaService.testVariation.findMany({
+        where: {
+          projectId,
+          ...baselineData,
+        },
+      }),
+    ]);
+
+    if (!!currentBranchTestVariation) {
+      return currentBranchTestVariation;
+    }
+    if (!!mainBranchTestVariation) {
+      return mainBranchTestVariation;
+    }
+    return this.prismaService.testVariation.create({
+      data: {
+        project: { connect: { id: projectId } },
         ...baselineData,
       },
     });
-
-    if (!testVariation) {
-      testVariation = await this.prismaService.testVariation.create({
-        data: {
-          project: { connect: { id: projectId } },
-          ...baselineData,
-        },
-      });
-    }
-
-    return testVariation;
   }
 
   async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestVariation> {
