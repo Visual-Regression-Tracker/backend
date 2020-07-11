@@ -58,6 +58,7 @@ model TestRun {
   comment               String?
   baseline              Baseline?
   branchName            String        @default("master")
+  baselineBranchName    String?
 }
 
 model TestVariation {

@@ -67,6 +67,13 @@
     },
     {
       "tag": "CreateField",
+      "model": "TestRun",
+      "field": "baselineBranchName",
+      "type": "String",
+      "arity": "Optional"
+    },
+    {
+      "tag": "CreateField",
       "model": "TestVariation",
       "field": "branchName",
       "type": "String",
