@@ -32,7 +32,7 @@ describe('Builds (e2e)', () => {
 
   beforeEach(async () => {
     user = await haveUserLogged(usersService);
-    project = await projecstService.create({ name: 'E2E test' });
+    project = await projecstService.create({ name: 'E2E test', mainBranchName: 'master' });
   });
 
   afterEach(async () => {

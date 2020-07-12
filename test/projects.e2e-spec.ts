@@ -16,6 +16,7 @@ const projectServiceMock = {
   findAll: () => ['test'],
   create: () => project,
   remove: () => project,
+  update: () => project,
 };
 
 describe('Projects (e2e)', () => {
@@ -89,6 +90,18 @@ describe('Projects (e2e)', () => {
 
     it('not valid token', async () => {
       await requestWithAuth(app, 'delete', `/projects/${project.id}`, {}, 'asd').expect(401);
+    });
+  });
+
+  describe('PUT /', () => {
+    it('can edit', async () => {
+      const res = await requestWithAuth(app, 'put', `/projects`, project, loggedUser.token).expect(200);
+
+      expect(res.body).toStrictEqual(projectServiceMock.update());
+    });
+
+    it('not valid token', async () => {
+      await requestWithAuth(app, 'put', `/projects`, project, 'asd').expect(401);
     });
   });
 });
