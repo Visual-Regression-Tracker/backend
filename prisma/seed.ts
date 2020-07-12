@@ -60,8 +60,9 @@ async function createDefaultProject() {
         console.log('## CREATING DEFAULT PROJECT ##');
         console.log('##############################');
         console.log('');
-        console.log(`Project name ${project.name}`);
         console.log(`Project key: ${project.id}`);
+        console.log(`Project name ${project.name}`);
+        console.log(`Project name ${project.mainBranchName}`);
       });
   }
 }

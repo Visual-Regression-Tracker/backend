@@ -4,6 +4,7 @@ import { BuildsService } from '../builds/builds.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Project } from '@prisma/client';
+import { ProjectDto } from './dto/project.dto';
 
 @Injectable()
 export class ProjectsService {
@@ -21,6 +22,17 @@ export class ProjectsService {
     return this.prismaService.project.create({
       data: {
         name: createProjectDto.name,
+        mainBranchName: createProjectDto.mainBranchName,
+      },
+    });
+  }
+
+  async update(projectDto: ProjectDto): Promise<Project> {
+    return this.prismaService.project.update({
+      where: { id: projectDto.id },
+      data: {
+        name: projectDto.name,
+        mainBranchName: projectDto.mainBranchName,
       },
     });
   }
@@ -35,9 +47,9 @@ export class ProjectsService {
     });
 
     try {
-      await Promise.all(project.builds.map((build) => this.buildsService.remove(build.id)));
+      await Promise.all(project.builds.map(build => this.buildsService.remove(build.id)));
       await Promise.all(
-        project.testVariations.map((testVariation) => this.testVariationsService.remove(testVariation.id))
+        project.testVariations.map(testVariation => this.testVariationsService.remove(testVariation.id))
       );
     } catch (err) {
       console.log(err);
