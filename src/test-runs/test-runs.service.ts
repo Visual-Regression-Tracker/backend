@@ -87,28 +87,67 @@ export class TestRunsService {
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName);
     const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
-
-    const testRunUpdated = await this.prismaService.testRun.update({
-      where: { id },
-      data: {
-        status: TestStatus.approved,
-        testVariation: {
-          update: {
-            baselineName,
-            baselines: {
-              create: {
-                baselineName,
-                testRun: {
-                  connect: {
-                    id: testRun.id,
+    let testRunUpdated: TestRun;
+    if (testRun.branchName === testRun.baselineBranchName) {
+      testRunUpdated = await this.prismaService.testRun.update({
+        where: { id },
+        data: {
+          status: TestStatus.approved,
+          testVariation: {
+            update: {
+              baselineName,
+              baselines: {
+                create: {
+                  baselineName,
+                  testRun: {
+                    connect: {
+                      id: testRun.id,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    });
+      });
+    } else {
+      const newTestVariation = await this.prismaService.testVariation.create({
+        data: {
+          project: { connect: { id: testRun.testVariation.projectId } },
+          baselineName,
+          name: testRun.name,
+          browser: testRun.browser,
+          device: testRun.device,
+          os: testRun.os,
+          viewport: testRun.viewport,
+          ignoreAreas: testRun.ignoreAreas,
+          comment: testRun.comment,
+          branchName: testRun.branchName,
+        },
+      });
+      const newBaseline = await this.prismaService.baseline.create({
+        data: {
+          baselineName,
+          testVariation: {
+            connect: { id: newTestVariation.id },
+          },
+          testRun: {
+            connect: {
+              id: testRun.id,
+            },
+          },
+        },
+      });
+      testRunUpdated = await this.prismaService.testRun.update({
+        where: { id },
+        data: {
+          status: TestStatus.approved,
+          testVariation: {
+            connect: { id: newTestVariation.id },
+          },
+        },
+      });
+    }
 
     this.emitUpdateBuildEvent(testRun.buildId);
     return testRunUpdated;
@@ -175,9 +214,11 @@ export class TestRunsService {
         os: testVariation.os,
         viewport: testVariation.viewport,
         baselineName: testVariation.baselineName,
+        baselineBranchName: testVariation.branchName,
         ignoreAreas: testVariation.ignoreAreas,
         comment: testVariation.comment,
         diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
+        branchName: createTestRequestDto.branchName,
         status: TestStatus.new,
       },
     });

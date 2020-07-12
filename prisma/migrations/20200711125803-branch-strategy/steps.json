@@ -1,0 +1,108 @@
+{
+  "version": "0.3.14-fixed",
+  "steps": [
+    {
+      "tag": "CreateField",
+      "model": "Project",
+      "field": "mainBranchName",
+      "type": "String",
+      "arity": "Required"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "Project",
+          "field": "mainBranchName"
+        },
+        "directive": "default"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "Project",
+          "field": "mainBranchName"
+        },
+        "directive": "default"
+      },
+      "argument": "",
+      "value": "\"master\""
+    },
+    {
+      "tag": "CreateField",
+      "model": "TestRun",
+      "field": "branchName",
+      "type": "String",
+      "arity": "Required"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "branchName"
+        },
+        "directive": "default"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "branchName"
+        },
+        "directive": "default"
+      },
+      "argument": "",
+      "value": "\"master\""
+    },
+    {
+      "tag": "CreateField",
+      "model": "TestRun",
+      "field": "baselineBranchName",
+      "type": "String",
+      "arity": "Optional"
+    },
+    {
+      "tag": "CreateField",
+      "model": "TestVariation",
+      "field": "branchName",
+      "type": "String",
+      "arity": "Required"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "TestVariation",
+          "field": "branchName"
+        },
+        "directive": "default"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "TestVariation",
+          "field": "branchName"
+        },
+        "directive": "default"
+      },
+      "argument": "",
+      "value": "\"master\""
+    }
+  ]
+}
