@@ -85,6 +85,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment1',
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -106,6 +108,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment2',
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
       ],
     };
@@ -129,7 +133,7 @@ describe('BuildDto', () => {
   });
 
   it('failed', () => {
-    const build = {
+    const build: Build & { testRuns: TestRun[] } = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
       number: null,
       branchName: 'develop',
@@ -159,6 +163,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment',
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -180,6 +186,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment1',
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -201,6 +209,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment2',
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
       ],
     };
@@ -224,7 +234,7 @@ describe('BuildDto', () => {
   });
 
   it('unresolved', () => {
-    const build = {
+    const build: Build & { testRuns: TestRun[] } = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
       number: null,
       branchName: 'develop',
@@ -254,6 +264,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment1',
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -275,6 +287,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment2',
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -296,6 +310,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: null,
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -317,6 +333,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment',
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -338,6 +356,8 @@ describe('BuildDto', () => {
           baselineName: null,
           ignoreAreas: '[]',
           comment: 'some comment',
+          branchName: 'develop',
+          baselineBranchName: 'master',
         },
       ],
     };
