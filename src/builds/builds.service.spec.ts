@@ -90,6 +90,8 @@ describe('BuildsService', () => {
         baselineName: null,
         ignoreAreas: '[]',
         comment: 'some comment',
+        branchName: 'develop',
+        baselineBranchName: 'master'
       },
     ],
   };
@@ -134,6 +136,7 @@ describe('BuildsService', () => {
       const project: Project = {
         id: 'project id',
         name: 'name',
+        mainBranchName: 'master',
         updatedAt: new Date(),
         createdAt: new Date(),
       };
