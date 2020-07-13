@@ -87,6 +87,7 @@ describe('BuildDto', () => {
           comment: 'some comment1',
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: true,
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -110,6 +111,7 @@ describe('BuildDto', () => {
           comment: 'some comment2',
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: false
         },
       ],
     };
@@ -165,6 +167,7 @@ describe('BuildDto', () => {
           comment: 'some comment',
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: false
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -188,6 +191,7 @@ describe('BuildDto', () => {
           comment: 'some comment1',
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: false
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -211,6 +215,7 @@ describe('BuildDto', () => {
           comment: 'some comment2',
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: false
         },
       ],
     };
@@ -266,6 +271,7 @@ describe('BuildDto', () => {
           comment: 'some comment1',
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: false
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -289,6 +295,7 @@ describe('BuildDto', () => {
           comment: 'some comment2',
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: false
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -312,6 +319,7 @@ describe('BuildDto', () => {
           comment: null,
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: false
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -335,6 +343,7 @@ describe('BuildDto', () => {
           comment: 'some comment',
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: false
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -358,6 +367,7 @@ describe('BuildDto', () => {
           comment: 'some comment',
           branchName: 'develop',
           baselineBranchName: 'master',
+          merge: false
         },
       ],
     };
