@@ -135,6 +135,26 @@
       },
       "argument": "",
       "value": "\"master\""
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Model",
+          "model": "TestVariation",
+          "arguments": [
+            {
+              "name": "",
+              "value": "[name, browser, device, os, viewport, branchName]"
+            },
+            {
+              "name": "name",
+              "value": "\"unique variation\""
+            }
+          ]
+        },
+        "directive": "unique"
+      }
     }
   ]
 }
