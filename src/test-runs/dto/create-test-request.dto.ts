@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsBase64, IsUUID, IsNumber } from 'class-validator';
+import { IsOptional, IsBase64, IsUUID, IsNumber, IsBoolean } from 'class-validator';
 import { BaselineDataDto } from '../../shared/dto/baseline-data.dto';
 
 export class CreateTestRequestDto extends BaselineDataDto {
@@ -19,4 +19,9 @@ export class CreateTestRequestDto extends BaselineDataDto {
   @IsOptional()
   @IsNumber()
   diffTollerancePercent?: number;
+
+  @ApiProperty()
+  @IsBoolean()
+  @IsOptional()
+  merge?: boolean;
 }

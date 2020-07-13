@@ -30,12 +30,13 @@ export class TestRunsController {
     return this.testRunsService.recalculateDiff(id);
   }
 
-  @Get('approve/:id')
-  @ApiParam({ name: 'id', required: true })
+  @Get('approve')
+  @ApiQuery({ name: 'id', required: true })
+  @ApiQuery({ name: 'merge', required: false })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  approveTestRun(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRun> {
-    return this.testRunsService.approve(id);
+  approveTestRun(@Query('id', new ParseUUIDPipe()) id: string, @Query('merge') merge: boolean): Promise<TestRun> {
+    return this.testRunsService.approve(id, merge);
   }
 
   @Get('reject/:id')
@@ -79,5 +80,17 @@ export class TestRunsController {
   @UseGuards(ApiGuard)
   postTestRun(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
     return this.testRunsService.postTestRun(createTestRequestDto);
+  }
+
+  @Get('merge')
+  @ApiQuery({ name: 'projectId', required: true })
+  @ApiQuery({ name: 'branchName', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  merge(
+    @Query('projectId', new ParseUUIDPipe()) projectId: string,
+    @Query('branchName') branchName: string
+  ): Promise<void> {
+    return this.testRunsService.merge(projectId, branchName);
   }
 }
