@@ -1,4 +1,16 @@
-import { Controller, Delete, UseGuards, Param, ParseUUIDPipe, Put, Body, Get, Query, Post } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  UseGuards,
+  Param,
+  ParseUUIDPipe,
+  Put,
+  Body,
+  Get,
+  Query,
+  Post,
+  ParseBoolPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery, ApiSecurity, ApiOkResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { TestRun } from '@prisma/client';
@@ -35,7 +47,10 @@ export class TestRunsController {
   @ApiQuery({ name: 'merge', required: false })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  approveTestRun(@Query('id', new ParseUUIDPipe()) id: string, @Query('merge') merge: boolean): Promise<TestRun> {
+  approveTestRun(
+    @Query('id', new ParseUUIDPipe()) id: string,
+    @Query('merge', new ParseBoolPipe()) merge: boolean
+  ): Promise<TestRun> {
     return this.testRunsService.approve(id, merge);
   }
 
