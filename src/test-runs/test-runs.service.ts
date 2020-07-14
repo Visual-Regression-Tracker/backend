@@ -70,25 +70,29 @@ export class TestRunsService {
       testVariations.map(async sideBranchTestVariation => {
         const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
         if (baseline) {
-          // get main branch variation
-          const baselineData = convertBaselineDataToQuery({
-            ...sideBranchTestVariation,
-            branchName: project.mainBranchName,
-          });
-          const mainBranchTestVariation = await this.testVariationService.findOrCreate(projectId, baselineData);
+          try {
+            let imageBase64 = PNG.sync.write(baseline).toString('base64');
 
-          // get side branch request
-          const imageBase64 = PNG.sync.write(baseline).toString('base64');
-          const createTestRequestDto: CreateTestRequestDto = {
-            ...sideBranchTestVariation,
-            projectId,
-            buildId: build.id,
-            imageBase64,
-            diffTollerancePercent: 0,
-            merge: true,
-          };
+            // get main branch variation
+            const baselineData = convertBaselineDataToQuery({
+              ...sideBranchTestVariation,
+              branchName: project.mainBranchName,
+            });
+            const mainBranchTestVariation = await this.testVariationService.findOrCreate(projectId, baselineData);
 
-          return this.create(mainBranchTestVariation, createTestRequestDto);
+            // get side branch request
+            const createTestRequestDto: CreateTestRequestDto = {
+              ...sideBranchTestVariation,
+              buildId: build.id,
+              imageBase64,
+              diffTollerancePercent: 0,
+              merge: true,
+            };
+
+            return this.create(mainBranchTestVariation, createTestRequestDto);
+          } catch (err) {
+            console.log(err);
+          }
         }
       })
     );

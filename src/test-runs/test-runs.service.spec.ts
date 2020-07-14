@@ -4,7 +4,7 @@ import { TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../shared/static/static.service';
 import { PNG } from 'pngjs';
-import { TestStatus, Build, TestRun, TestVariation } from '@prisma/client';
+import { TestStatus, Build, TestRun, TestVariation, Project } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
@@ -30,10 +30,14 @@ const initService = async ({
   deleteImageMock = jest.fn(),
   eventNewTestRunMock = jest.fn(),
   eventBuildUpdatedMock = jest.fn(),
+  eventBuildCreatedMock = jest.fn(),
   buildFindOneMock = jest.fn(),
+  buildCreateMock = jest.fn(),
   testVariationCreateMock = jest.fn(),
+  testVariationFindManyMock = jest.fn(),
   baselineCreateMock = jest.fn(),
   testVariationFindOrCreateMock = jest.fn(),
+  projectFindOneMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -50,12 +54,17 @@ const initService = async ({
           },
           build: {
             findOne: buildFindOneMock,
+            create: buildCreateMock,
           },
           testVariation: {
             create: testVariationCreateMock,
+            findMany: testVariationFindManyMock,
           },
           baseline: {
             create: baselineCreateMock,
+          },
+          project: {
+            findOne: projectFindOneMock,
           },
         },
       },
@@ -72,6 +81,7 @@ const initService = async ({
         useValue: {
           newTestRun: eventNewTestRunMock,
           buildUpdated: eventBuildUpdatedMock,
+          buildCreated: eventBuildCreatedMock,
         },
       },
       {
@@ -159,7 +169,7 @@ describe('TestRunsService', () => {
         branchName: 'master',
         baselineBranchName: 'master',
         comment: 'some comment',
-        merge: false
+        merge: false,
       };
       const testRunUpdateMock = jest.fn();
       const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
@@ -231,7 +241,7 @@ describe('TestRunsService', () => {
         branchName: 'develop',
         baselineBranchName: 'master',
         comment: 'some comment',
-        merge: false
+        merge: false,
       };
       const testRunUpdateMock = jest.fn();
       const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
@@ -948,5 +958,128 @@ describe('TestRunsService', () => {
     expect(deleteMock).toHaveBeenCalledWith(testRun.id);
     expect(createMock).toHaveBeenCalledWith(testVariation, createTestRequestDto);
     expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
+  });
+
+  it('merge', async () => {
+    const mergedBranch = 'develop';
+    const project: Project = {
+      id: 'some id',
+      name: 'some name',
+      mainBranchName: 'master',
+      updatedAt: new Date(),
+      createdAt: new Date(),
+    };
+    const build: Build = {
+      id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+      number: null,
+      branchName: project.mainBranchName,
+      status: null,
+      projectId: project.id,
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      userId: null,
+    };
+    const testVariation: TestVariation = {
+      id: '123',
+      projectId: project.id,
+      name: 'Test name',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      branchName: mergedBranch,
+    };
+    const testVariationNoBaseline: TestVariation = {
+      id: '123',
+      projectId: project.id,
+      name: 'Test name',
+      baselineName: null,
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      branchName: mergedBranch,
+    };
+    const testVariationMainBranch: TestVariation = {
+      id: '123',
+      projectId: project.id,
+      name: 'Test name',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      branchName: project.mainBranchName,
+    };
+    const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
+    const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
+    const eventBuildCreatedMock = jest.fn();
+    const testVariationFindManyMock = jest.fn().mockResolvedValueOnce([testVariation, testVariationNoBaseline]);
+    const image = new PNG({
+      width: 10,
+      height: 10,
+    });
+    const getImageMock = jest
+      .fn()
+      .mockReturnValueOnce(image)
+      .mockReturnValueOnce(null);
+    const testVariationFindOrCreateMock = jest.fn().mockResolvedValueOnce(testVariationMainBranch);
+    const createMock = jest.fn();
+    const service = await initService({
+      projectFindOneMock,
+      buildCreateMock,
+      eventBuildCreatedMock,
+      testVariationFindManyMock,
+      testVariationFindOrCreateMock,
+      getImageMock,
+    });
+    service.create = createMock;
+
+    await service.merge(project.id, mergedBranch);
+
+    expect(projectFindOneMock).toHaveBeenCalledWith({ where: { id: project.id } });
+    expect(buildCreateMock).toHaveBeenCalledWith({
+      data: {
+        branchName: project.mainBranchName,
+        project: {
+          connect: {
+            id: project.id,
+          },
+        },
+      },
+    });
+    expect(eventBuildCreatedMock).toHaveBeenCalledWith(new BuildDto(build));
+    expect(testVariationFindManyMock).toHaveBeenCalledWith({
+      where: { projectId: project.id, branchName: mergedBranch },
+    });
+    expect(getImageMock).toHaveBeenCalledWith(testVariation.baselineName);
+    expect(testVariationFindOrCreateMock).toHaveBeenCalledWith(project.id, {
+      name: testVariation.name,
+      os: testVariation.os,
+      device: testVariation.device,
+      browser: testVariation.browser,
+      viewport: testVariation.viewport,
+      branchName: project.mainBranchName,
+    });
+    expect(createMock).toHaveBeenCalledWith(testVariationMainBranch, {
+      ...testVariation,
+      buildId: build.id,
+      imageBase64: PNG.sync.write(image).toString('base64'),
+      diffTollerancePercent: 0,
+      merge: true,
+    });
   });
 });
