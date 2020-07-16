@@ -48,4 +48,16 @@ export class TestVariationsController {
   updateComment(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: CommentDto): Promise<TestVariation> {
     return this.testVariations.updateComment(id, body);
   }
+
+  @Get('merge')
+  @ApiQuery({ name: 'projectId', required: true })
+  @ApiQuery({ name: 'branchName', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  merge(
+    @Query('projectId', new ParseUUIDPipe()) projectId: string,
+    @Query('branchName') branchName: string
+  ): Promise<void> {
+    return this.testVariations.merge(projectId, branchName);
+  }
 }

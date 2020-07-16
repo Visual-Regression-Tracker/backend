@@ -96,16 +96,4 @@ export class TestRunsController {
   postTestRun(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
     return this.testRunsService.postTestRun(createTestRequestDto);
   }
-
-  @Get('merge')
-  @ApiQuery({ name: 'projectId', required: true })
-  @ApiQuery({ name: 'branchName', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  merge(
-    @Query('projectId', new ParseUUIDPipe()) projectId: string,
-    @Query('branchName') branchName: string
-  ): Promise<void> {
-    return this.testRunsService.merge(projectId, branchName);
-  }
 }

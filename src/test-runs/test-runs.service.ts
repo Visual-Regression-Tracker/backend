@@ -5,7 +5,7 @@ import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestRun, TestStatus, TestVariation, Project, Build } from '@prisma/client';
+import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
@@ -42,60 +42,6 @@ export class TestRunsService {
         testVariation: true,
       },
     });
-  }
-
-  async merge(projectId: string, branchName: string): Promise<void> {
-    const project: Project = await this.prismaService.project.findOne({ where: { id: projectId } });
-
-    // create build
-    const build: Build = await this.prismaService.build.create({
-      data: {
-        branchName: project.mainBranchName,
-        project: {
-          connect: {
-            id: project.id,
-          },
-        },
-      },
-    });
-    this.eventsGateway.buildCreated(new BuildDto(build));
-
-    // find side branch variations
-    const testVariations: TestVariation[] = await this.prismaService.testVariation.findMany({
-      where: { projectId, branchName },
-    });
-
-    // compare to main branch variations
-    await Promise.all(
-      testVariations.map(async sideBranchTestVariation => {
-        const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
-        if (baseline) {
-          try {
-            let imageBase64 = PNG.sync.write(baseline).toString('base64');
-
-            // get main branch variation
-            const baselineData = convertBaselineDataToQuery({
-              ...sideBranchTestVariation,
-              branchName: project.mainBranchName,
-            });
-            const mainBranchTestVariation = await this.testVariationService.findOrCreate(projectId, baselineData);
-
-            // get side branch request
-            const createTestRequestDto: CreateTestRequestDto = {
-              ...sideBranchTestVariation,
-              buildId: build.id,
-              imageBase64,
-              diffTollerancePercent: 0,
-              merge: true,
-            };
-
-            return this.create(mainBranchTestVariation, createTestRequestDto);
-          } catch (err) {
-            console.log(err);
-          }
-        }
-      })
-    );
   }
 
   async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
