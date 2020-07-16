@@ -146,10 +146,6 @@
             {
               "name": "",
               "value": "[name, browser, device, os, viewport, branchName]"
-            },
-            {
-              "name": "name",
-              "value": "\"unique variation\""
             }
           ]
         },
