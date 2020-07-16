@@ -9,6 +9,7 @@ import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { PNG } from 'pngjs';
 import { CreateTestRequestDto } from 'src/test-runs/dto/create-test-request.dto';
+import { BuildDto } from 'src/builds/dto/build.dto';
 
 @Injectable()
 export class TestVariationsService {
@@ -118,11 +119,11 @@ export class TestVariationsService {
     });
   }
 
-  async merge(projectId: string, branchName: string): Promise<void> {
+  async merge(projectId: string, branchName: string): Promise<BuildDto> {
     const project: Project = await this.prismaService.project.findOne({ where: { id: projectId } });
 
     // create build
-    const build: Build = await this.buildsService.create({
+    const build: BuildDto = await this.buildsService.create({
       branchName: project.mainBranchName,
       project: projectId,
     });
@@ -163,5 +164,7 @@ export class TestVariationsService {
         }
       })
     );
+
+    return build;
   }
 }
