@@ -7,7 +7,7 @@ import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
-import { EventsGateway } from '../events/events.gateway';
+import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BuildDto } from '../builds/dto/build.dto';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';

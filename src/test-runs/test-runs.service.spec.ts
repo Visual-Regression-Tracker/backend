@@ -10,7 +10,7 @@ import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { DiffResult } from './diffResult';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
-import { EventsGateway } from '../events/events.gateway';
+import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BuildDto } from '../builds/dto/build.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';

@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BuildsService } from './builds.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
-import { EventsGateway } from '../events/events.gateway';
+import { EventsGateway } from '../shared/events/events.gateway';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { Build, TestRun, Project } from '@prisma/client';
 import { mocked } from 'ts-jest/utils';
