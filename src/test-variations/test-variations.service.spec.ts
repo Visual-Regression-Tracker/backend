@@ -407,6 +407,21 @@ describe('TestVariationsService', () => {
       updatedAt: new Date(),
       branchName: mergedBranch,
     };
+    const testVariationSecond: TestVariation = {
+      id: '123',
+      projectId: project.id,
+      name: 'Test name second',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      branchName: mergedBranch,
+    };
     const testVariationNoBaseline: TestVariation = {
       id: '123',
       projectId: project.id,
@@ -439,7 +454,9 @@ describe('TestVariationsService', () => {
     };
     const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
     const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
-    const variationFindManyMock = jest.fn().mockResolvedValueOnce([testVariation, testVariationNoBaseline]);
+    const variationFindManyMock = jest
+      .fn()
+      .mockResolvedValueOnce([testVariation, testVariationSecond, testVariationNoBaseline]);
     const image = new PNG({
       width: 10,
       height: 10,
@@ -447,8 +464,12 @@ describe('TestVariationsService', () => {
     const getImageMock = jest
       .fn()
       .mockReturnValueOnce(image)
+      .mockReturnValueOnce(image)
       .mockReturnValueOnce(null);
-    const findOrCreateMock = jest.fn().mockResolvedValueOnce(testVariationMainBranch);
+    const findOrCreateMock = jest
+      .fn()
+      .mockResolvedValueOnce(testVariationMainBranch)
+      .mockResolvedValueOnce(testVariationMainBranch);
     const testRunCreateMock = jest.fn();
     const service = await initModule({
       projectFindOneMock,
@@ -478,12 +499,22 @@ describe('TestVariationsService', () => {
       viewport: testVariation.viewport,
       branchName: project.mainBranchName,
     });
-    expect(testRunCreateMock).toHaveBeenCalledWith(testVariationMainBranch, {
+
+    await new Promise(r => setTimeout(r, 1));
+    expect(testRunCreateMock).toHaveBeenNthCalledWith(1, testVariationMainBranch, {
       ...testVariation,
       buildId: build.id,
       imageBase64: PNG.sync.write(image).toString('base64'),
       diffTollerancePercent: 0,
       merge: true,
     });
+    expect(testRunCreateMock).toHaveBeenNthCalledWith(2, testVariationMainBranch, {
+      ...testVariationSecond,
+      buildId: build.id,
+      imageBase64: PNG.sync.write(image).toString('base64'),
+      diffTollerancePercent: 0,
+      merge: true,
+    });
+    expect(testRunCreateMock).toHaveBeenCalledTimes(2);
   });
 });

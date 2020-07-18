@@ -134,36 +134,34 @@ export class TestVariationsService {
     });
 
     // compare to main branch variations
-    await Promise.all(
-      testVariations.map(async sideBranchTestVariation => {
-        const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
-        if (baseline) {
-          try {
-            let imageBase64 = PNG.sync.write(baseline).toString('base64');
+    testVariations.map(async sideBranchTestVariation => {
+      const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
+      if (baseline) {
+        try {
+          let imageBase64 = PNG.sync.write(baseline).toString('base64');
 
-            // get main branch variation
-            const baselineData = convertBaselineDataToQuery({
-              ...sideBranchTestVariation,
-              branchName: project.mainBranchName,
-            });
-            const mainBranchTestVariation = await this.findOrCreate(projectId, baselineData);
+          // get main branch variation
+          const baselineData = convertBaselineDataToQuery({
+            ...sideBranchTestVariation,
+            branchName: project.mainBranchName,
+          });
+          const mainBranchTestVariation = await this.findOrCreate(projectId, baselineData);
 
-            // get side branch request
-            const createTestRequestDto: CreateTestRequestDto = {
-              ...sideBranchTestVariation,
-              buildId: build.id,
-              imageBase64,
-              diffTollerancePercent: 0,
-              merge: true,
-            };
+          // get side branch request
+          const createTestRequestDto: CreateTestRequestDto = {
+            ...sideBranchTestVariation,
+            buildId: build.id,
+            imageBase64,
+            diffTollerancePercent: 0,
+            merge: true,
+          };
 
-            return this.testRunsService.create(mainBranchTestVariation, createTestRequestDto);
-          } catch (err) {
-            console.log(err);
-          }
+          return this.testRunsService.create(mainBranchTestVariation, createTestRequestDto);
+        } catch (err) {
+          console.log(err);
         }
-      })
-    );
+      }
+    });
 
     return build;
   }
