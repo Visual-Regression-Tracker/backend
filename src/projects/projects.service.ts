@@ -49,7 +49,7 @@ export class ProjectsService {
     try {
       await Promise.all(project.builds.map(build => this.buildsService.remove(build.id)));
       await Promise.all(
-        project.testVariations.map(testVariation => this.testVariationsService.remove(testVariation.id))
+        project.testVariations.map(testVariation => this.testVariationsService.delete(testVariation.id))
       );
     } catch (err) {
       console.log(err);
