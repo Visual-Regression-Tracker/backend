@@ -7,7 +7,7 @@ import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
-import { EventsGateway } from '../events/events.gateway';
+import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BuildDto } from '../builds/dto/build.dto';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
@@ -81,14 +81,14 @@ export class TestRunsService {
     this.eventsGateway.buildUpdated(buildDto);
   }
 
-  async approve(id: string): Promise<TestRun> {
+  async approve(id: string, merge: boolean): Promise<TestRun> {
     const testRun = await this.findOne(id);
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName);
     const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
     let testRunUpdated: TestRun;
-    if (testRun.branchName === testRun.baselineBranchName) {
+    if (merge || testRun.branchName === testRun.baselineBranchName) {
       testRunUpdated = await this.prismaService.testRun.update({
         where: { id },
         data: {
@@ -219,6 +219,7 @@ export class TestRunsService {
         comment: testVariation.comment,
         diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
         branchName: createTestRequestDto.branchName,
+        merge: createTestRequestDto.merge,
         status: TestStatus.new,
       },
     });

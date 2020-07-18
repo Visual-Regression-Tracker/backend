@@ -1,10 +1,11 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build } from '@prisma/client';
+import { Build, Project } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
-import { EventsGateway } from '../events/events.gateway';
+import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
+import uuidAPIKey from 'uuid-apikey';
 
 @Injectable()
 export class BuildsService {
@@ -27,13 +28,21 @@ export class BuildsService {
   }
 
   async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
-    const projects = await this.prismaService.project.findMany({
-      where: {
-        OR: [{ id: createBuildDto.project }, { name: createBuildDto.project }],
-      },
-    });
+    let project: Project;
 
-    if (projects.length <= 0) {
+    if (uuidAPIKey.isUUID(createBuildDto.project)) {
+      project = await this.prismaService.project.findOne({
+        where: { id: createBuildDto.project },
+      });
+    } else {
+      project = await this.prismaService.project.findOne({
+        where: {
+          name: createBuildDto.project,
+        },
+      });
+    }
+
+    if (!project) {
       throw new HttpException(`Project not found`, HttpStatus.NOT_FOUND);
     }
 
@@ -42,7 +51,7 @@ export class BuildsService {
         branchName: createBuildDto.branchName,
         project: {
           connect: {
-            id: projects[0].id,
+            id: project.id,
           },
         },
       },

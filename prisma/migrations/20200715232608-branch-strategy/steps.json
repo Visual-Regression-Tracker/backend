@@ -36,6 +36,38 @@
     {
       "tag": "CreateField",
       "model": "TestRun",
+      "field": "merge",
+      "type": "Boolean",
+      "arity": "Required"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "merge"
+        },
+        "directive": "default"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "merge"
+        },
+        "directive": "default"
+      },
+      "argument": "",
+      "value": "false"
+    },
+    {
+      "tag": "CreateField",
+      "model": "TestRun",
       "field": "branchName",
       "type": "String",
       "arity": "Required"
@@ -103,6 +135,22 @@
       },
       "argument": "",
       "value": "\"master\""
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Model",
+          "model": "TestVariation",
+          "arguments": [
+            {
+              "name": "",
+              "value": "[name, browser, device, os, viewport, branchName]"
+            }
+          ]
+        },
+        "directive": "unique"
+      }
     }
   ]
 }

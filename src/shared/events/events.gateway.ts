@@ -1,7 +1,7 @@
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { TestRun } from '@prisma/client';
-import { BuildDto } from '../builds/dto/build.dto';
+import { BuildDto } from '../../builds/dto/build.dto';
 
 @WebSocketGateway()
 export class EventsGateway {

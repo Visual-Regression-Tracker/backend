@@ -5,18 +5,17 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
-  "scripts": {
-  },
+  "scripts": {},
   "dependencies": {
-    "@prisma/client": "^2.0.0-beta.6",
+    "@prisma/client": "^2.2.2",
     "bcryptjs": "^2.4.3",
     "uuid-apikey": "^1.4.6"
   },
   "devDependencies": {
-    "ts-node": "^8.8.2",
-    "@prisma/cli": "^2.0.0-beta.6",
+    "@prisma/cli": "^2.2.2",
     "@types/bcryptjs": "^2.4.2",
     "@types/uuid-apikey": "^1.4.0",
+    "ts-node": "^8.8.2",
     "typescript": "^3.7.4"
   }
 }
