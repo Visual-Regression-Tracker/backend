@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { CommentDto } from '../shared/dto/comment.dto';
-import { BuildDto } from 'src/builds/dto/build.dto';
+import { BuildDto } from '../builds/dto/build.dto';
 
 @ApiTags('test-variations')
 @Controller('test-variations')
