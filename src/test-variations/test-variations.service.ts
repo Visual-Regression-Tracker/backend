@@ -1,7 +1,7 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation, Baseline, Project, Build } from '@prisma/client';
+import { TestVariation, Baseline, Project, Build, TestRun } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BaselineDataDto, convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
@@ -164,5 +164,32 @@ export class TestVariationsService {
     });
 
     return build;
+  }
+
+  async delete(id: string): Promise<TestVariation> {
+    const [testVariation, testRuns] = await Promise.all([
+      this.getDetails(id),
+      this.prismaService.testRun.findMany({
+        where: { testVariationId: id },
+      })
+    ])
+
+    // delete testRun
+    await Promise.all(testRuns.map(item => this.testRunsService.delete(item.id)));
+    
+    // delete baseline
+    await Promise.all(testVariation.baselines.map(baseline => this.deleteBaseline(baseline)));
+
+    // delete testVariation
+    return this.prismaService.testVariation.delete({
+      where: { id },
+    });
+  }
+
+  private async deleteBaseline(baseline: Baseline): Promise<Baseline> {
+    this.staticService.deleteImage(baseline.baselineName);
+    return this.prismaService.baseline.delete({
+      where: { id: baseline.id },
+    });
   }
 }
