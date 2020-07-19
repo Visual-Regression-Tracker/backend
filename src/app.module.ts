@@ -7,6 +7,8 @@ import { TestRunsModule } from './test-runs/test-runs.module';
 import { TestVariationsModule } from './test-variations/test-variations.module';
 import { PrismaService } from './prisma/prisma.service';
 import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER } from '@nestjs/core';
+import { HttpPrismaExceptionFilter } from './http-prisma-exception.filter';
 
 @Module({
   imports: [
@@ -18,6 +20,12 @@ import { ConfigModule } from '@nestjs/config';
     TestRunsModule,
     TestVariationsModule,
   ],
-  providers: [PrismaService],
+  providers: [
+    PrismaService,
+    {
+      provide: APP_FILTER,
+      useClass: HttpPrismaExceptionFilter,
+    },
+  ],
 })
 export class AppModule {}

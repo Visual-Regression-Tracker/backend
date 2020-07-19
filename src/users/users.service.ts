@@ -25,19 +25,11 @@ export class UsersService {
       password: await this.authService.encryptPassword(createUserDto.password),
     };
 
-    try {
-      const userData = await this.prismaService.user.create({
-        data: user,
-      });
+    const userData = await this.prismaService.user.create({
+      data: user,
+    });
 
-      return new UserLoginResponseDto(userData, null);
-    } catch (err) {
-      if (err.original.constraint === 'user_email_key') {
-        throw new HttpException(`User with email '${err.errors[0].value}' already exists`, HttpStatus.CONFLICT);
-      }
-
-      throw new HttpException(err, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
+    return new UserLoginResponseDto(userData, null);
   }
 
   async findOne(id: string): Promise<User> {
