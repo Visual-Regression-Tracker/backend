@@ -1,4 +1,4 @@
-import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query, Put, Body } from '@nestjs/common';
+import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query, Put, Body, Delete } from '@nestjs/common';
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery, ApiOkResponse } from '@nestjs/swagger';
 import { TestVariationsService } from './test-variations.service';
 import { TestVariation, Baseline } from '@prisma/client';
@@ -56,7 +56,18 @@ export class TestVariationsController {
   @ApiOkResponse({ type: BuildDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  merge(@Query('projectId') projectId: string, @Query('branchName') branchName: string): Promise<BuildDto> {
+  merge(
+    @Query('projectId', new ParseUUIDPipe()) projectId: string,
+    @Query('branchName') branchName: string
+  ): Promise<BuildDto> {
     return this.testVariations.merge(projectId, branchName);
+  }
+
+  @Delete(':id')
+  @ApiParam({ name: 'id', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  delete(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestVariation> {
+    return this.testVariations.delete(id);
   }
 }

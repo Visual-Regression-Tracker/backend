@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { StaticService } from '../shared/static/static.service';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
-import { TestVariation, Baseline, Project, Build } from '@prisma/client';
+import { TestVariation, Baseline, Project, Build, TestRun } from '@prisma/client';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { PNG } from 'pngjs';
@@ -23,6 +23,8 @@ const initModule = async ({
   projectFindOneMock = jest.fn(),
   buildCreateMock = jest.fn(),
   testRunCreateMock = jest.fn(),
+  testRunFindMany = jest.fn(),
+  testRunDeleteMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -43,6 +45,7 @@ const initModule = async ({
       {
         provide: TestRunsService,
         useValue: {
+          delete: testRunDeleteMock,
           create: testRunCreateMock,
         },
       },
@@ -61,6 +64,9 @@ const initModule = async ({
           },
           project: {
             findOne: projectFindOneMock,
+          },
+          testRun: {
+            findMany: testRunFindMany,
           },
         },
       },
@@ -300,59 +306,6 @@ describe('TestVariationsService', () => {
     });
   });
 
-  describe('remove', () => {
-    it('can remove', async () => {
-      const id = 'test id';
-      const variation: TestVariation & {
-        baselines: Baseline[];
-      } = {
-        id,
-        projectId: 'project Id',
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        ignoreAreas: '[]',
-        comment: 'some comment',
-        branchName: 'develop',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        baselines: [
-          {
-            id: 'baseline id 1',
-            baselineName: 'image name 1',
-            testVariationId: id,
-            testRunId: 'test run id 1',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        ],
-      };
-      const variationFindOneMock = jest.fn();
-      const variationDeleteMock = jest.fn();
-      const imageDeleteMock = jest.fn();
-      const baselineDeleteMock = jest.fn();
-      service = await initModule({
-        variationFindOneMock: variationFindOneMock.mockResolvedValueOnce(variation),
-        variationDeleteMock,
-        imageDeleteMock,
-        baselineDeleteMock,
-      });
-
-      await service.remove(id);
-
-      expect(imageDeleteMock).toHaveBeenCalledWith(variation.baselines[0].baselineName);
-      expect(baselineDeleteMock).toHaveBeenCalledWith({
-        where: { id: variation.baselines[0].id },
-      });
-      expect(variationDeleteMock).toHaveBeenCalledWith({
-        where: { id: variation.id },
-      });
-    });
-  });
-
   it('updateComment', async () => {
     const id = 'some id';
     const commentDto: CommentDto = {
@@ -516,5 +469,111 @@ describe('TestVariationsService', () => {
       merge: true,
     });
     expect(testRunCreateMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('delete', async () => {
+    const testRunId = 'test run id';
+    const testVariationId = 'test variation id';
+    const testRun: TestRun = {
+      id: testRunId,
+      imageName: '1592423768112.screenshot.png',
+      diffName: null,
+      diffPercent: null,
+      diffTollerancePercent: 1,
+      pixelMisMatchCount: null,
+      status: 'new',
+      buildId: '146e7a8d-89f0-4565-aa2c-e61efabb0afd',
+      testVariationId: testVariationId,
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      name: 'ss2f77',
+      browser: 'chromium',
+      device: null,
+      os: null,
+      viewport: '1800x1600',
+      baselineName: null,
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      baselineBranchName: 'master',
+      branchName: 'develop',
+      merge: false,
+    };
+    const variation: TestVariation & {
+      baselines: Baseline[];
+    } = {
+      id: testVariationId,
+      projectId: 'project Id',
+      name: 'Test name',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      branchName: 'develop',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      baselines: [
+        {
+          id: 'baseline id 1',
+          baselineName: 'image name 1',
+          testVariationId: testVariationId,
+          testRunId: 'test run id 1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    };
+
+    const variationDeleteMock = jest.fn();
+    const testRunFindMany = jest.fn().mockResolvedValueOnce([testRun]);
+    const testRunDeleteMock = jest.fn();
+    const getDetailsMock = jest.fn().mockResolvedValueOnce(variation);
+    const deleteBaselineMock = jest.fn().mockResolvedValueOnce(variation.baselines[0]);
+    const service = await initModule({
+      variationDeleteMock,
+      testRunFindMany,
+      testRunDeleteMock,
+    });
+    service.getDetails = getDetailsMock;
+    service.deleteBaseline = deleteBaselineMock;
+
+    await service.delete(testVariationId);
+
+    expect(service.getDetails).toHaveBeenCalledWith(testVariationId);
+    expect(testRunFindMany).toHaveBeenCalledWith({
+      where: { testVariationId },
+    });
+    expect(testRunDeleteMock).toHaveBeenCalledWith(testRunId);
+    expect(service.deleteBaseline).toHaveBeenCalledWith(variation.baselines[0]);
+    expect(variationDeleteMock).toHaveBeenCalledWith({
+      where: { id: testVariationId },
+    });
+  });
+
+  it('deleteBaseline', async () => {
+    const baseline: Baseline = {
+      id: 'baseline id 1',
+      baselineName: 'image name 1',
+      testVariationId: 'test variation id',
+      testRunId: 'test run id 1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const baselineDeleteMock = jest.fn();
+    const imageDeleteMock = jest.fn();
+    const service = await initModule({
+      baselineDeleteMock,
+      imageDeleteMock,
+    });
+
+    await service.deleteBaseline(baseline);
+
+    expect(imageDeleteMock).toHaveBeenCalledWith(baseline.baselineName);
+    expect(baselineDeleteMock).toHaveBeenCalledWith({
+      where: { id: baseline.id },
+    });
   });
 });
