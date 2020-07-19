@@ -25,16 +25,11 @@ export class UsersService {
       password: await this.authService.encryptPassword(createUserDto.password),
     };
 
-    try {
-      const userData = await this.prismaService.user.create({
-        data: user,
-      });
+    const userData = await this.prismaService.user.create({
+      data: user,
+    });
 
-      return new UserLoginResponseDto(userData, null);
-    } catch (err) {
-
-      throw new HttpException(err.message, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
+    return new UserLoginResponseDto(userData, null);
   }
 
   async findOne(id: string): Promise<User> {
