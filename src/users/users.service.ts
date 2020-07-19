@@ -32,11 +32,8 @@ export class UsersService {
 
       return new UserLoginResponseDto(userData, null);
     } catch (err) {
-      if (err.original.constraint === 'user_email_key') {
-        throw new HttpException(`User with email '${err.errors[0].value}' already exists`, HttpStatus.CONFLICT);
-      }
 
-      throw new HttpException(err, HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(err.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
