@@ -33,7 +33,7 @@
     "@prisma/client": "^2.2.2",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.2.3",
-    "class-validator": "^0.11.1",
+    "class-validator": "^0.12.2",
     "fs-extra": "^9.0.1",
     "passport": "^0.4.1",
     "passport-jwt": "^4.0.0",
