@@ -22,7 +22,7 @@ jobs:
       run: npm ci
       
     - name: Unit tests
-      run: npm run test
+      run: npm run test:cov
       
     - name: Codecov
       uses: codecov/codecov-action@v1.0.11
