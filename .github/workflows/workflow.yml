@@ -23,6 +23,9 @@ jobs:
       
     - name: Unit tests
       run: npm run test
+      
+    - name: Codecov
+      uses: codecov/codecov-action@v1.0.11
     
     - name: Setup PostgreSQL
       uses: Harmon758/postgresql-action@v1.0.0
