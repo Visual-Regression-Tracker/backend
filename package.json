@@ -61,7 +61,7 @@
     "@types/passport-local": "^1.0.33",
     "@types/pixelmatch": "^5.2.1",
     "@types/pngjs": "^3.4.2",
-    "@types/socket.io": "^2.1.9",
+    "@types/socket.io": "^2.1.10",
     "@types/supertest": "^2.0.10",
     "@types/uuid-apikey": "^1.4.0",
     "@typescript-eslint/eslint-plugin": "^2.34.0",
