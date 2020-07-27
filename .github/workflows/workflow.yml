@@ -23,9 +23,11 @@ jobs:
       
     - name: Unit tests
       run: npm run test:cov
-      
-    - name: Codecov
-      uses: codecov/codecov-action@v1.0.11
+
+    - name: Codacy Coverage Reporter
+      uses: codacy/codacy-coverage-reporter-action@0.2.0
+      with:
+        project-token: ${{ secrets.CODACY_TOKEN }}
     
     - name: Setup PostgreSQL
       uses: Harmon758/postgresql-action@v1.0.0
