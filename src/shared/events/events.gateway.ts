@@ -8,19 +8,19 @@ export class EventsGateway {
   @WebSocketServer()
   server: Server;
 
-  buildCreated(build: BuildDto) {
+  buildCreated(build: BuildDto): void {
     this.server.emit('build_created', build);
   }
 
-  buildFinished(build: BuildDto) {
+  buildFinished(build: BuildDto): void {
     this.server.emit('build_finished', build);
   }
 
-  buildUpdated(build: BuildDto) {
+  buildUpdated(build: BuildDto): void {
     this.server.emit('build_updated', build);
   }
 
-  newTestRun(testRun: TestRun) {
+  newTestRun(testRun: TestRun): void {
     this.server.emit('testRun_created', testRun);
   }
 }
