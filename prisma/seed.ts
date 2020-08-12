@@ -7,15 +7,15 @@ const prisma = new PrismaClient({
 });
 
 async function seed() {
-  await prisma.connect();
+  await prisma.$connect();
   console.log('Seeding default data...');
   await Promise.all([createDefaultUser(), createDefaultProject()]);
-  await prisma.disconnect();
+  await prisma.$disconnect();
 }
 
 seed()
   .catch((e) => console.error('e', e))
-  .finally(async () => await prisma.disconnect());
+  .finally(async () => await prisma.$disconnect());
 
 async function createDefaultUser() {
   const userList = await prisma.user.findMany();
