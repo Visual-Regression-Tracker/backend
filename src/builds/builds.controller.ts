@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Post, Body, Param, ParseUUIDPipe, Delete, Query } from '@nestjs/common';
+import { Controller, Get, UseGuards, Post, Body, Param, ParseUUIDPipe, Delete, Query, Patch } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ApiBearerAuth, ApiTags, ApiParam, ApiSecurity, ApiQuery, ApiResponse } from '@nestjs/swagger';
@@ -37,11 +37,11 @@ export class BuildsController {
     return this.buildsService.create(createBuildDto);
   }
 
-  @Post()
+  @Patch()
   @ApiResponse({ type: BuildDto })
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard)
-  finish(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
-    return this.buildsService.create(createBuildDto);
+  stop(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
+    return this.buildsService.stop(id);
   }
 }

@@ -24,7 +24,7 @@ export class BuildsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return buildList.map(build => new BuildDto(build));
+    return buildList.map((build) => new BuildDto(build));
   }
 
   async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
@@ -62,6 +62,18 @@ export class BuildsService {
     return buildDto;
   }
 
+  async stop(id: string): Promise<BuildDto> {
+    const build = await this.prismaService.build.update({
+      where: { id },
+      data: {
+        isRunning: false,
+      },
+    });
+    const buildDto = new BuildDto(build);
+    this.eventsGateway.buildFinished(buildDto);
+    return buildDto;
+  }
+
   async remove(id: string): Promise<Build> {
     const build = await this.prismaService.build.findOne({
       where: { id },
@@ -70,7 +82,7 @@ export class BuildsService {
       },
     });
 
-    await Promise.all(build.testRuns.map(testRun => this.testRunsService.delete(testRun.id)));
+    await Promise.all(build.testRuns.map((testRun) => this.testRunsService.delete(testRun.id)));
 
     return this.prismaService.build.delete({
       where: { id },

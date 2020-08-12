@@ -12,6 +12,10 @@ export class EventsGateway {
     this.server.emit('build_created', build);
   }
 
+  buildFinished(build: BuildDto) {
+    this.server.emit('build_finished', build);
+  }
+
   buildUpdated(build: BuildDto) {
     this.server.emit('build_updated', build);
   }
