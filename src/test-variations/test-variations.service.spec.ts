@@ -344,6 +344,7 @@ describe('TestVariationsService', () => {
       updatedAt: new Date(),
       createdAt: new Date(),
       userId: null,
+      isRunning: true,
     };
     const testVariation: TestVariation = {
       id: '123',

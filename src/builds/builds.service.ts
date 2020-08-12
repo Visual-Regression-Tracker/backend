@@ -49,6 +49,7 @@ export class BuildsService {
     const build = await this.prismaService.build.create({
       data: {
         branchName: createBuildDto.branchName,
+        isRunning: true,
         project: {
           connect: {
             id: project.id,

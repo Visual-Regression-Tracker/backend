@@ -69,6 +69,7 @@ describe('BuildsService', () => {
     updatedAt: new Date(),
     createdAt: new Date(),
     userId: null,
+    isRunning: true,
     testRuns: [
       {
         id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -109,6 +110,7 @@ describe('BuildsService', () => {
     passedCount: 0,
     unresolvedCount: 0,
     failedCount: 0,
+    isRunning: true,
   };
 
   it('findMany', async () => {
@@ -155,6 +157,7 @@ describe('BuildsService', () => {
       expect(buildCreateMock).toHaveBeenCalledWith({
         data: {
           branchName: createBuildDto.branchName,
+          isRunning: true,
           project: {
             connect: {
               id: project.id,
@@ -193,6 +196,7 @@ describe('BuildsService', () => {
       expect(buildCreateMock).toHaveBeenCalledWith({
         data: {
           branchName: createBuildDto.branchName,
+          isRunning: true,
           project: {
             connect: {
               id: project.id,

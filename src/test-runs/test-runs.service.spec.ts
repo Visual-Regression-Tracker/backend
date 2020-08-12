@@ -836,6 +836,7 @@ describe('TestRunsService', () => {
       updatedAt: new Date(),
       createdAt: new Date(),
       userId: null,
+      isRunning: true,
       testRuns: [
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
