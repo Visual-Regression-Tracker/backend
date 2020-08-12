@@ -36,4 +36,12 @@ export class BuildsController {
   create(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
     return this.buildsService.create(createBuildDto);
   }
+
+  @Post()
+  @ApiResponse({ type: BuildDto })
+  @ApiSecurity('api_key')
+  @UseGuards(ApiGuard)
+  finish(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
+    return this.buildsService.create(createBuildDto);
+  }
 }
