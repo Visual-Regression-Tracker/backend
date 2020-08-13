@@ -257,6 +257,9 @@ describe('BuildsService', () => {
 
     expect(buildUpdateMock).toHaveBeenCalledWith({
       where: { id },
+      include: {
+        testRuns: true,
+      },
       data: {
         isRunning: false,
       },

@@ -6,6 +6,7 @@ import { CreateBuildDto } from './dto/build-create.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { Build } from '@prisma/client';
 import { BuildDto } from './dto/build.dto';
+import { MixedGuard } from '../auth/guards/mixed.guard';
 
 @Controller('builds')
 @ApiTags('builds')
@@ -38,7 +39,8 @@ export class BuildsController {
   @Patch(':id')
   @ApiResponse({ type: BuildDto })
   @ApiSecurity('api_key')
-  @UseGuards(ApiGuard)
+  @ApiBearerAuth()
+  @UseGuards(MixedGuard)
   stop(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
     return this.buildsService.stop(id);
   }

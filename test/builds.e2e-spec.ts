@@ -127,21 +127,30 @@ describe('Builds (e2e)', () => {
   });
 
   describe('PATCH /', () => {
-    it('200', async () => {
+    it('200 jwt', async () => {
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
+
+      return requestWithAuth(app, 'patch', `/builds/${build.id}`, {}, user.token)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body.isRunning).toBe(false);
+        });
+    });
+
+    it('200 api', async () => {
       const build = await buildsService.create({ project: project.id, branchName: 'develop' });
 
       return requestWithApiKey(app, 'patch', `/builds/${build.id}`, {}, user.apiKey)
         .expect(200)
         .expect((res) => {
-          expect(res.body.projectId).toBe(project.id);
           expect(res.body.isRunning).toBe(false);
         });
     });
 
-    it('401', async () => {
+    it('403', async () => {
       const build = await buildsService.create({ project: project.id, branchName: 'develop' });
 
-      return requestWithAuth(app, 'patch', `/builds/${build.id}`, {}, '').expect(401);
+      return requestWithAuth(app, 'patch', `/builds/${build.id}`, {}, '').expect(403);
     });
   });
 });

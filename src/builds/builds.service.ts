@@ -65,6 +65,9 @@ export class BuildsService {
   async stop(id: string): Promise<BuildDto> {
     const build = await this.prismaService.build.update({
       where: { id },
+      include: {
+        testRuns: true,
+      },
       data: {
         isRunning: false,
       },
