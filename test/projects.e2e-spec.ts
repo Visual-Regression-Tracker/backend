@@ -34,7 +34,6 @@ describe('Projects (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     usersService = moduleFixture.get<UsersService>(UsersService);
-    usersService = moduleFixture.get<UsersService>(UsersService);
 
     await app.init();
   });

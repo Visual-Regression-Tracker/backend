@@ -52,12 +52,13 @@ describe('Builds (e2e)', () => {
       };
       return requestWithApiKey(app, 'post', '/builds', createBuildDto, user.apiKey)
         .expect(201)
-        .expect(res => {
+        .expect((res) => {
           expect(res.body.projectId).toBe(project.id);
           expect(res.body.branchName).toBe(createBuildDto.branchName);
           expect(res.body.failedCount).toBe(0);
           expect(res.body.passedCount).toBe(0);
           expect(res.body.unresolvedCount).toBe(0);
+          expect(res.body.isRunning).toBe(true);
         });
     });
 
@@ -68,15 +69,16 @@ describe('Builds (e2e)', () => {
       };
       return requestWithApiKey(app, 'post', '/builds', createBuildDto, user.apiKey)
         .expect(201)
-        .expect(res => {
+        .expect((res) => {
           expect(res.body.projectId).toBe(project.id);
           expect(res.body.branchName).toBe(createBuildDto.branchName);
           expect(res.body.failedCount).toBe(0);
           expect(res.body.passedCount).toBe(0);
           expect(res.body.unresolvedCount).toBe(0);
+          expect(res.body.isRunning).toBe(true);
         });
     });
-    
+
     it('404', () => {
       const createBuildDto: CreateBuildDto = {
         branchName: 'branchName',
@@ -100,7 +102,7 @@ describe('Builds (e2e)', () => {
 
       return requestWithAuth(app, 'get', `/builds?projectId=${project.id}`, {}, user.token)
         .expect(200)
-        .expect(res => {
+        .expect((res) => {
           expect(JSON.stringify(res.body)).toEqual(JSON.stringify([build]));
         });
     });
@@ -121,6 +123,34 @@ describe('Builds (e2e)', () => {
       const build = await buildsService.create({ project: project.id, branchName: 'develop' });
 
       return requestWithAuth(app, 'delete', `/builds/${build.id}`, {}, '').expect(401);
+    });
+  });
+
+  describe('PATCH /', () => {
+    it('200 jwt', async () => {
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
+
+      return requestWithAuth(app, 'patch', `/builds/${build.id}`, {}, user.token)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body.isRunning).toBe(false);
+        });
+    });
+
+    it('200 api', async () => {
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
+
+      return requestWithApiKey(app, 'patch', `/builds/${build.id}`, {}, user.apiKey)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body.isRunning).toBe(false);
+        });
+    });
+
+    it('403', async () => {
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
+
+      return requestWithAuth(app, 'patch', `/builds/${build.id}`, {}, '').expect(403);
     });
   });
 });

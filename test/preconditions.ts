@@ -14,7 +14,7 @@ export const generateUser = (
 
 export const requestWithAuth = (
   app: INestApplication,
-  method: 'post' | 'get' | 'put' | 'delete',
+  method: 'post' | 'get' | 'put' | 'delete' | 'patch',
   url: string,
   body = {},
   token: string
@@ -26,15 +26,11 @@ export const requestWithAuth = (
 
 export const requestWithApiKey = (
   app: INestApplication,
-  method: 'post' | 'get' | 'put' | 'delete',
+  method: 'post' | 'get' | 'put' | 'delete' | 'patch',
   url: string,
   body = {},
   apiKey: string
-): Test =>
-  request(app.getHttpServer())
-    [method](url)
-    .set('apiKey', apiKey)
-    .send(body);
+): Test => request(app.getHttpServer())[method](url).set('apiKey', apiKey).send(body);
 
 export const haveUserLogged = async (usersService: UsersService) => {
   const password = '123456';

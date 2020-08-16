@@ -5,9 +5,10 @@ import { UsersModule } from '../users/users.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsModule } from '../test-runs/test-runs.module';
 import { SharedModule } from '../shared/shared.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [SharedModule, UsersModule, TestRunsModule],
+  imports: [SharedModule, UsersModule, TestRunsModule, AuthModule],
   providers: [BuildsService, PrismaService],
   controllers: [BuildsController],
   exports: [BuildsService],

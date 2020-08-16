@@ -1,4 +1,3 @@
-import { ApiProperty } from '@nestjs/swagger';
 import { Build, TestRun, TestStatus } from '@prisma/client';
 import { BuildDto } from './build.dto';
 
@@ -15,6 +14,7 @@ describe('BuildDto', () => {
         updatedAt: new Date(),
         createdAt: new Date(),
         userId: null,
+        isRunning: true,
         testRuns: undefined,
       },
     ],
@@ -29,6 +29,7 @@ describe('BuildDto', () => {
         updatedAt: new Date(),
         createdAt: new Date(),
         userId: null,
+        isRunning: true,
         testRuns: [],
       },
     ],
@@ -45,6 +46,7 @@ describe('BuildDto', () => {
       passedCount: 0,
       unresolvedCount: 0,
       failedCount: 0,
+      isRunning: true,
     };
 
     const result = new BuildDto(build);
@@ -64,6 +66,7 @@ describe('BuildDto', () => {
       updatedAt: new Date(),
       createdAt: new Date(),
       userId: null,
+      isRunning: true,
       testRuns: [
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -111,7 +114,7 @@ describe('BuildDto', () => {
           comment: 'some comment2',
           branchName: 'develop',
           baselineBranchName: 'master',
-          merge: false
+          merge: false,
         },
       ],
     };
@@ -127,6 +130,7 @@ describe('BuildDto', () => {
       passedCount: 2,
       unresolvedCount: 0,
       failedCount: 0,
+      isRunning: true,
     };
 
     const result = new BuildDto(build);
@@ -144,6 +148,7 @@ describe('BuildDto', () => {
       updatedAt: new Date(),
       createdAt: new Date(),
       userId: null,
+      isRunning: true,
       testRuns: [
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -167,7 +172,7 @@ describe('BuildDto', () => {
           comment: 'some comment',
           branchName: 'develop',
           baselineBranchName: 'master',
-          merge: false
+          merge: false,
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -191,7 +196,7 @@ describe('BuildDto', () => {
           comment: 'some comment1',
           branchName: 'develop',
           baselineBranchName: 'master',
-          merge: false
+          merge: false,
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -215,7 +220,7 @@ describe('BuildDto', () => {
           comment: 'some comment2',
           branchName: 'develop',
           baselineBranchName: 'master',
-          merge: false
+          merge: false,
         },
       ],
     };
@@ -231,6 +236,7 @@ describe('BuildDto', () => {
       passedCount: 2,
       unresolvedCount: 0,
       failedCount: 1,
+      isRunning: true,
     };
 
     const result = new BuildDto(build);
@@ -248,6 +254,7 @@ describe('BuildDto', () => {
       updatedAt: new Date(),
       createdAt: new Date(),
       userId: null,
+      isRunning: true,
       testRuns: [
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -271,7 +278,7 @@ describe('BuildDto', () => {
           comment: 'some comment1',
           branchName: 'develop',
           baselineBranchName: 'master',
-          merge: false
+          merge: false,
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -295,7 +302,7 @@ describe('BuildDto', () => {
           comment: 'some comment2',
           branchName: 'develop',
           baselineBranchName: 'master',
-          merge: false
+          merge: false,
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -319,7 +326,7 @@ describe('BuildDto', () => {
           comment: null,
           branchName: 'develop',
           baselineBranchName: 'master',
-          merge: false
+          merge: false,
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -343,7 +350,7 @@ describe('BuildDto', () => {
           comment: 'some comment',
           branchName: 'develop',
           baselineBranchName: 'master',
-          merge: false
+          merge: false,
         },
         {
           id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
@@ -367,7 +374,7 @@ describe('BuildDto', () => {
           comment: 'some comment',
           branchName: 'develop',
           baselineBranchName: 'master',
-          merge: false
+          merge: false,
         },
       ],
     };
@@ -383,6 +390,7 @@ describe('BuildDto', () => {
       passedCount: 2,
       unresolvedCount: 2,
       failedCount: 1,
+      isRunning: true,
     };
 
     const result = new BuildDto(build);

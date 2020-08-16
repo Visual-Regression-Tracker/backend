@@ -32,6 +32,8 @@ export class BuildDto {
   unresolvedCount: number;
   @ApiProperty()
   failedCount: number;
+  @ApiProperty()
+  isRunning: boolean;
 
   constructor(build: Build & { testRuns?: TestRun[] }) {
     this.id = build.id;
@@ -42,6 +44,7 @@ export class BuildDto {
     this.projectId = build.projectId;
     this.updatedAt = build.updatedAt;
     this.createdAt = build.createdAt;
+    this.isRunning = build.isRunning;
 
     this.passedCount = 0;
     this.unresolvedCount = 0;
