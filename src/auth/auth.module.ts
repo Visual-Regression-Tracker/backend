@@ -6,7 +6,6 @@ import { JwtStrategy } from './jwt.strategy';
 import { ApiGuard } from './guards/api.guard';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { MixedGuard } from './guards/mixed.guard';
 import { JwtAuthGuard } from './guards/auth.guard';
 
 @Module({
