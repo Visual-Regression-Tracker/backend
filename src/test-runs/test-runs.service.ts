@@ -288,7 +288,6 @@ export class TestRunsService {
           baseline.width,
           baseline.height,
           {
-            threshold: diffTollerancePercent / 100,
             includeAA: true,
           }
         );
