@@ -230,7 +230,7 @@ export class TestRunsService {
     const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, testVariation.ignoreAreas);
 
     const testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
-    this.eventsGateway.newTestRun(testRunWithResult);
+    this.eventsGateway.testRunCreated(testRunWithResult);
     return testRunWithResult;
   }
 

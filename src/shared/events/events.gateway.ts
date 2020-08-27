@@ -20,7 +20,7 @@ export class EventsGateway {
     this.server.emit('build_updated', build);
   }
 
-  newTestRun(testRun: TestRun): void {
+  testRunCreated(testRun: TestRun): void {
     this.server.emit('testRun_created', testRun);
   }
 
