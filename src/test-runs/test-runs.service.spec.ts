@@ -29,6 +29,7 @@ const initService = async ({
   saveImageMock = jest.fn(),
   deleteImageMock = jest.fn(),
   eventNewTestRunMock = jest.fn(),
+  eventTestRunDeletedMock = jest.fn(),
   eventBuildUpdatedMock = jest.fn(),
   eventBuildCreatedMock = jest.fn(),
   buildFindOneMock = jest.fn(),
@@ -80,6 +81,7 @@ const initService = async ({
         provide: EventsGateway,
         useValue: {
           newTestRun: eventNewTestRunMock,
+          testRunDeleted: eventTestRunDeletedMock,
           buildUpdated: eventBuildUpdatedMock,
           buildCreated: eventBuildCreatedMock,
         },
@@ -467,10 +469,7 @@ describe('TestRunsService', () => {
     const saveImageMock = jest.fn().mockReturnValueOnce(imageName);
     const image = 'image';
     const baseline = 'baseline';
-    const getImageMock = jest
-      .fn()
-      .mockReturnValueOnce(baseline)
-      .mockReturnValueOnce(image);
+    const getImageMock = jest.fn().mockReturnValueOnce(baseline).mockReturnValueOnce(image);
     const eventNewTestRunMock = jest.fn();
     service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventNewTestRunMock });
     const diffResult: DiffResult = {
@@ -665,10 +664,7 @@ describe('TestRunsService', () => {
     const testRunUpdateMock = jest.fn();
     const baselineMock = 'baseline image';
     const imageeMock = 'image';
-    const getImageMock = jest
-      .fn()
-      .mockReturnValueOnce(baselineMock)
-      .mockReturnValueOnce(imageeMock);
+    const getImageMock = jest.fn().mockReturnValueOnce(baselineMock).mockReturnValueOnce(imageeMock);
     const deleteImageMock = jest.fn();
     const diffResult = {
       id: 'test',
@@ -770,9 +766,11 @@ describe('TestRunsService', () => {
     const findOneMock = jest.fn().mockResolvedValueOnce(testRun);
     const deleteImageMock = jest.fn();
     const testRunDeleteMock = jest.fn();
+    const eventTestRunDeletedMock = jest.fn();
     service = await initService({
       deleteImageMock,
       testRunDeleteMock,
+      eventTestRunDeletedMock,
     });
     service.findOne = findOneMock;
 
@@ -784,6 +782,7 @@ describe('TestRunsService', () => {
     expect(testRunDeleteMock).toHaveBeenCalledWith({
       where: { id },
     });
+    expect(eventTestRunDeletedMock).toHaveBeenCalledWith(testRun);
   });
 
   it('updateIgnoreAreas', async () => {

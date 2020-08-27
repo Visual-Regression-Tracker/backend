@@ -237,11 +237,16 @@ export class TestRunsService {
   async delete(id: string): Promise<TestRun> {
     const testRun = await this.findOne(id);
 
-    Promise.all([this.staticService.deleteImage(testRun.diffName), this.staticService.deleteImage(testRun.imageName)]);
+    await Promise.all([
+      this.staticService.deleteImage(testRun.diffName),
+      this.staticService.deleteImage(testRun.imageName),
+      this.prismaService.testRun.delete({
+        where: { id },
+      }),
+    ]);
 
-    return this.prismaService.testRun.delete({
-      where: { id },
-    });
+    this.eventsGateway.testRunDeleted(testRun);
+    return testRun;
   }
 
   async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
@@ -310,7 +315,7 @@ export class TestRunsService {
   }
 
   private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buffer {
-    ignoreAreas.forEach(area => {
+    ignoreAreas.forEach((area) => {
       for (let y = area.y; y < area.y + area.height; y++) {
         for (let x = area.x; x < area.x + area.width; x++) {
           const k = 4 * (image.width * y + x);
