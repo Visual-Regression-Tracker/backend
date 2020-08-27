@@ -28,7 +28,8 @@ const initService = async ({
   getImageMock = jest.fn(),
   saveImageMock = jest.fn(),
   deleteImageMock = jest.fn(),
-  eventNewTestRunMock = jest.fn(),
+  eventTestRunCreatedMock = jest.fn(),
+  eventTestRunDeletedMock = jest.fn(),
   eventBuildUpdatedMock = jest.fn(),
   eventBuildCreatedMock = jest.fn(),
   buildFindOneMock = jest.fn(),
@@ -79,7 +80,8 @@ const initService = async ({
       {
         provide: EventsGateway,
         useValue: {
-          newTestRun: eventNewTestRunMock,
+          testRunCreated: eventTestRunCreatedMock,
+          testRunDeleted: eventTestRunDeletedMock,
           buildUpdated: eventBuildUpdatedMock,
           buildCreated: eventBuildCreatedMock,
         },
@@ -467,12 +469,9 @@ describe('TestRunsService', () => {
     const saveImageMock = jest.fn().mockReturnValueOnce(imageName);
     const image = 'image';
     const baseline = 'baseline';
-    const getImageMock = jest
-      .fn()
-      .mockReturnValueOnce(baseline)
-      .mockReturnValueOnce(image);
-    const eventNewTestRunMock = jest.fn();
-    service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventNewTestRunMock });
+    const getImageMock = jest.fn().mockReturnValueOnce(baseline).mockReturnValueOnce(image);
+    const eventTestRunCreatedMock = jest.fn();
+    service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventTestRunCreatedMock });
     const diffResult: DiffResult = {
       status: TestStatus.unresolved,
       diffName: 'diff image name',
@@ -526,7 +525,7 @@ describe('TestRunsService', () => {
     });
     expect(getDiffMock).toHaveBeenCalledWith(baseline, image, testRun.diffTollerancePercent, testRun.ignoreAreas);
     expect(saveDiffResultMock).toHaveBeenCalledWith(testRun.id, diffResult);
-    expect(eventNewTestRunMock).toHaveBeenCalledWith(testRunWithResult);
+    expect(eventTestRunCreatedMock).toHaveBeenCalledWith(testRunWithResult);
     expect(result).toBe(testRunWithResult);
   });
 
@@ -665,10 +664,7 @@ describe('TestRunsService', () => {
     const testRunUpdateMock = jest.fn();
     const baselineMock = 'baseline image';
     const imageeMock = 'image';
-    const getImageMock = jest
-      .fn()
-      .mockReturnValueOnce(baselineMock)
-      .mockReturnValueOnce(imageeMock);
+    const getImageMock = jest.fn().mockReturnValueOnce(baselineMock).mockReturnValueOnce(imageeMock);
     const deleteImageMock = jest.fn();
     const diffResult = {
       id: 'test',
@@ -770,9 +766,11 @@ describe('TestRunsService', () => {
     const findOneMock = jest.fn().mockResolvedValueOnce(testRun);
     const deleteImageMock = jest.fn();
     const testRunDeleteMock = jest.fn();
+    const eventTestRunDeletedMock = jest.fn();
     service = await initService({
       deleteImageMock,
       testRunDeleteMock,
+      eventTestRunDeletedMock,
     });
     service.findOne = findOneMock;
 
@@ -784,6 +782,7 @@ describe('TestRunsService', () => {
     expect(testRunDeleteMock).toHaveBeenCalledWith({
       where: { id },
     });
+    expect(eventTestRunDeletedMock).toHaveBeenCalledWith(testRun);
   });
 
   it('updateIgnoreAreas', async () => {
