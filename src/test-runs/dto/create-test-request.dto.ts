@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsOptional, IsUUID, IsNumber, IsBoolean, IsString, IsBase64 } from 'class-validator';
+import { IsOptional, IsUUID, IsNumber, IsBoolean, IsBase64 } from 'class-validator';
 import { BaselineDataDto } from '../../shared/dto/baseline-data.dto';
 
 export class CreateTestRequestDto extends BaselineDataDto {
