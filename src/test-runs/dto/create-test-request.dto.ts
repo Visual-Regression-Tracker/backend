@@ -1,9 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsBase64, IsUUID, IsNumber, IsBoolean } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsOptional, IsUUID, IsNumber, IsBoolean, IsString, IsBase64 } from 'class-validator';
 import { BaselineDataDto } from '../../shared/dto/baseline-data.dto';
 
 export class CreateTestRequestDto extends BaselineDataDto {
   @ApiProperty()
+  // TODO: remove Transform when fixed https://github.com/validatorjs/validator.js/issues/1424
+  @Transform((value) => value.replace(/(\r\n|\n|\r)/gm, ''))
   @IsBase64()
   imageBase64: string;
 
