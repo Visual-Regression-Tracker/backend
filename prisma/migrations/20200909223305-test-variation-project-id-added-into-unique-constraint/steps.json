@@ -1,0 +1,37 @@
+{
+  "version": "0.3.14-fixed",
+  "steps": [
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Model",
+          "model": "TestVariation",
+          "arguments": [
+            {
+              "name": "",
+              "value": "[projectId, name, browser, device, os, viewport, branchName]"
+            }
+          ]
+        },
+        "directive": "unique"
+      }
+    },
+    {
+      "tag": "DeleteDirective",
+      "location": {
+        "path": {
+          "tag": "Model",
+          "model": "TestVariation",
+          "arguments": [
+            {
+              "name": "",
+              "value": "[name, browser, device, os, viewport, branchName]"
+            }
+          ]
+        },
+        "directive": "unique"
+      }
+    }
+  ]
+}
