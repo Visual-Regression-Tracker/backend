@@ -16,10 +16,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
     response.status(status).json({
       path: request.url,
-      stack: exception.stack,
       name: exception.name,
       message: exception.message,
       exception: exception,
+      stack: exception.stack,
     });
   }
 }
