@@ -8,7 +8,7 @@ import { TestVariationsModule } from './test-variations/test-variations.module';
 import { PrismaService } from './prisma/prisma.service';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
-import { HttpPrismaExceptionFilter } from './http-prisma-exception.filter';
+import { HttpExceptionFilter } from './http-exception.filter';
 
 @Module({
   imports: [
@@ -24,7 +24,7 @@ import { HttpPrismaExceptionFilter } from './http-prisma-exception.filter';
     PrismaService,
     {
       provide: APP_FILTER,
-      useClass: HttpPrismaExceptionFilter,
+      useClass: HttpExceptionFilter,
     },
   ],
 })
