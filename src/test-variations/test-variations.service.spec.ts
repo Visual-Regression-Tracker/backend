@@ -22,6 +22,7 @@ const initModule = async ({
   baselineDeleteMock = jest.fn(),
   projectFindOneMock = jest.fn(),
   buildCreateMock = jest.fn(),
+  buildStopMock = jest.fn(),
   testRunCreateMock = jest.fn(),
   testRunFindMany = jest.fn(),
   testRunDeleteMock = jest.fn(),
@@ -40,6 +41,7 @@ const initModule = async ({
         provide: BuildsService,
         useValue: {
           create: buildCreateMock,
+          stop: buildStopMock,
         },
       },
       {
@@ -140,10 +142,7 @@ describe('TestVariationsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      const variationFindManyMock = jest
-        .fn()
-        .mockResolvedValueOnce([variationMock])
-        .mockResolvedValueOnce([undefined]);
+      const variationFindManyMock = jest.fn().mockResolvedValueOnce([variationMock]).mockResolvedValueOnce([undefined]);
       const projectFindOneMock = jest.fn().mockReturnValueOnce(projectMock);
       service = await initModule({ variationFindManyMock, projectFindOneMock });
 
@@ -203,10 +202,7 @@ describe('TestVariationsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      const variationFindManyMock = jest
-        .fn()
-        .mockResolvedValueOnce([undefined])
-        .mockResolvedValueOnce([variationMock]);
+      const variationFindManyMock = jest.fn().mockResolvedValueOnce([undefined]).mockResolvedValueOnce([variationMock]);
       const projectFindOneMock = jest.fn().mockReturnValueOnce(projectMock);
       service = await initModule({ variationFindManyMock, projectFindOneMock });
 
@@ -251,10 +247,7 @@ describe('TestVariationsService', () => {
         branchName: 'develop',
       };
 
-      const variationFindManyMock = jest
-        .fn()
-        .mockResolvedValueOnce([undefined])
-        .mockResolvedValueOnce([undefined]);
+      const variationFindManyMock = jest.fn().mockResolvedValueOnce([undefined]).mockResolvedValueOnce([undefined]);
       const projectFindOneMock = jest.fn().mockReturnValueOnce(projectMock);
       const variationCreateMock = jest.fn();
       service = await initModule({ variationFindManyMock, projectFindOneMock, variationCreateMock });
@@ -415,19 +408,17 @@ describe('TestVariationsService', () => {
       width: 10,
       height: 10,
     });
-    const getImageMock = jest
-      .fn()
-      .mockReturnValueOnce(image)
-      .mockReturnValueOnce(image)
-      .mockReturnValueOnce(null);
+    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image).mockReturnValueOnce(null);
     const findOrCreateMock = jest
       .fn()
       .mockResolvedValueOnce(testVariationMainBranch)
       .mockResolvedValueOnce(testVariationMainBranch);
     const testRunCreateMock = jest.fn();
+    const buildStopMock = jest.fn();
     const service = await initModule({
       projectFindOneMock,
       buildCreateMock,
+      buildStopMock,
       testRunCreateMock,
       variationFindManyMock,
       getImageMock,
@@ -454,7 +445,7 @@ describe('TestVariationsService', () => {
       branchName: project.mainBranchName,
     });
 
-    await new Promise(r => setTimeout(r, 1));
+    await new Promise((r) => setTimeout(r, 1));
     expect(testRunCreateMock).toHaveBeenNthCalledWith(1, testVariationMainBranch, {
       ...testVariation,
       buildId: build.id,
@@ -470,6 +461,7 @@ describe('TestVariationsService', () => {
       merge: true,
     });
     expect(testRunCreateMock).toHaveBeenCalledTimes(2);
+    expect(buildStopMock).toHaveBeenCalledWith(build.id);
   });
 
   it('delete', async () => {

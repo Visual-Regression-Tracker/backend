@@ -139,7 +139,8 @@ export class TestVariationsService {
       }
     });
 
-    return build;
+    // stop build
+    return this.buildsService.stop(build.id);
   }
 
   async delete(id: string): Promise<TestVariation> {
