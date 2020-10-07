@@ -1,14 +1,24 @@
 import { TestRun, TestStatus, TestVariation } from '@prisma/client';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class TestRunResultDto {
+  @ApiProperty()
   id: string;
+  @ApiProperty()
   imageName: string;
+  @ApiProperty()
   diffName?: string;
+  @ApiProperty()
   diffPercent: number;
+  @ApiProperty()
   diffTollerancePercent?: number;
+  @ApiProperty()
   pixelMisMatchCount?: number;
+  @ApiProperty()
   status: TestStatus;
+  @ApiProperty()
   url: string;
+  @ApiProperty()
   merge: boolean;
 
   constructor(testRun: TestRun, testVariation: TestVariation) {
