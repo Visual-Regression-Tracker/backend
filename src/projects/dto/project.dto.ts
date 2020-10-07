@@ -1,11 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsString } from 'class-validator';
+import { IsUUID, IsString, IsNumber } from 'class-validator';
 import { Project } from '@prisma/client';
 
 export class ProjectDto implements Project {
   @ApiProperty()
   @IsUUID()
   readonly id: string;
+
+  @ApiProperty()
+  @IsNumber()
+  readonly buildsCounter: number;
 
   @ApiProperty()
   @IsString()

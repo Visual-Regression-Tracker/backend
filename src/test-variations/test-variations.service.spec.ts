@@ -109,6 +109,7 @@ describe('TestVariationsService', () => {
     const projectMock: Project = {
       id: '12',
       name: 'Project',
+      buildsCounter: 0,
       mainBranchName: 'master',
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -323,6 +324,7 @@ describe('TestVariationsService', () => {
     const mergedBranch = 'develop';
     const project: Project = {
       id: 'some id',
+      buildsCounter: 0,
       name: 'some name',
       mainBranchName: 'master',
       updatedAt: new Date(),
