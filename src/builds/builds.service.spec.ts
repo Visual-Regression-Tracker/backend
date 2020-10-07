@@ -21,6 +21,7 @@ const initService = async ({
   eventsBuildCreatedMock = jest.fn(),
   eventsBuildFinishedMock = jest.fn(),
   projectFindOneMock = jest.fn(),
+  projectUpdateMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -30,6 +31,7 @@ const initService = async ({
         useValue: {
           project: {
             findOne: projectFindOneMock,
+            update: projectUpdateMock,
           },
           build: {
             findMany: buildFindManyMock,
@@ -144,24 +146,35 @@ describe('BuildsService', () => {
         id: 'project id',
         name: 'name',
         mainBranchName: 'master',
+        buildsCounter: 1,
         updatedAt: new Date(),
         createdAt: new Date(),
       };
       const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
       const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
+      const projectUpdateMock = jest.fn().mockResolvedValueOnce(project);
       const eventsBuildCreatedMock = jest.fn();
       mocked(BuildDto).mockReturnValueOnce(buildDto);
-      service = await initService({ buildCreateMock, eventsBuildCreatedMock, projectFindOneMock });
+      service = await initService({ buildCreateMock, eventsBuildCreatedMock, projectFindOneMock, projectUpdateMock });
 
       const result = await service.create(createBuildDto);
 
       expect(projectFindOneMock).toHaveBeenCalledWith({
-        where: { name: createBuildDto.project },
+        where: { id: undefined, name: createBuildDto.project },
+      });
+      expect(projectUpdateMock).toHaveBeenCalledWith({
+        where: { id: project.id },
+        data: {
+          buildsCounter: {
+            increment: 1,
+          },
+        },
       });
       expect(buildCreateMock).toHaveBeenCalledWith({
         data: {
           branchName: createBuildDto.branchName,
           isRunning: true,
+          number: project.buildsCounter,
           project: {
             connect: {
               id: project.id,
@@ -182,25 +195,36 @@ describe('BuildsService', () => {
       const project: Project = {
         id: '6bdd3704-90af-4b1b-94cb-f183e500f5cb',
         name: 'name',
+        buildsCounter: 1,
         mainBranchName: 'master',
         updatedAt: new Date(),
         createdAt: new Date(),
       };
       const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
       const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
+      const projectUpdateMock = jest.fn().mockResolvedValueOnce(project);
       const eventsBuildCreatedMock = jest.fn();
       mocked(BuildDto).mockReturnValueOnce(buildDto);
-      service = await initService({ buildCreateMock, eventsBuildCreatedMock, projectFindOneMock });
+      service = await initService({ buildCreateMock, eventsBuildCreatedMock, projectFindOneMock, projectUpdateMock });
 
       const result = await service.create(createBuildDto);
 
       expect(projectFindOneMock).toHaveBeenCalledWith({
-        where: { id: createBuildDto.project },
+        where: { id: createBuildDto.project, name: undefined },
+      });
+      expect(projectUpdateMock).toHaveBeenCalledWith({
+        where: { id: project.id },
+        data: {
+          buildsCounter: {
+            increment: 1,
+          },
+        },
       });
       expect(buildCreateMock).toHaveBeenCalledWith({
         data: {
           branchName: createBuildDto.branchName,
           isRunning: true,
+          number: project.buildsCounter,
           project: {
             connect: {
               id: project.id,

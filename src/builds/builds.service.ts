@@ -28,28 +28,36 @@ export class BuildsService {
   }
 
   async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
-    let project: Project;
-
-    if (uuidAPIKey.isUUID(createBuildDto.project)) {
-      project = await this.prismaService.project.findOne({
-        where: { id: createBuildDto.project },
-      });
-    } else {
-      project = await this.prismaService.project.findOne({
-        where: {
-          name: createBuildDto.project,
-        },
-      });
-    }
-
+    // find project
+    const isUUID = uuidAPIKey.isUUID(createBuildDto.project);
+    let project: Project = await this.prismaService.project.findOne({
+      where: {
+        id: isUUID ? createBuildDto.project : undefined,
+        name: !isUUID ? createBuildDto.project : undefined,
+      },
+    });
     if (!project) {
       throw new HttpException(`Project not found`, HttpStatus.NOT_FOUND);
     }
 
+    // increment build number
+    project = await this.prismaService.project.update({
+      where: {
+        id: project.id,
+      },
+      data: {
+        buildsCounter: {
+          increment: 1,
+        },
+      },
+    });
+
+    // create build
     const build = await this.prismaService.build.create({
       data: {
         branchName: createBuildDto.branchName,
         isRunning: true,
+        number: project.buildsCounter,
         project: {
           connect: {
             id: project.id,
