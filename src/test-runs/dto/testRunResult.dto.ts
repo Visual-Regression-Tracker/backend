@@ -9,6 +9,8 @@ export class TestRunResultDto {
   @ApiProperty()
   diffName?: string;
   @ApiProperty()
+  baselineName?: string;
+  @ApiProperty()
   diffPercent: number;
   @ApiProperty()
   diffTollerancePercent?: number;
@@ -25,6 +27,7 @@ export class TestRunResultDto {
     this.id = testRun.id;
     this.imageName = testRun.imageName;
     this.diffName = testRun.diffName;
+    this.baselineName = testVariation.baselineName;
     this.diffPercent = testRun.diffPercent;
     this.diffTollerancePercent = testRun.diffTollerancePercent;
     this.pixelMisMatchCount = testRun.pixelMisMatchCount;
