@@ -184,7 +184,7 @@ export class TestRunsService {
     const image = this.staticService.getImage(testRun.imageName);
     await this.staticService.deleteImage(testRun.diffName);
 
-    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, testRun.ignoreAreas);
+    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, JSON.parse(testRun.ignoreAreas));
     const updatedTestRun = await this.saveDiffResult(id, diffResult);
     this.emitUpdateBuildEvent(testRun.buildId);
     return updatedTestRun;
@@ -227,7 +227,11 @@ export class TestRunsService {
     const baseline = this.staticService.getImage(testRun.baselineName);
     const image = this.staticService.getImage(imageName);
 
-    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, testVariation.ignoreAreas);
+    let ignoreAreas: IgnoreAreaDto[] = JSON.parse(testVariation.ignoreAreas);
+    if (createTestRequestDto.ignoreAreas?.length > 0) {
+      ignoreAreas = ignoreAreas.concat(createTestRequestDto.ignoreAreas);
+    }
+    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, ignoreAreas);
 
     const testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
     this.eventsGateway.testRunCreated(testRunWithResult);
@@ -267,7 +271,7 @@ export class TestRunsService {
     });
   }
 
-  getDiff(baseline: PNG, image: PNG, diffTollerancePercent: number, ignoreAreas: string): DiffResult {
+  getDiff(baseline: PNG, image: PNG, diffTollerancePercent: number, ignoreAreas: IgnoreAreaDto[]): DiffResult {
     const result: DiffResult = {
       status: undefined,
       diffName: null,
@@ -287,8 +291,8 @@ export class TestRunsService {
 
         // compare
         result.pixelMisMatchCount = Pixelmatch(
-          this.applyIgnoreAreas(baseline, JSON.parse(ignoreAreas)),
-          this.applyIgnoreAreas(image, JSON.parse(ignoreAreas)),
+          this.applyIgnoreAreas(baseline, ignoreAreas),
+          this.applyIgnoreAreas(image, ignoreAreas),
           diff.data,
           baseline.width,
           baseline.height,

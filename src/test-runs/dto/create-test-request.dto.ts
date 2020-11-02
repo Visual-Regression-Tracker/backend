@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsOptional, IsUUID, IsNumber, IsBoolean, IsBase64 } from 'class-validator';
 import { BaselineDataDto } from '../../shared/dto/baseline-data.dto';
+import { IgnoreAreaDto } from './ignore-area.dto';
 
 export class CreateTestRequestDto extends BaselineDataDto {
   @ApiProperty()
@@ -26,4 +27,8 @@ export class CreateTestRequestDto extends BaselineDataDto {
   @IsBoolean()
   @IsOptional()
   merge?: boolean;
+
+  @ApiProperty({ type: [IgnoreAreaDto] })
+  @IsOptional()
+  ignoreAreas?: IgnoreAreaDto[];
 }
