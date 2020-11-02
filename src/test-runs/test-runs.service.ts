@@ -227,10 +227,8 @@ export class TestRunsService {
     const baseline = this.staticService.getImage(testRun.baselineName);
     const image = this.staticService.getImage(imageName);
 
-    let ignoreAreas: IgnoreAreaDto[] = [];
-    if (!!testVariation.ignoreAreas) {
-      ignoreAreas = ignoreAreas.concat(JSON.parse(testVariation.ignoreAreas));
-    }
+    // combine ignore areas from testVarition together with testRun request
+    let ignoreAreas: IgnoreAreaDto[] = JSON.parse(testVariation.ignoreAreas);
     if (createTestRequestDto.ignoreAreas?.length > 0) {
       ignoreAreas = ignoreAreas.concat(createTestRequestDto.ignoreAreas);
     }

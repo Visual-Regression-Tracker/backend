@@ -429,6 +429,14 @@ describe('TestRunsService', () => {
       diffTollerancePercent: undefined,
       branchName: 'develop',
       merge: true,
+      ignoreAreas: [
+        {
+          x: 1,
+          y: 2,
+          width: 100,
+          height: 200,
+        },
+      ],
     };
     const testRunWithResult = {
       id: 'id',
@@ -457,7 +465,7 @@ describe('TestRunsService', () => {
       browser: 'browser',
       viewport: 'viewport',
       device: 'device',
-      ignoreAreas: '[]',
+      ignoreAreas: '[{"x":3,"y":4,"width":500,"height":600}]',
       comment: 'some comment',
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -487,12 +495,6 @@ describe('TestRunsService', () => {
     const result = await service.create(testVariation, createTestRequestDto);
 
     expect(saveImageMock).toHaveBeenCalledWith('screenshot', Buffer.from(createTestRequestDto.imageBase64, 'base64'));
-    expect(service.getDiff).toHaveBeenCalledWith(
-      baseline,
-      image,
-      testRun.diffTollerancePercent,
-      JSON.parse(testVariation.ignoreAreas)
-    );
     expect(getImageMock).toHaveBeenNthCalledWith(1, testVariation.baselineName);
     expect(getImageMock).toHaveBeenNthCalledWith(2, imageName);
     expect(testRunCreateMock).toHaveBeenCalledWith({
@@ -523,12 +525,20 @@ describe('TestRunsService', () => {
         status: TestStatus.new,
       },
     });
-    expect(getDiffMock).toHaveBeenCalledWith(
-      baseline,
-      image,
-      testRun.diffTollerancePercent,
-      JSON.parse(testRun.ignoreAreas)
-    );
+    expect(getDiffMock).toHaveBeenCalledWith(baseline, image, testRun.diffTollerancePercent, [
+      {
+        x: 3,
+        y: 4,
+        width: 500,
+        height: 600,
+      },
+      {
+        x: 1,
+        y: 2,
+        width: 100,
+        height: 200,
+      },
+    ]);
     expect(saveDiffResultMock).toHaveBeenCalledWith(testRun.id, diffResult);
     expect(eventTestRunCreatedMock).toHaveBeenCalledWith(testRunWithResult);
     expect(result).toBe(testRunWithResult);
