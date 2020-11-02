@@ -491,7 +491,7 @@ describe('TestRunsService', () => {
       baseline,
       image,
       testRun.diffTollerancePercent,
-      testVariation.ignoreAreas
+      JSON.parse(testVariation.ignoreAreas)
     );
     expect(getImageMock).toHaveBeenNthCalledWith(1, testVariation.baselineName);
     expect(getImageMock).toHaveBeenNthCalledWith(2, imageName);
@@ -523,7 +523,12 @@ describe('TestRunsService', () => {
         status: TestStatus.new,
       },
     });
-    expect(getDiffMock).toHaveBeenCalledWith(baseline, image, testRun.diffTollerancePercent, testRun.ignoreAreas);
+    expect(getDiffMock).toHaveBeenCalledWith(
+      baseline,
+      image,
+      testRun.diffTollerancePercent,
+      JSON.parse(testRun.ignoreAreas)
+    );
     expect(saveDiffResultMock).toHaveBeenCalledWith(testRun.id, diffResult);
     expect(eventTestRunCreatedMock).toHaveBeenCalledWith(testRunWithResult);
     expect(result).toBe(testRunWithResult);
@@ -538,7 +543,7 @@ describe('TestRunsService', () => {
       });
       service = await initService({});
 
-      const result = service.getDiff(baseline, image, 0, '[]');
+      const result = service.getDiff(baseline, image, 0, []);
 
       expect(result).toStrictEqual({
         status: undefined,
@@ -560,7 +565,7 @@ describe('TestRunsService', () => {
       });
       service = await initService({});
 
-      const result = service.getDiff(baseline, image, 0, '[]');
+      const result = service.getDiff(baseline, image, 0, []);
 
       expect(result).toStrictEqual({
         status: TestStatus.unresolved,
@@ -583,7 +588,7 @@ describe('TestRunsService', () => {
       service = await initService({});
       mocked(Pixelmatch).mockReturnValueOnce(0);
 
-      const result = service.getDiff(baseline, image, 0, '[]');
+      const result = service.getDiff(baseline, image, 0, []);
 
       expect(result).toStrictEqual({
         status: TestStatus.ok,
@@ -608,7 +613,7 @@ describe('TestRunsService', () => {
       const pixelMisMatchCount = 150;
       mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
 
-      const result = service.getDiff(baseline, image, 1.5, '[]');
+      const result = service.getDiff(baseline, image, 1.5, []);
 
       expect(saveImageMock).toHaveBeenCalledTimes(0);
       expect(result).toStrictEqual({
@@ -637,7 +642,7 @@ describe('TestRunsService', () => {
         saveImageMock,
       });
 
-      const result = service.getDiff(baseline, image, 1, '[]');
+      const result = service.getDiff(baseline, image, 1, []);
 
       expect(saveImageMock).toHaveBeenCalledTimes(1);
       expect(result).toStrictEqual({
@@ -689,7 +694,7 @@ describe('TestRunsService', () => {
       baselineMock,
       imageeMock,
       testRun.diffTollerancePercent,
-      testRun.ignoreAreas
+      JSON.parse(testRun.ignoreAreas)
     );
     expect(service.emitUpdateBuildEvent).toBeCalledWith(testRun.buildId);
   });

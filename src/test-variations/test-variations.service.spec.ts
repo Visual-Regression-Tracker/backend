@@ -454,6 +454,7 @@ describe('TestVariationsService', () => {
       imageBase64: PNG.sync.write(image).toString('base64'),
       diffTollerancePercent: 0,
       merge: true,
+      ignoreAreas: JSON.parse(testVariation.ignoreAreas),
     });
     expect(testRunCreateMock).toHaveBeenNthCalledWith(2, testVariationMainBranch, {
       ...testVariationSecond,
@@ -461,6 +462,7 @@ describe('TestVariationsService', () => {
       imageBase64: PNG.sync.write(image).toString('base64'),
       diffTollerancePercent: 0,
       merge: true,
+      ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
     });
     expect(testRunCreateMock).toHaveBeenCalledTimes(2);
     expect(buildStopMock).toHaveBeenCalledWith(build.id);
