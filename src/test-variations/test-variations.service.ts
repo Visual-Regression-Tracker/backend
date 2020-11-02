@@ -130,6 +130,7 @@ export class TestVariationsService {
             imageBase64,
             diffTollerancePercent: 0,
             merge: true,
+            ignoreAreas:  JSON.parse(sideBranchTestVariation.ignoreAreas)
           };
 
           return this.testRunsService.create(mainBranchTestVariation, createTestRequestDto);
