@@ -1,18 +1,19 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build, Project } from '@prisma/client';
+import { Build } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
-import uuidAPIKey from 'uuid-apikey';
+import { ProjectsService } from '../projects/projects.service';
 
 @Injectable()
 export class BuildsService {
   constructor(
     private prismaService: PrismaService,
     private testRunsService: TestRunsService,
-    private eventsGateway: EventsGateway
+    private eventsGateway: EventsGateway,
+    private projectService: ProjectsService
   ) {}
 
   async findMany(projectId: string): Promise<BuildDto[]> {
@@ -29,16 +30,7 @@ export class BuildsService {
 
   async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
     // find project
-    const isUUID = uuidAPIKey.isUUID(createBuildDto.project);
-    let project: Project = await this.prismaService.project.findOne({
-      where: {
-        id: isUUID ? createBuildDto.project : undefined,
-        name: !isUUID ? createBuildDto.project : undefined,
-      },
-    });
-    if (!project) {
-      throw new HttpException(`Project not found`, HttpStatus.NOT_FOUND);
-    }
+    let project = await this.projectService.findOne(createBuildDto.project);
 
     // increment build number
     project = await this.prismaService.project.update({
@@ -53,6 +45,7 @@ export class BuildsService {
     });
 
     // get or create build
+    const buildId = createBuildDto.id || '';
     const build = await this.prismaService.build.upsert({
       create: {
         branchName: createBuildDto.branchName,
@@ -66,7 +59,7 @@ export class BuildsService {
       },
       update: {},
       where: {
-        id: createBuildDto.id || '',
+        id: buildId,
       },
     });
     const buildDto = new BuildDto(build);

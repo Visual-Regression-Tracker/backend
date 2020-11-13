@@ -7,7 +7,7 @@ import { CreateBuildDto } from './dto/build-create.dto';
 import { Build, TestRun, Project } from '@prisma/client';
 import { mocked } from 'ts-jest/utils';
 import { BuildDto } from './dto/build.dto';
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { ProjectsService } from '../projects/projects.service';
 
 jest.mock('./dto/build.dto');
 
@@ -31,7 +31,6 @@ const initService = async ({
         provide: PrismaService,
         useValue: {
           project: {
-            findOne: projectFindOneMock,
             update: projectUpdateMock,
           },
           build: {
@@ -55,6 +54,12 @@ const initService = async ({
         useValue: {
           buildCreated: eventsBuildCreatedMock,
           buildFinished: eventsBuildFinishedMock,
+        },
+      },
+      {
+        provide: ProjectsService,
+        useValue: {
+          findOne: projectFindOneMock,
         },
       },
     ],
@@ -138,7 +143,7 @@ describe('BuildsService', () => {
   });
 
   describe('create', () => {
-    it('should create by name', async () => {
+    it('should create', async () => {
       const createBuildDto: CreateBuildDto = {
         branchName: 'branchName',
         project: 'name',
@@ -161,9 +166,7 @@ describe('BuildsService', () => {
 
       const result = await service.create(createBuildDto);
 
-      expect(projectFindOneMock).toHaveBeenCalledWith({
-        where: { id: undefined, name: createBuildDto.project },
-      });
+      expect(projectFindOneMock).toHaveBeenCalledWith(createBuildDto.project);
       expect(projectUpdateMock).toHaveBeenCalledWith({
         where: { id: project.id },
         data: {
@@ -190,73 +193,6 @@ describe('BuildsService', () => {
       });
       expect(eventsBuildCreatedMock).toHaveBeenCalledWith(buildDto);
       expect(result).toBe(buildDto);
-    });
-
-    it('should create by UUID', async () => {
-      const createBuildDto: CreateBuildDto = {
-        branchName: 'branchName',
-        project: '6bdd3704-90af-4b1b-94cb-f183e500f5cb',
-      };
-
-      const project: Project = {
-        id: '6bdd3704-90af-4b1b-94cb-f183e500f5cb',
-        name: 'name',
-        buildsCounter: 1,
-        mainBranchName: 'master',
-        updatedAt: new Date(),
-        createdAt: new Date(),
-      };
-      const buildUpsertMock = jest.fn().mockResolvedValueOnce(build);
-      const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
-      const projectUpdateMock = jest.fn().mockResolvedValueOnce(project);
-      const eventsBuildCreatedMock = jest.fn();
-      mocked(BuildDto).mockReturnValueOnce(buildDto);
-      service = await initService({ buildUpsertMock, eventsBuildCreatedMock, projectFindOneMock, projectUpdateMock });
-
-      const result = await service.create(createBuildDto);
-
-      expect(projectFindOneMock).toHaveBeenCalledWith({
-        where: { id: createBuildDto.project, name: undefined },
-      });
-      expect(projectUpdateMock).toHaveBeenCalledWith({
-        where: { id: project.id },
-        data: {
-          buildsCounter: {
-            increment: 1,
-          },
-        },
-      });
-      expect(buildUpsertMock).toHaveBeenCalledWith({
-        create: {
-          branchName: createBuildDto.branchName,
-          isRunning: true,
-          number: project.buildsCounter,
-          project: {
-            connect: {
-              id: project.id,
-            },
-          },
-        },
-        update: {},
-        where: {
-          id: '',
-        },
-      });
-      expect(eventsBuildCreatedMock).toHaveBeenCalledWith(buildDto);
-      expect(result).toBe(buildDto);
-    });
-
-    it('should throw exception if not found', async () => {
-      const createBuildDto: CreateBuildDto = {
-        branchName: 'branchName',
-        project: 'nonexisting',
-      };
-      const projectFindOneMock = jest.fn().mockResolvedValueOnce(undefined);
-      service = await initService({ projectFindOneMock });
-
-      await expect(service.create(createBuildDto)).rejects.toThrowError(
-        new HttpException('Project not found', HttpStatus.NOT_FOUND)
-      );
     });
   });
 
