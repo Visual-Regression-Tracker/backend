@@ -52,9 +52,9 @@ export class BuildsService {
       },
     });
 
-    // create build
-    const build = await this.prismaService.build.create({
-      data: {
+    // get or create build
+    const build = await this.prismaService.build.upsert({
+      create: {
         branchName: createBuildDto.branchName,
         isRunning: true,
         number: project.buildsCounter,
@@ -63,6 +63,10 @@ export class BuildsService {
             id: project.id,
           },
         },
+      },
+      update: {},
+      where: {
+        id: createBuildDto.id || '',
       },
     });
     const buildDto = new BuildDto(build);
