@@ -4,7 +4,6 @@ import { TestVariationsController } from './test-variations.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsModule } from '../test-runs/test-runs.module';
 import { BuildsModule } from '../builds/builds.module';
-import { SharedModule } from 'src/shared/shared.module';
 
 @Module({
   imports: [forwardRef(() => TestRunsModule), forwardRef(() => BuildsModule)],

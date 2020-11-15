@@ -31,42 +31,44 @@ export class BuildsService {
   }
 
   async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
-    // find project
     let project = await this.projectService.findOne(createBuildDto.project);
 
-    // increment build number
-    project = await this.prismaService.project.update({
+    let build = await this.prismaService.build.findOne({
       where: {
-        id: project.id,
-      },
-      data: {
-        buildsCounter: {
-          increment: 1,
-        },
+        ciBuildId: createBuildDto.ciBuildId,
       },
     });
 
-    // get or create build
-    const buildId = createBuildDto.id || '';
-    const build = await this.prismaService.build.upsert({
-      create: {
-        branchName: createBuildDto.branchName,
-        isRunning: true,
-        number: project.buildsCounter,
-        project: {
-          connect: {
-            id: project.id,
+    if (!build) {
+      // increment build number
+      project = await this.prismaService.project.update({
+        where: {
+          id: project.id,
+        },
+        data: {
+          buildsCounter: {
+            increment: 1,
           },
         },
-      },
-      update: {},
-      where: {
-        id: buildId,
-      },
-    });
-    const buildDto = new BuildDto(build);
-    this.eventsGateway.buildCreated(buildDto);
-    return buildDto;
+      });
+
+      build = await this.prismaService.build.create({
+        data: {
+          ciBuildId: createBuildDto.ciBuildId,
+          branchName: createBuildDto.branchName,
+          isRunning: true,
+          number: project.buildsCounter,
+          project: {
+            connect: {
+              id: project.id,
+            },
+          },
+        },
+      });
+
+      this.eventsGateway.buildCreated(new BuildDto(build));
+    }
+    return new BuildDto(build);
   }
 
   async stop(id: string): Promise<BuildDto> {
