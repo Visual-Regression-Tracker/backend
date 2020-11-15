@@ -1,18 +1,21 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build, Project } from '@prisma/client';
+import { Build } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
-import uuidAPIKey from 'uuid-apikey';
+import { ProjectsService } from '../projects/projects.service';
 
 @Injectable()
 export class BuildsService {
   constructor(
     private prismaService: PrismaService,
+    private eventsGateway: EventsGateway,
+    @Inject(forwardRef(() => TestRunsService))
     private testRunsService: TestRunsService,
-    private eventsGateway: EventsGateway
+    @Inject(forwardRef(() => ProjectsService))
+    private projectService: ProjectsService
   ) {}
 
   async findMany(projectId: string): Promise<BuildDto[]> {
@@ -28,46 +31,47 @@ export class BuildsService {
   }
 
   async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
-    // find project
-    const isUUID = uuidAPIKey.isUUID(createBuildDto.project);
-    let project: Project = await this.prismaService.project.findOne({
-      where: {
-        id: isUUID ? createBuildDto.project : undefined,
-        name: !isUUID ? createBuildDto.project : undefined,
-      },
-    });
-    if (!project) {
-      throw new HttpException(`Project not found`, HttpStatus.NOT_FOUND);
+    let project = await this.projectService.findOne(createBuildDto.project);
+
+    let build: Build;
+    if (createBuildDto.ciBuildId) {
+      build = await this.prismaService.build.findOne({
+        where: {
+          ciBuildId: createBuildDto.ciBuildId,
+        },
+      });
     }
 
-    // increment build number
-    project = await this.prismaService.project.update({
-      where: {
-        id: project.id,
-      },
-      data: {
-        buildsCounter: {
-          increment: 1,
+    if (!build) {
+      // increment build number
+      project = await this.prismaService.project.update({
+        where: {
+          id: project.id,
         },
-      },
-    });
-
-    // create build
-    const build = await this.prismaService.build.create({
-      data: {
-        branchName: createBuildDto.branchName,
-        isRunning: true,
-        number: project.buildsCounter,
-        project: {
-          connect: {
-            id: project.id,
+        data: {
+          buildsCounter: {
+            increment: 1,
           },
         },
-      },
-    });
-    const buildDto = new BuildDto(build);
-    this.eventsGateway.buildCreated(buildDto);
-    return buildDto;
+      });
+
+      build = await this.prismaService.build.create({
+        data: {
+          ciBuildId: createBuildDto.ciBuildId,
+          branchName: createBuildDto.branchName,
+          isRunning: true,
+          number: project.buildsCounter,
+          project: {
+            connect: {
+              id: project.id,
+            },
+          },
+        },
+      });
+
+      this.eventsGateway.buildCreated(new BuildDto(build));
+    }
+    return new BuildDto(build);
   }
 
   async stop(id: string): Promise<BuildDto> {

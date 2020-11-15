@@ -79,6 +79,28 @@ describe('Builds (e2e)', () => {
         });
     });
 
+    it('201 by ciBuildId', async () => {
+      const createBuildDto: CreateBuildDto = {
+        ciBuildId: 'ciBuildId',
+        branchName: 'branchName',
+        project: project.name,
+      };
+      const build = await buildsService.create(createBuildDto);
+
+      return requestWithApiKey(app, 'post', '/builds', createBuildDto, user.apiKey)
+        .expect(201)
+        .expect((res) => {
+          expect(res.body.id).toBe(build.id);
+          expect(res.body.ciBuildId).toBe(createBuildDto.ciBuildId);
+          expect(res.body.projectId).toBe(project.id);
+          expect(res.body.branchName).toBe(createBuildDto.branchName);
+          expect(res.body.failedCount).toBe(0);
+          expect(res.body.passedCount).toBe(0);
+          expect(res.body.unresolvedCount).toBe(0);
+          expect(res.body.isRunning).toBe(true);
+        });
+    });
+
     it('404', () => {
       const createBuildDto: CreateBuildDto = {
         branchName: 'branchName',

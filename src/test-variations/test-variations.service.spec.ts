@@ -332,6 +332,7 @@ describe('TestVariationsService', () => {
     };
     const build: Build = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+      ciBuildId: 'ciBuildId',
       number: null,
       branchName: project.mainBranchName,
       status: null,

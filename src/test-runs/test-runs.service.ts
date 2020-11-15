@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
@@ -17,6 +17,7 @@ import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 @Injectable()
 export class TestRunsService {
   constructor(
+    @Inject(forwardRef(() => TestVariationsService))
     private testVariationService: TestVariationsService,
     private prismaService: PrismaService,
     private staticService: StaticService,
