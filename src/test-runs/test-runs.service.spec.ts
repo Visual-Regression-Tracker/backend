@@ -843,6 +843,7 @@ describe('TestRunsService', () => {
       testRuns: TestRun[];
     } = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+      ciBuildId: null,
       number: null,
       branchName: 'develop',
       status: null,
