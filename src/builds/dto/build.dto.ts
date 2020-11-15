@@ -6,6 +6,9 @@ export class BuildDto {
   id: string;
 
   @ApiProperty()
+  ciBuildId: string | null;
+
+  @ApiProperty()
   number: number | null;
 
   @ApiProperty()
@@ -37,6 +40,7 @@ export class BuildDto {
 
   constructor(build: Build & { testRuns?: TestRun[] }) {
     this.id = build.id;
+    this.ciBuildId = build.ciBuildId;
     this.number = build.number;
     this.branchName = build.branchName;
     this.userId = build.userId;
@@ -50,7 +54,7 @@ export class BuildDto {
     this.unresolvedCount = 0;
     this.failedCount = 0;
 
-    build.testRuns?.forEach(testRun => {
+    build.testRuns?.forEach((testRun) => {
       switch (testRun.status) {
         case TestStatus.approved:
         case TestStatus.ok: {

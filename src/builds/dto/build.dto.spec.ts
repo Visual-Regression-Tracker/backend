@@ -7,6 +7,7 @@ describe('BuildDto', () => {
       'undefined testRuns',
       {
         id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+        ciBuildId: 'ciBuildId',
         number: null,
         branchName: 'develop',
         status: null,
@@ -22,6 +23,7 @@ describe('BuildDto', () => {
       'empty testRuns',
       {
         id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+        ciBuildId: 'ciBuildId',
         number: null,
         branchName: 'develop',
         status: null,
@@ -36,6 +38,7 @@ describe('BuildDto', () => {
   ])('new with %s', (_, build) => {
     const buildDto: BuildDto = {
       id: build.id,
+      ciBuildId: build.ciBuildId,
       number: build.number,
       branchName: build.branchName,
       status: 'new',
@@ -59,6 +62,7 @@ describe('BuildDto', () => {
       testRuns: TestRun[];
     } = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+      ciBuildId: 'ciBuildId',
       number: null,
       branchName: 'develop',
       status: null,
@@ -120,6 +124,7 @@ describe('BuildDto', () => {
     };
     const buildDto: BuildDto = {
       id: build.id,
+      ciBuildId: build.ciBuildId,
       number: build.number,
       branchName: build.branchName,
       status: 'passed',
@@ -141,6 +146,7 @@ describe('BuildDto', () => {
   it('failed', () => {
     const build: Build & { testRuns: TestRun[] } = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+      ciBuildId: 'ciBuildId',
       number: null,
       branchName: 'develop',
       status: null,
@@ -226,6 +232,7 @@ describe('BuildDto', () => {
     };
     const buildDto: BuildDto = {
       id: build.id,
+      ciBuildId: build.ciBuildId,
       number: build.number,
       branchName: build.branchName,
       status: 'failed',
@@ -247,6 +254,7 @@ describe('BuildDto', () => {
   it('unresolved', () => {
     const build: Build & { testRuns: TestRun[] } = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+      ciBuildId: 'ciBuildId',
       number: null,
       branchName: 'develop',
       status: null,
@@ -380,6 +388,7 @@ describe('BuildDto', () => {
     };
     const buildDto: BuildDto = {
       id: build.id,
+      ciBuildId: build.ciBuildId,
       number: build.number,
       branchName: build.branchName,
       status: 'unresolved',
