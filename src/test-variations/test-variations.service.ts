@@ -16,10 +16,10 @@ export class TestVariationsService {
   constructor(
     private prismaService: PrismaService,
     private staticService: StaticService,
-    @Inject(forwardRef(() => BuildsService))
-    private buildsService: BuildsService,
     @Inject(forwardRef(() => TestRunsService))
-    private testRunsService: TestRunsService
+    private testRunsService: TestRunsService,
+    @Inject(forwardRef(() => BuildsService))
+    private buildsService: BuildsService
   ) {}
 
   async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
@@ -110,7 +110,7 @@ export class TestVariationsService {
     });
 
     // compare to main branch variations
-    testVariations.map(async sideBranchTestVariation => {
+    testVariations.map(async (sideBranchTestVariation) => {
       const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
       if (baseline) {
         try {
@@ -130,7 +130,7 @@ export class TestVariationsService {
             imageBase64,
             diffTollerancePercent: 0,
             merge: true,
-            ignoreAreas:  JSON.parse(sideBranchTestVariation.ignoreAreas)
+            ignoreAreas: JSON.parse(sideBranchTestVariation.ignoreAreas),
           };
 
           return this.testRunsService.create(mainBranchTestVariation, createTestRequestDto);
@@ -149,14 +149,14 @@ export class TestVariationsService {
       this.getDetails(id),
       this.prismaService.testRun.findMany({
         where: { testVariationId: id },
-      })
-    ])
+      }),
+    ]);
 
     // delete testRun
-    await Promise.all(testRuns.map(item => this.testRunsService.delete(item.id)));
+    await Promise.all(testRuns.map((item) => this.testRunsService.delete(item.id)));
 
     // delete baseline
-    await Promise.all(testVariation.baselines.map(baseline => this.deleteBaseline(baseline)));
+    await Promise.all(testVariation.baselines.map((baseline) => this.deleteBaseline(baseline)));
 
     // delete testVariation
     return this.prismaService.testVariation.delete({

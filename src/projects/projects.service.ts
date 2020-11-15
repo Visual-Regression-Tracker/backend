@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { forwardRef, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { BuildsService } from '../builds/builds.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
@@ -11,7 +11,9 @@ import uuidAPIKey from 'uuid-apikey';
 export class ProjectsService {
   constructor(
     private prismaService: PrismaService,
+    @Inject(forwardRef(() => BuildsService))
     private buildsService: BuildsService,
+    @Inject(forwardRef(() => TestVariationsService))
     private testVariationsService: TestVariationsService
   ) {}
 
