@@ -33,11 +33,14 @@ export class BuildsService {
   async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
     let project = await this.projectService.findOne(createBuildDto.project);
 
-    let build = await this.prismaService.build.findOne({
-      where: {
-        ciBuildId: createBuildDto.ciBuildId,
-      },
-    });
+    let build: Build;
+    if (createBuildDto.ciBuildId) {
+      build = await this.prismaService.build.findOne({
+        where: {
+          ciBuildId: createBuildDto.ciBuildId,
+        },
+      });
+    }
 
     if (!build) {
       // increment build number
