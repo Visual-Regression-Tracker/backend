@@ -1,9 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsNotEmpty } from 'class-validator';
 
 export class CreateBuildDto {
   @ApiProperty()
   @IsOptional()
+  @IsString()
+  @IsNotEmpty()
   readonly ciBuildId?: string;
 
   @ApiProperty()
