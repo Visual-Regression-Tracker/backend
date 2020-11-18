@@ -6,7 +6,7 @@ set -e
 echo Start applying migrations...
 
 # apply migration
-npx prisma migrate up -c --experimental
+npx prisma migrate up -c --auto-approve --experimental
 
 echo Seeding data...
 
