@@ -11,8 +11,6 @@ services:
   #     IMG_UPLOAD_FOLDER: ${IMG_UPLOAD_FOLDER}
   #     BODY_PARSER_JSON_LIMIT: ${BODY_PARSER_JSON_LIMIT}
   #     APP_FRONTEND_URL: ${APP_FRONTEND_URL}
-  #     HTTPS_KEY_PATH: ${HTTPS_KEY_PATH}
-  #     HTTPS_CERT_PATH: ${HTTPS_CERT_PATH}
   #   ports:
   #     - "${APP_PORT}:3000"
   #   expose:
