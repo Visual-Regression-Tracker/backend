@@ -5,24 +5,19 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
 import * as bodyParser from 'body-parser';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
 
 function getHttpsOptions(): HttpsOptions | null {
-  let cert: Buffer, key: Buffer;
-  try {
-    key = readFileSync('./secrets/ssl.key');
-  } catch (err) {
-    Logger.error('./secrets/ssl.key not found', err.stack);
-  }
-  try {
-    cert = readFileSync('./secrets/ssl.cert');
-  } catch (err) {
-    Logger.error('./secrets/ssl.cert not found', err.stack);
+  const keyPath = './secrets/ssl.key';
+  const certPath = './secrets/cert.key';
+  if (!existsSync(keyPath) || !existsSync(certPath)) {
+    Logger.log('HTTPS config not found. Fall back to HTTP');
+    return null;
   }
   return {
-    key,
-    cert,
+    key: readFileSync(keyPath),
+    cert: readFileSync(certPath),
   };
 }
 
