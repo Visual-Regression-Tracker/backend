@@ -10,7 +10,7 @@ import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.i
 
 function getHttpsOptions(): HttpsOptions | null {
   const keyPath = './secrets/ssl.key';
-  const certPath = './secrets/cert.key';
+  const certPath = './secrets/ssl.cert';
   if (!existsSync(keyPath) || !existsSync(certPath)) {
     Logger.log('HTTPS config not found. Fall back to HTTP');
     return null;
