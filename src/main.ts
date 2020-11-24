@@ -9,20 +9,16 @@ import { readFileSync } from 'fs';
 import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
 
 function getHttpsOptions(): HttpsOptions | null {
-  if (!process.env.HTTPS_KEY_PATH || !process.env.HTTPS_CERT_PATH) {
-    Logger.log('HTTPS is not configured');
-    return null;
-  }
   let cert: Buffer, key: Buffer;
   try {
-    key = readFileSync(process.env.HTTPS_KEY_PATH);
+    key = readFileSync('./secrets/ssl.key');
   } catch (err) {
-    Logger.error('HTTPS_KEY_PATH is not correct', err.stack);
+    Logger.error('./secrets/ssl.key not found', err.stack);
   }
   try {
-    cert = readFileSync(process.env.HTTPS_CERT_PATH);
+    cert = readFileSync('./secrets/ssl.cert');
   } catch (err) {
-    Logger.error('HTTPS_CERT_PATH is not correct', err.stack);
+    Logger.error('./secrets/ssl.cert not found', err.stack);
   }
   return {
     key,
