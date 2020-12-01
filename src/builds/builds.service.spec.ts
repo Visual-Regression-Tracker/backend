@@ -104,6 +104,7 @@ describe('BuildsService', () => {
         viewport: '1800x1600',
         baselineName: null,
         ignoreAreas: '[]',
+        tempIgnoreAreas: '[]',
         comment: 'some comment',
         branchName: 'develop',
         baselineBranchName: 'master',
