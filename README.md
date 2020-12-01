@@ -14,3 +14,8 @@
 - `npm run test:e2e`
 - Seed initial data `npx ts-node prisma/seed.ts`
 - `npm run start:debug`
+
+## Local HTTPS config
+
+- Generate keys [here](https://www.selfsignedcertificate.com/)
+- place in folder `/secrets` named `ssl.cert` and `ssl.key`

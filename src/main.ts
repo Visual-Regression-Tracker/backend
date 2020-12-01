@@ -1,13 +1,31 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
 import * as bodyParser from 'body-parser';
+import { readFileSync, existsSync } from 'fs';
+import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
+
+function getHttpsOptions(): HttpsOptions | null {
+  const keyPath = './secrets/ssl.key';
+  const certPath = './secrets/ssl.cert';
+  if (!existsSync(keyPath) || !existsSync(certPath)) {
+    Logger.log('HTTPS config not found. Fall back to HTTP');
+    return null;
+  }
+  return {
+    key: readFileSync(keyPath),
+    cert: readFileSync(certPath),
+  };
+}
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: true });
+  const app = await NestFactory.create(AppModule, {
+    cors: true,
+    httpsOptions: getHttpsOptions(),
+  });
   app.useGlobalPipes(new ValidationPipe());
   setupSwagger(app);
 
@@ -16,11 +34,7 @@ async function bootstrap() {
   }
 
   // serve images
-  app.use(
-    express.static(
-      join(process.cwd(), process.env.IMG_UPLOAD_FOLDER || 'imageUploads/')
-    )
-  );
+  app.use(express.static(join(process.cwd(), process.env.IMG_UPLOAD_FOLDER || 'imageUploads/')));
 
   await app.listen(process.env.APP_PORT || 3000);
 }
