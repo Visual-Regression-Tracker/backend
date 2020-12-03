@@ -38,7 +38,7 @@ export class StaticService {
   }
 
   private getImagePath(imageName: string): string {
-    const dir = this.configService.get('IMG_UPLOAD_FOLDER');
+    const dir = this.configService.get('imageUploads/');
     this.ensureDirectoryExistence(dir);
     return path.resolve(dir, imageName);
   }
