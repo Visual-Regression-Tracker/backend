@@ -34,7 +34,7 @@ async function bootstrap() {
   }
 
   // serve images
-  app.use(express.static(join(process.cwd(), process.env.IMG_UPLOAD_FOLDER || 'imageUploads/')));
+  app.use(express.static(join(process.cwd(), 'imageUploads/')));
 
   await app.listen(process.env.APP_PORT || 3000);
 }
