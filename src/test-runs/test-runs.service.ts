@@ -217,6 +217,7 @@ export class TestRunsService {
         baselineName: testVariation.baselineName,
         baselineBranchName: testVariation.branchName,
         ignoreAreas: testVariation.ignoreAreas,
+        tempIgnoreAreas: JSON.stringify(createTestRequestDto.ignoreAreas),
         comment: testVariation.comment,
         diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
         branchName: createTestRequestDto.branchName,

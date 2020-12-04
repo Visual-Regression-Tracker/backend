@@ -491,6 +491,7 @@ describe('TestVariationsService', () => {
       viewport: '1800x1600',
       baselineName: null,
       ignoreAreas: '[]',
+      tempIgnoreAreas: '[]',
       comment: 'some comment',
       baselineBranchName: 'master',
       branchName: 'develop',
