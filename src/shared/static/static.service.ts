@@ -2,11 +2,10 @@ import { Injectable } from '@nestjs/common';
 import path from 'path';
 import { writeFileSync, readFileSync, unlink, mkdirSync, existsSync } from 'fs';
 import { PNG, PNGWithMetadata } from 'pngjs';
-import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class StaticService {
-  constructor(private configService: ConfigService) {}
+  constructor() {}
 
   saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): string {
     const imageName = `${Date.now()}.${type}.png`;
@@ -38,7 +37,7 @@ export class StaticService {
   }
 
   private getImagePath(imageName: string): string {
-    const dir = this.configService.get('imageUploads/');
+    const dir = 'imageUploads/';
     this.ensureDirectoryExistence(dir);
     return path.resolve(dir, imageName);
   }
