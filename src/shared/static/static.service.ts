@@ -5,8 +5,6 @@ import { PNG, PNGWithMetadata } from 'pngjs';
 
 @Injectable()
 export class StaticService {
-  constructor() {}
-
   saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): string {
     const imageName = `${Date.now()}.${type}.png`;
     writeFileSync(this.getImagePath(imageName), imageBuffer);
