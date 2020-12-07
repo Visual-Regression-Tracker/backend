@@ -24,7 +24,7 @@ export class TestVariationsController {
   }
 
   @Get('details/:id')
-  @ApiQuery({ name: 'id', required: true })
+  @ApiParam({ name: 'id', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestVariation & { baselines: Baseline[] }> {

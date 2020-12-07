@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsOptional, IsUUID, IsNumber, IsBoolean, IsBase64 } from 'class-validator';
 import { BaselineDataDto } from '../../shared/dto/baseline-data.dto';
@@ -18,17 +18,17 @@ export class CreateTestRequestDto extends BaselineDataDto {
   @IsUUID()
   projectId: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
   diffTollerancePercent?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   @IsBoolean()
   @IsOptional()
   merge?: boolean;
 
-  @ApiProperty({ type: [IgnoreAreaDto] })
+  @ApiPropertyOptional({ type: [IgnoreAreaDto] })
   @IsOptional()
   ignoreAreas?: IgnoreAreaDto[];
 }
