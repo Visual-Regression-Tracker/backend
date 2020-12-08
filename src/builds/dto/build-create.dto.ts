@@ -1,8 +1,8 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNotEmpty } from 'class-validator';
 
 export class CreateBuildDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @IsNotEmpty()
