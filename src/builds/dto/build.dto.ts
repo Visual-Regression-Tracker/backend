@@ -1,21 +1,21 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Build, TestRun, TestStatus } from '@prisma/client';
 
 export class BuildDto {
   @ApiProperty()
   id: string;
 
-  @ApiProperty()
-  ciBuildId: string | null;
+  @ApiPropertyOptional()
+  ciBuildId?: string;
 
   @ApiProperty()
-  number: number | null;
+  number: number;
 
   @ApiProperty()
-  branchName: string | null;
+  branchName: string;
 
   @ApiProperty()
-  status: string | null;
+  status: string;
 
   @ApiProperty()
   projectId: string;
@@ -26,8 +26,8 @@ export class BuildDto {
   @ApiProperty()
   createdAt: Date;
 
-  @ApiProperty()
-  userId: string | null;
+  @ApiPropertyOptional()
+  userId?: string;
 
   @ApiProperty()
   passedCount: number;
