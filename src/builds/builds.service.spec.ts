@@ -18,6 +18,7 @@ const initService = async ({
   buildFindOneMock = jest.fn(),
   buildDeleteMock = jest.fn(),
   buildUpsertMock = jest.fn(),
+  buildCountMock = jest.fn(),
   testRunDeleteMock = jest.fn(),
   eventsBuildCreatedMock = jest.fn(),
   eventsBuildFinishedMock = jest.fn(),
@@ -40,6 +41,7 @@ const initService = async ({
             findOne: buildFindOneMock,
             delete: buildDeleteMock,
             upsert: buildUpsertMock,
+            count: buildCountMock,
           },
         },
       },
@@ -131,18 +133,29 @@ describe('BuildsService', () => {
 
   it('findMany', async () => {
     const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
+    const buildCountMock = jest.fn().mockResolvedValueOnce(33);
     const projectId = 'someId';
     mocked(BuildDto).mockReturnValueOnce(buildDto);
-    service = await initService({ buildFindManyMock });
+    service = await initService({ buildFindManyMock, buildCountMock });
 
-    const result = await service.findMany(projectId);
+    const result = await service.findMany(projectId, 10, 20);
 
+    expect(buildCountMock).toHaveBeenCalledWith({
+      where: { projectId },
+    });
     expect(buildFindManyMock).toHaveBeenCalledWith({
       include: { testRuns: true },
+      take: 10,
+      skip: 20,
       orderBy: { createdAt: 'desc' },
       where: { projectId },
     });
-    expect(result).toEqual([buildDto]);
+    expect(result).toEqual({
+      data: [buildDto],
+      total: 33,
+      take: 10,
+      skip: 20,
+    });
   });
 
   describe('create', () => {

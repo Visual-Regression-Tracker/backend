@@ -6,6 +6,7 @@ import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
+import { PaginatedBuildDto } from './dto/build-paginated.dto';
 
 @Injectable()
 export class BuildsService {
@@ -18,16 +19,26 @@ export class BuildsService {
     private projectService: ProjectsService
   ) {}
 
-  async findMany(projectId: string): Promise<BuildDto[]> {
-    const buildList = await this.prismaService.build.findMany({
-      where: { projectId },
-      include: {
-        testRuns: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findMany(projectId: string, take: number, skip: number): Promise<PaginatedBuildDto> {
+    const [total, buildList] = await Promise.all([
+      this.prismaService.build.count({ where: { projectId } }),
+      this.prismaService.build.findMany({
+        where: { projectId },
+        take,
+        skip,
+        include: {
+          testRuns: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
-    return buildList.map((build) => new BuildDto(build));
+    return {
+      data: buildList.map((build) => new BuildDto(build)),
+      total,
+      take,
+      skip,
+    };
   }
 
   async create(createBuildDto: CreateBuildDto): Promise<BuildDto> {
