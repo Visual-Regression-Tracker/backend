@@ -122,15 +122,22 @@ describe('Builds (e2e)', () => {
     it('200', async () => {
       const build = await buildsService.create({ project: project.id, branchName: 'develop' });
 
-      return requestWithAuth(app, 'get', `/builds?projectId=${project.id}`, {}, user.token)
+      return requestWithAuth(app, 'get', `/builds?projectId=${project.id}&take=${5}&skip=${0}`, {}, user.token)
         .expect(200)
         .expect((res) => {
-          expect(JSON.stringify(res.body)).toEqual(JSON.stringify([build]));
+          expect(JSON.stringify(res.body)).toEqual(
+            JSON.stringify({
+              data: [build],
+              total: 1,
+              take: 5,
+              skip: 0,
+            })
+          );
         });
     });
 
     it('401', async () => {
-      return requestWithAuth(app, 'get', `/builds?projectId=${project.id}`, {}, '').expect(401);
+      return requestWithAuth(app, 'get', `/builds?projectId=${project.id}&take=${5}&skip=${0}`, {}, '').expect(401);
     });
   });
 
