@@ -17,6 +17,7 @@ describe('BuildDto', () => {
         userId: null,
         isRunning: true,
         testRuns: undefined,
+        merge: false,
       },
     ],
     [
@@ -33,6 +34,7 @@ describe('BuildDto', () => {
         userId: null,
         isRunning: true,
         testRuns: [],
+        merge: false,
       },
     ],
   ])('new with %s', (_, build) => {
@@ -50,6 +52,7 @@ describe('BuildDto', () => {
       unresolvedCount: 0,
       failedCount: 0,
       isRunning: true,
+      merge: false,
     };
 
     const result = new BuildDto(build);
@@ -138,6 +141,7 @@ describe('BuildDto', () => {
       unresolvedCount: 0,
       failedCount: 0,
       isRunning: true,
+      merge: true,
     };
 
     const result = new BuildDto(build);
@@ -249,6 +253,7 @@ describe('BuildDto', () => {
       unresolvedCount: 0,
       failedCount: 1,
       isRunning: true,
+      merge: false,
     };
 
     const result = new BuildDto(build);
@@ -410,6 +415,7 @@ describe('BuildDto', () => {
       unresolvedCount: 2,
       failedCount: 1,
       isRunning: true,
+      merge: false,
     };
 
     const result = new BuildDto(build);

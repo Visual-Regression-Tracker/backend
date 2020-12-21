@@ -37,6 +37,8 @@ export class BuildDto {
   failedCount: number;
   @ApiProperty()
   isRunning: boolean;
+  @ApiProperty()
+  merge: boolean;
 
   constructor(build: Build & { testRuns?: TestRun[] }) {
     this.id = build.id;
@@ -54,24 +56,31 @@ export class BuildDto {
     this.unresolvedCount = 0;
     this.failedCount = 0;
 
-    build.testRuns?.forEach((testRun) => {
-      switch (testRun.status) {
-        case TestStatus.approved:
-        case TestStatus.ok: {
-          this.passedCount += 1;
-          break;
+    this.merge = false;
+    if (build.testRuns) {
+      // determine if merge
+      this.merge = build.testRuns.some((testRun) => testRun.merge);
+
+      // calculate statistics
+      build.testRuns.forEach((testRun) => {
+        switch (testRun.status) {
+          case TestStatus.approved:
+          case TestStatus.ok: {
+            this.passedCount += 1;
+            break;
+          }
+          case TestStatus.unresolved:
+          case TestStatus.new: {
+            this.unresolvedCount += 1;
+            break;
+          }
+          case TestStatus.failed: {
+            this.failedCount += 1;
+            break;
+          }
         }
-        case TestStatus.unresolved:
-        case TestStatus.new: {
-          this.unresolvedCount += 1;
-          break;
-        }
-        case TestStatus.failed: {
-          this.failedCount += 1;
-          break;
-        }
-      }
-    });
+      });
+    }
 
     if (!build.testRuns || build.testRuns.length === 0) {
       this.status = 'new';
