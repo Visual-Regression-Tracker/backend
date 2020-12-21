@@ -9,7 +9,7 @@ export class ApiGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request: Request = context.switchToHttp().getRequest();
     try {
-      const user = await this.prismaService.user.findOne({
+      const user = await this.prismaService.user.findUnique({
         where: { apiKey: request.header('apiKey') },
       });
       return !!user;

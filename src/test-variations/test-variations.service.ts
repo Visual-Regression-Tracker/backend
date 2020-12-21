@@ -23,7 +23,7 @@ export class TestVariationsService {
   ) {}
 
   async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
-    return this.prismaService.testVariation.findOne({
+    return this.prismaService.testVariation.findUnique({
       where: { id },
       include: {
         baselines: {
@@ -39,7 +39,7 @@ export class TestVariationsService {
   }
 
   async findOrCreate(projectId: string, baselineData: BaselineDataDto): Promise<TestVariation> {
-    const project = await this.prismaService.project.findOne({ where: { id: projectId } });
+    const project = await this.prismaService.project.findUnique({ where: { id: projectId } });
 
     let [[mainBranchTestVariation], [currentBranchTestVariation]] = await Promise.all([
       // search main branch variation
@@ -96,7 +96,7 @@ export class TestVariationsService {
   }
 
   async merge(projectId: string, branchName: string): Promise<BuildDto> {
-    const project: Project = await this.prismaService.project.findOne({ where: { id: projectId } });
+    const project: Project = await this.prismaService.project.findUnique({ where: { id: projectId } });
 
     // create build
     const build: BuildDto = await this.buildsService.create({

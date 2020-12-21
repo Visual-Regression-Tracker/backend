@@ -5,7 +5,7 @@ import { TestVariationsService } from '../test-variations/test-variations.servic
 import { BuildsService } from '../builds/builds.service';
 import { HttpException, HttpStatus } from '@nestjs/common';
 
-const initService = async ({ projectFindOneMock = jest.fn() }) => {
+const initService = async ({ projectFindUniqueMock = jest.fn() }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       ProjectsService,
@@ -13,7 +13,7 @@ const initService = async ({ projectFindOneMock = jest.fn() }) => {
         provide: PrismaService,
         useValue: {
           project: {
-            findOne: projectFindOneMock,
+            findUnique: projectFindUniqueMock,
           },
         },
       },
@@ -32,19 +32,19 @@ describe('ProjectsService', () => {
       ['name', 'someName', { id: undefined, name: 'someName' }],
       ['id', 'a9385fc1-884d-4f9f-915e-40da0e7773d5', { id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5', name: undefined }],
     ])('should find by %s', async (_, query, expected) => {
-      const projectFindOneMock = jest.fn().mockResolvedValue({});
-      service = await initService({ projectFindOneMock });
+      const projectFindUniqueMock = jest.fn().mockResolvedValue({});
+      service = await initService({ projectFindUniqueMock });
 
       await service.findOne(query);
 
-      expect(projectFindOneMock).toHaveBeenCalledWith({
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({
         where: expected,
       });
     });
 
     it('should throw exception if not found', async () => {
-      const projectFindOneMock = jest.fn().mockResolvedValueOnce(undefined);
-      service = await initService({ projectFindOneMock });
+      const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(undefined);
+      service = await initService({ projectFindUniqueMock });
 
       await expect(service.findOne('foo')).rejects.toThrowError(
         new HttpException('Project not found', HttpStatus.NOT_FOUND)

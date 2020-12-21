@@ -14,13 +14,13 @@ import { TestRunsService } from '../test-runs/test-runs.service';
 const initModule = async ({
   imageDeleteMock = jest.fn(),
   getImageMock = jest.fn(),
-  variationFindOneMock = jest.fn,
+  variationfindUniqueMock = jest.fn,
   variationFindManyMock = jest.fn().mockReturnValue([]),
   variationCreateMock = jest.fn(),
   variationUpdateMock = jest.fn(),
   variationDeleteMock = jest.fn(),
   baselineDeleteMock = jest.fn(),
-  projectFindOneMock = jest.fn(),
+  projectFindUniqueMock = jest.fn(),
   buildCreateMock = jest.fn(),
   buildStopMock = jest.fn(),
   testRunCreateMock = jest.fn(),
@@ -55,7 +55,7 @@ const initModule = async ({
         provide: PrismaService,
         useValue: {
           testVariation: {
-            findOne: variationFindOneMock,
+            findUnique: variationfindUniqueMock,
             findMany: variationFindManyMock,
             create: variationCreateMock,
             update: variationUpdateMock,
@@ -65,7 +65,7 @@ const initModule = async ({
             delete: baselineDeleteMock,
           },
           project: {
-            findOne: projectFindOneMock,
+            findUnique: projectFindUniqueMock,
           },
           testRun: {
             findMany: testRunFindMany,
@@ -84,12 +84,12 @@ describe('TestVariationsService', () => {
   describe('getDetails', () => {
     it('can find one', async () => {
       const id = 'test id';
-      const variationFindOneMock = jest.fn();
-      service = await initModule({ variationFindOneMock });
+      const variationfindUniqueMock = jest.fn();
+      service = await initModule({ variationfindUniqueMock });
 
       await service.getDetails(id);
 
-      expect(variationFindOneMock).toHaveBeenCalledWith({
+      expect(variationfindUniqueMock).toHaveBeenCalledWith({
         where: { id },
         include: {
           baselines: {
@@ -144,12 +144,12 @@ describe('TestVariationsService', () => {
         updatedAt: new Date(),
       };
       const variationFindManyMock = jest.fn().mockResolvedValueOnce([variationMock]).mockResolvedValueOnce([undefined]);
-      const projectFindOneMock = jest.fn().mockReturnValueOnce(projectMock);
-      service = await initModule({ variationFindManyMock, projectFindOneMock });
+      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
+      service = await initModule({ variationFindManyMock, projectFindUniqueMock });
 
       const result = await service.findOrCreate(createRequest.projectId, convertBaselineDataToQuery(createRequest));
 
-      expect(projectFindOneMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(variationFindManyMock).toHaveBeenNthCalledWith(1, {
         where: {
           name: createRequest.name,
@@ -204,12 +204,12 @@ describe('TestVariationsService', () => {
         updatedAt: new Date(),
       };
       const variationFindManyMock = jest.fn().mockResolvedValueOnce([undefined]).mockResolvedValueOnce([variationMock]);
-      const projectFindOneMock = jest.fn().mockReturnValueOnce(projectMock);
-      service = await initModule({ variationFindManyMock, projectFindOneMock });
+      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
+      service = await initModule({ variationFindManyMock, projectFindUniqueMock });
 
       const result = await service.findOrCreate(createRequest.projectId, convertBaselineDataToQuery(createRequest));
 
-      expect(projectFindOneMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(variationFindManyMock).toHaveBeenNthCalledWith(1, {
         where: {
           name: createRequest.name,
@@ -249,9 +249,9 @@ describe('TestVariationsService', () => {
       };
 
       const variationFindManyMock = jest.fn().mockResolvedValueOnce([undefined]).mockResolvedValueOnce([undefined]);
-      const projectFindOneMock = jest.fn().mockReturnValueOnce(projectMock);
+      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
       const variationCreateMock = jest.fn();
-      service = await initModule({ variationFindManyMock, projectFindOneMock, variationCreateMock });
+      service = await initModule({ variationFindManyMock, projectFindUniqueMock, variationCreateMock });
 
       const result = await service.findOrCreate(createRequest.projectId, convertBaselineDataToQuery(createRequest));
 
@@ -402,7 +402,7 @@ describe('TestVariationsService', () => {
       updatedAt: new Date(),
       branchName: project.mainBranchName,
     };
-    const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
+    const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(project);
     const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
     const variationFindManyMock = jest
       .fn()
@@ -419,7 +419,7 @@ describe('TestVariationsService', () => {
     const testRunCreateMock = jest.fn();
     const buildStopMock = jest.fn();
     const service = await initModule({
-      projectFindOneMock,
+      projectFindUniqueMock,
       buildCreateMock,
       buildStopMock,
       testRunCreateMock,
@@ -430,7 +430,7 @@ describe('TestVariationsService', () => {
 
     await service.merge(project.id, mergedBranch);
 
-    expect(projectFindOneMock).toHaveBeenCalledWith({ where: { id: project.id } });
+    expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: project.id } });
     expect(buildCreateMock).toHaveBeenCalledWith({
       branchName: project.mainBranchName,
       project: project.id,
