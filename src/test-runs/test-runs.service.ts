@@ -9,7 +9,6 @@ import { TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
-import { BuildDto } from '../builds/dto/build.dto';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
@@ -37,7 +36,7 @@ export class TestRunsService {
       testVariation: TestVariation;
     }
   > {
-    return this.prismaService.testRun.findOne({
+    return this.prismaService.testRun.findUnique({
       where: { id },
       include: {
         testVariation: true,
@@ -67,19 +66,6 @@ export class TestRunsService {
     const testRun = await this.create(testVariation, createTestRequestDto);
 
     return new TestRunResultDto(testRun, testVariation);
-  }
-
-  async emitUpdateBuildEvent(buildId: string) {
-    const build = await this.prismaService.build.findOne({
-      where: {
-        id: buildId,
-      },
-      include: {
-        testRuns: true,
-      },
-    });
-    const buildDto = new BuildDto(build);
-    this.eventsGateway.buildUpdated(buildDto);
   }
 
   async approve(id: string, merge: boolean): Promise<TestRun> {
@@ -150,7 +136,7 @@ export class TestRunsService {
       });
     }
 
-    this.emitUpdateBuildEvent(testRun.buildId);
+    this.eventsGateway.testRunUpdated(testRunUpdated);
     return testRunUpdated;
   }
 
@@ -162,7 +148,7 @@ export class TestRunsService {
       },
     });
 
-    this.emitUpdateBuildEvent(testRun.buildId);
+    this.eventsGateway.testRunUpdated(testRun);
     return testRun;
   }
 
@@ -187,7 +173,8 @@ export class TestRunsService {
 
     const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, JSON.parse(testRun.ignoreAreas));
     const updatedTestRun = await this.saveDiffResult(id, diffResult);
-    this.emitUpdateBuildEvent(testRun.buildId);
+
+    this.eventsGateway.testRunUpdated(testRun);
     return updatedTestRun;
   }
 
