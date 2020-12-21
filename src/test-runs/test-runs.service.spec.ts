@@ -4,7 +4,7 @@ import { TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../shared/static/static.service';
 import { PNG } from 'pngjs';
-import { TestStatus, Build, TestRun, TestVariation, Project } from '@prisma/client';
+import { TestStatus, TestRun, TestVariation } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
@@ -12,7 +12,6 @@ import { DiffResult } from './diffResult';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
-import { BuildDto } from '../builds/dto/build.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 

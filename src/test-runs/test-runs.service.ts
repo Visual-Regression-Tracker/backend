@@ -51,7 +51,7 @@ export class TestRunsService {
     const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto.projectId, baselineData);
 
     // delete previous test run if exists
-    let [previousTestRun] = await this.prismaService.testRun.findMany({
+    const [previousTestRun] = await this.prismaService.testRun.findMany({
       where: {
         buildId: createTestRequestDto.buildId,
         ...baselineData,
@@ -112,7 +112,7 @@ export class TestRunsService {
           branchName: testRun.branchName,
         },
       });
-      const newBaseline = await this.prismaService.baseline.create({
+      await this.prismaService.baseline.create({
         data: {
           baselineName,
           testVariation: {

@@ -1,7 +1,7 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation, Baseline, Project, Build, TestRun } from '@prisma/client';
+import { TestVariation, Baseline, Project} from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BaselineDataDto, convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
@@ -41,7 +41,7 @@ export class TestVariationsService {
   async findOrCreate(projectId: string, baselineData: BaselineDataDto): Promise<TestVariation> {
     const project = await this.prismaService.project.findUnique({ where: { id: projectId } });
 
-    let [[mainBranchTestVariation], [currentBranchTestVariation]] = await Promise.all([
+    const [[mainBranchTestVariation], [currentBranchTestVariation]] = await Promise.all([
       // search main branch variation
       this.prismaService.testVariation.findMany({
         where: {
@@ -114,7 +114,7 @@ export class TestVariationsService {
       const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
       if (baseline) {
         try {
-          let imageBase64 = PNG.sync.write(baseline).toString('base64');
+          const imageBase64 = PNG.sync.write(baseline).toString('base64');
 
           // get main branch variation
           const baselineData = convertBaselineDataToQuery({

@@ -253,7 +253,7 @@ describe('TestVariationsService', () => {
       const variationCreateMock = jest.fn();
       service = await initModule({ variationFindManyMock, projectFindUniqueMock, variationCreateMock });
 
-      const result = await service.findOrCreate(createRequest.projectId, convertBaselineDataToQuery(createRequest));
+      await service.findOrCreate(createRequest.projectId, convertBaselineDataToQuery(createRequest));
 
       expect(variationCreateMock).toHaveBeenCalledWith({
         data: {
