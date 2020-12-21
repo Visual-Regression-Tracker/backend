@@ -6,7 +6,7 @@ import { haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditi
 import { BuildsService } from '../src/builds/builds.service';
 import { CreateBuildDto } from '../src/builds/dto/build-create.dto';
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
-import { Project, TestStatus } from '@prisma/client';
+import { Project } from '@prisma/client';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { readFileSync } from 'fs';
@@ -203,7 +203,7 @@ describe('Builds (e2e)', () => {
   describe('PATCH /:id/approve', () => {
     it('200', async () => {
       const build = await buildsService.create({ project: project.id, branchName: 'develop' });
-      const testRun: TestRunResultDto = await testRunsService.postTestRun({
+      await testRunsService.postTestRun({
         projectId: build.projectId,
         branchName: build.branchName,
         imageBase64: readFileSync('./test/image.png').toString('base64'),
