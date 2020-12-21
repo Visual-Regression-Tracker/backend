@@ -10,6 +10,7 @@ import {
   Query,
   Patch,
   ParseIntPipe,
+  ParseBoolPipe,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
@@ -38,6 +39,14 @@ export class BuildsController {
     return this.buildsService.findMany(projectId, take, skip);
   }
 
+  @Get(':id')
+  @ApiOkResponse({ type: BuildDto })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
+    return this.buildsService.findOne(id);
+  }
+
   @Delete(':id')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
@@ -60,5 +69,16 @@ export class BuildsController {
   @UseGuards(MixedGuard)
   stop(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
     return this.buildsService.stop(id);
+  }
+
+  @Patch(':id/approve')
+  @ApiOkResponse({ type: BuildDto })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  approve(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('merge', new ParseBoolPipe()) merge: boolean
+  ): Promise<BuildDto> {
+    return this.buildsService.approve(id, merge);
   }
 }

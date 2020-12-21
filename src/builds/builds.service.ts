@@ -1,7 +1,7 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build } from '@prisma/client';
+import { Build, TestStatus } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
@@ -18,6 +18,17 @@ export class BuildsService {
     @Inject(forwardRef(() => ProjectsService))
     private projectService: ProjectsService
   ) {}
+
+  async findOne(id: string): Promise<BuildDto> {
+    return this.prismaService.build
+      .findUnique({
+        where: { id },
+        include: {
+          testRuns: true,
+        },
+      })
+      .then((build) => new BuildDto(build));
+  }
 
   async findMany(projectId: string, take: number, skip: number): Promise<PaginatedBuildDto> {
     const [total, buildList] = await Promise.all([
@@ -46,7 +57,7 @@ export class BuildsService {
 
     let build: Build;
     if (createBuildDto.ciBuildId) {
-      build = await this.prismaService.build.findOne({
+      build = await this.prismaService.build.findUnique({
         where: {
           ciBuildId: createBuildDto.ciBuildId,
         },
@@ -101,7 +112,7 @@ export class BuildsService {
   }
 
   async remove(id: string): Promise<Build> {
-    const build = await this.prismaService.build.findOne({
+    const build = await this.prismaService.build.findUnique({
       where: { id },
       include: {
         testRuns: true,
@@ -113,5 +124,28 @@ export class BuildsService {
     return this.prismaService.build.delete({
       where: { id },
     });
+  }
+
+  async approve(id: string, merge: boolean): Promise<BuildDto> {
+    const build = await this.prismaService.build.findUnique({
+      where: { id },
+      include: {
+        testRuns: {
+          where: {
+            status: {
+              in: [TestStatus.new, TestStatus.unresolved],
+            },
+          },
+        },
+      },
+    });
+
+    build.testRuns = await Promise.all(
+      build.testRuns.map((testRun) => this.testRunsService.approve(testRun.id, merge))
+    );
+
+    const buildDto = new BuildDto(build);
+    this.eventsGateway.buildUpdated(buildDto);
+    return buildDto;
   }
 }
