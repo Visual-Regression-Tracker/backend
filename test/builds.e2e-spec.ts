@@ -10,7 +10,6 @@ import { Project } from '@prisma/client';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { readFileSync } from 'fs';
-import { TestRunResultDto } from 'src/test-runs/dto/testRunResult.dto';
 
 describe('Builds (e2e)', () => {
   let app: INestApplication;
