@@ -8,12 +8,15 @@ import { CreateBuildDto } from '../src/builds/dto/build-create.dto';
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { Project } from '@prisma/client';
 import { ProjectsService } from '../src/projects/projects.service';
+import { TestRunsService } from '../src/test-runs/test-runs.service';
+import { readFileSync } from 'fs';
 
 describe('Builds (e2e)', () => {
   let app: INestApplication;
   let buildsService: BuildsService;
   let projecstService: ProjectsService;
   let usersService: UsersService;
+  let testRunsService: TestRunsService;
   let user: UserLoginResponseDto;
   let project: Project;
 
@@ -26,6 +29,7 @@ describe('Builds (e2e)', () => {
     buildsService = moduleFixture.get<BuildsService>(BuildsService);
     usersService = moduleFixture.get<UsersService>(UsersService);
     projecstService = moduleFixture.get<ProjectsService>(ProjectsService);
+    testRunsService = moduleFixture.get<TestRunsService>(TestRunsService);
 
     await app.init();
   });
@@ -122,15 +126,34 @@ describe('Builds (e2e)', () => {
     it('200', async () => {
       const build = await buildsService.create({ project: project.id, branchName: 'develop' });
 
-      return requestWithAuth(app, 'get', `/builds?projectId=${project.id}`, {}, user.token)
+      return requestWithAuth(app, 'get', `/builds?projectId=${project.id}&take=${5}&skip=${0}`, {}, user.token)
         .expect(200)
         .expect((res) => {
-          expect(JSON.stringify(res.body)).toEqual(JSON.stringify([build]));
+          expect(JSON.stringify(res.body)).toEqual(
+            JSON.stringify({
+              data: [build],
+              total: 1,
+              take: 5,
+              skip: 0,
+            })
+          );
         });
     });
 
     it('401', async () => {
-      return requestWithAuth(app, 'get', `/builds?projectId=${project.id}`, {}, '').expect(401);
+      return requestWithAuth(app, 'get', `/builds?projectId=${project.id}&take=${5}&skip=${0}`, {}, '').expect(401);
+    });
+  });
+
+  describe('GET /:id', () => {
+    it('200', async () => {
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
+
+      return requestWithAuth(app, 'get', `/builds/${build.id}`, {}, user.token)
+        .expect(200)
+        .expect((res) => {
+          expect(JSON.stringify(res.body)).toEqual(JSON.stringify(build));
+        });
     });
   });
 
@@ -173,6 +196,28 @@ describe('Builds (e2e)', () => {
       const build = await buildsService.create({ project: project.id, branchName: 'develop' });
 
       return requestWithAuth(app, 'patch', `/builds/${build.id}`, {}, '').expect(403);
+    });
+  });
+
+  describe('PATCH /:id/approve', () => {
+    it('200', async () => {
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
+      await testRunsService.postTestRun({
+        projectId: build.projectId,
+        branchName: build.branchName,
+        imageBase64: readFileSync('./test/image.png').toString('base64'),
+        buildId: build.id,
+        name: 'Image name',
+        merge: true,
+      });
+
+      return requestWithAuth(app, 'patch', `/builds/${build.id}/approve?merge=true`, {}, user.token)
+        .expect(200)
+        .expect((resp) => {
+          expect(JSON.stringify(resp.body)).toBe(
+            JSON.stringify({ ...build, status: 'passed', passedCount: 1, merge: true })
+          );
+        });
     });
   });
 });

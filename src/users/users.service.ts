@@ -33,7 +33,7 @@ export class UsersService {
   }
 
   async findOne(id: string): Promise<User> {
-    return this.prismaService.user.findOne({ where: { id } });
+    return this.prismaService.user.findUnique({ where: { id } });
   }
 
   async delete(id: string): Promise<User> {
@@ -80,7 +80,7 @@ export class UsersService {
   }
 
   async login(userLoginRequestDto: UserLoginRequestDto) {
-    const user = await this.prismaService.user.findOne({
+    const user = await this.prismaService.user.findUnique({
       where: { email: userLoginRequestDto.email },
     });
     if (!user) {

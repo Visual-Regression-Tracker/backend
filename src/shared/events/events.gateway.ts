@@ -24,7 +24,10 @@ export class EventsGateway {
     this.server.emit('testRun_created', testRun);
   }
 
-  
+  testRunUpdated(testRun: TestRun): void {
+    this.server.emit('testRun_updated', testRun);
+  }
+
   testRunDeleted(testRun: TestRun): void {
     this.server.emit('testRun_deleted', testRun);
   }
