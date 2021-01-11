@@ -3,6 +3,8 @@ import path from 'path';
 import { writeFileSync, readFileSync, unlink, mkdirSync, existsSync } from 'fs';
 import { PNG, PNGWithMetadata } from 'pngjs';
 
+export const IMAGE_PATH = 'imageUploads/'
+
 @Injectable()
 export class StaticService {
   saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): string {
@@ -35,9 +37,8 @@ export class StaticService {
   }
 
   private getImagePath(imageName: string): string {
-    const dir = 'imageUploads/';
-    this.ensureDirectoryExistence(dir);
-    return path.resolve(dir, imageName);
+    this.ensureDirectoryExistence(IMAGE_PATH);
+    return path.resolve(IMAGE_PATH, imageName);
   }
 
   private ensureDirectoryExistence(dir: string) {

@@ -7,6 +7,8 @@ import { join } from 'path';
 import * as bodyParser from 'body-parser';
 import { readFileSync, existsSync } from 'fs';
 import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
+import { IMAGE_PATH } from './shared/static/static.service';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 function getHttpsOptions(): HttpsOptions | null {
   const keyPath = './secrets/ssl.key';
@@ -22,7 +24,7 @@ function getHttpsOptions(): HttpsOptions | null {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     cors: true,
     httpsOptions: getHttpsOptions(),
   });
@@ -34,7 +36,9 @@ async function bootstrap() {
   }
 
   // serve images
-  app.use(express.static(join(process.cwd(), 'imageUploads/')));
+  app.useStaticAssets(join(process.cwd(), IMAGE_PATH), {
+    maxAge: 31536000
+  });
 
   await app.listen(process.env.APP_PORT || 3000);
 }
