@@ -1,0 +1,32 @@
+{
+  "version": "0.3.14-fixed",
+  "steps": [
+    {
+      "tag": "DeleteDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "Build",
+          "field": "ciBuildId"
+        },
+        "directive": "unique"
+      }
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Model",
+          "model": "Build",
+          "arguments": [
+            {
+              "name": "",
+              "value": "[projectId, ciBuildId]"
+            }
+          ]
+        },
+        "directive": "unique"
+      }
+    }
+  ]
+}

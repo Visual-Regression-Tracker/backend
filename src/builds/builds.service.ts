@@ -59,7 +59,10 @@ export class BuildsService {
     if (createBuildDto.ciBuildId) {
       build = await this.prismaService.build.findUnique({
         where: {
-          ciBuildId: createBuildDto.ciBuildId,
+          projectId_ciBuildId: {
+            projectId: project.id,
+            ciBuildId: createBuildDto.ciBuildId,
+          },
         },
       });
     }

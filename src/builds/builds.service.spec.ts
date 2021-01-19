@@ -215,7 +215,10 @@ describe('BuildsService', () => {
       expect(projectFindOneMock).toHaveBeenCalledWith(createBuildDto.project);
       expect(buildFindUniqueMock).toHaveBeenCalledWith({
         where: {
-          ciBuildId: createBuildDto.ciBuildId,
+          projectId_ciBuildId: {
+            projectId: project.id,
+            ciBuildId: createBuildDto.ciBuildId,
+          },
         },
       });
       expect(projectUpdateMock).toHaveBeenCalledWith({
@@ -254,12 +257,6 @@ describe('BuildsService', () => {
 
       const result = await service.create(createBuildDto);
 
-      expect(projectFindOneMock).toHaveBeenCalledWith(createBuildDto.project);
-      expect(buildFindUniqueMock).toHaveBeenCalledWith({
-        where: {
-          ciBuildId: createBuildDto.ciBuildId,
-        },
-      });
       expect(result).toBe(buildDto);
     });
   });
