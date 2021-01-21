@@ -53,7 +53,7 @@
     "@nestjs/cli": "^7.4.1",
     "@nestjs/schematics": "^7.0.1",
     "@nestjs/testing": "^7.4.2",
-    "@prisma/cli": "2.12.1",
+    "@prisma/cli": "2.15.0",
     "@types/bcryptjs": "^2.4.2",
     "@types/cache-manager": "^2.10.3",
     "@types/express": "^4.17.7",
