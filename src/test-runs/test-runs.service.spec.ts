@@ -14,6 +14,7 @@ import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
+import { TestRunDto } from './dto/testRun.dto';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -24,6 +25,7 @@ const initService = async ({
   testRunFindUniqueMock = jest.fn(),
   testRunFindManyMock = jest.fn(),
   testRunCreateMock = jest.fn(),
+  testRunCountMock = jest.fn(),
   getImageMock = jest.fn(),
   saveImageMock = jest.fn(),
   deleteImageMock = jest.fn(),
@@ -50,6 +52,7 @@ const initService = async ({
             findUnique: testRunFindUniqueMock,
             create: testRunCreateMock,
             update: testRunUpdateMock,
+            count: testRunCountMock,
           },
           testVariation: {
             create: testVariationCreateMock,
@@ -782,15 +785,53 @@ describe('TestRunsService', () => {
 
   it('findMany', async () => {
     const buildId = 'some id';
-    const testRunFindManyMock = jest.fn();
+    const testRun: TestRun = {
+      id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
+      imageName: '1592423768112.screenshot.png',
+      diffName: 'diffName',
+      diffPercent: 12,
+      diffTollerancePercent: 1,
+      pixelMisMatchCount: 123,
+      status: 'new',
+      buildId: buildId,
+      testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      name: 'ss2f77',
+      browser: 'chromium',
+      device: null,
+      os: null,
+      viewport: '1800x1600',
+      baselineName: null,
+      ignoreAreas: '[]',
+      tempIgnoreAreas: '[]',
+      comment: 'some comment',
+      baselineBranchName: 'master',
+      branchName: 'develop',
+      merge: false,
+    };
+    const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
+    const testRunCountMock = jest.fn().mockResolvedValueOnce(30);
     service = await initService({
       testRunFindManyMock,
+      testRunCountMock,
     });
 
-    await service.findMany(buildId);
+    const result = await service.findMany(buildId, 10, 1);
 
     expect(testRunFindManyMock).toHaveBeenCalledWith({
       where: { buildId },
+      take: 10,
+      skip: 1,
+    });
+    expect(testRunCountMock).toHaveBeenCalledWith({
+      where: { buildId },
+    });
+    expect(result).toEqual({
+      data: [new TestRunDto(testRun)],
+      take: 10,
+      skip: 1,
+      total: 30,
     });
   });
 

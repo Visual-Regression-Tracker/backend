@@ -12,6 +12,8 @@ import { CommentDto } from '../shared/dto/comment.dto';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
+import { TestRunDto } from './dto/testRun.dto';
+import { PaginatedTestRunDto } from './dto/testRun-paginated.dto';
 
 @Injectable()
 export class TestRunsService {
@@ -23,10 +25,21 @@ export class TestRunsService {
     private eventsGateway: EventsGateway
   ) {}
 
-  async findMany(buildId: string): Promise<TestRun[]> {
-    return this.prismaService.testRun.findMany({
-      where: { buildId },
-    });
+  async findMany(buildId: string, take: number, skip: number): Promise<PaginatedTestRunDto> {
+    const [total, list] = await Promise.all([
+      this.prismaService.testRun.count({ where: { buildId } }),
+      this.prismaService.testRun.findMany({
+        where: { buildId },
+        take,
+        skip,
+      }),
+    ]);
+    return {
+      data: list.map((item) => new TestRunDto(item)),
+      total,
+      take,
+      skip,
+    };
   }
 
   async findOne(

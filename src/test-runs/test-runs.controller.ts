@@ -10,6 +10,7 @@ import {
   Query,
   Post,
   ParseBoolPipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery, ApiSecurity, ApiOkResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
@@ -20,6 +21,7 @@ import { CommentDto } from '../shared/dto/comment.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
+import { PaginatedTestRunDto } from './dto/testRun-paginated.dto';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
@@ -27,11 +29,15 @@ export class TestRunsController {
   constructor(private testRunsService: TestRunsService) {}
 
   @Get()
-  @ApiQuery({ name: 'buildId', required: true })
+  @ApiOkResponse({ type: PaginatedTestRunDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  get(@Query('buildId', new ParseUUIDPipe()) buildId: string): Promise<TestRun[]> {
-    return this.testRunsService.findMany(buildId);
+  get(
+    @Query('buildId', new ParseUUIDPipe()) buildId: string,
+    @Query('take', new ParseIntPipe()) take: number,
+    @Query('skip', new ParseIntPipe()) skip: number
+  ): Promise<PaginatedTestRunDto> {
+    return this.testRunsService.findMany(buildId, take, skip);
   }
 
   @Get('recalculateDiff/:id')
