@@ -1,7 +1,7 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation, Baseline, Project} from '@prisma/client';
+import { TestVariation, Baseline, Project } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BaselineDataDto, convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
@@ -10,6 +10,7 @@ import { TestRunsService } from '../test-runs/test-runs.service';
 import { PNG } from 'pngjs';
 import { CreateTestRequestDto } from 'src/test-runs/dto/create-test-request.dto';
 import { BuildDto } from 'src/builds/dto/build.dto';
+import { getTestVariationUniqueData } from '../utils';
 
 @Injectable()
 export class TestVariationsService {
@@ -46,12 +47,8 @@ export class TestVariationsService {
       this.prismaService.testVariation.findMany({
         where: {
           projectId,
-          name: baselineData.name,
-          os: baselineData.os,
-          device: baselineData.device,
-          browser: baselineData.browser,
-          viewport: baselineData.viewport,
           branchName: project.mainBranchName,
+          ...getTestVariationUniqueData(baselineData),
         },
       }),
       // search current branch variation

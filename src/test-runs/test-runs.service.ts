@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
@@ -14,9 +14,12 @@ import { TestVariationsService } from '../test-variations/test-variations.servic
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { TestRunDto } from './dto/testRun.dto';
 import { PaginatedTestRunDto } from './dto/testRun-paginated.dto';
+import { getTestVariationUniqueData } from '../utils';
 
 @Injectable()
 export class TestRunsService {
+  private readonly logger: Logger = new Logger(TestRunsService.name);
+
   constructor(
     @Inject(forwardRef(() => TestVariationsService))
     private testVariationService: TestVariationsService,
@@ -81,7 +84,8 @@ export class TestRunsService {
     return new TestRunResultDto(testRun, testVariation);
   }
 
-  async approve(id: string, merge: boolean): Promise<TestRun> {
+  async approve(id: string, merge: boolean, autoApprove?: boolean): Promise<TestRun> {
+    const status = autoApprove ? TestStatus.autoApproved : TestStatus.approved;
     const testRun = await this.findOne(id);
 
     // save new baseline
@@ -92,7 +96,7 @@ export class TestRunsService {
       testRunUpdated = await this.prismaService.testRun.update({
         where: { id },
         data: {
-          status: TestStatus.approved,
+          status,
           testVariation: {
             update: {
               baselineName,
@@ -115,11 +119,7 @@ export class TestRunsService {
         data: {
           project: { connect: { id: testRun.testVariation.projectId } },
           baselineName,
-          name: testRun.name,
-          browser: testRun.browser,
-          device: testRun.device,
-          os: testRun.os,
-          viewport: testRun.viewport,
+          ...getTestVariationUniqueData(testRun),
           ignoreAreas: testRun.ignoreAreas,
           comment: testRun.comment,
           branchName: testRun.branchName,
@@ -141,7 +141,7 @@ export class TestRunsService {
       testRunUpdated = await this.prismaService.testRun.update({
         where: { id },
         data: {
-          status: TestStatus.approved,
+          status,
           testVariation: {
             connect: { id: newTestVariation.id },
           },
@@ -209,11 +209,7 @@ export class TestRunsService {
             id: createTestRequestDto.buildId,
           },
         },
-        name: testVariation.name,
-        browser: testVariation.browser,
-        device: testVariation.device,
-        os: testVariation.os,
-        viewport: testVariation.viewport,
+        ...getTestVariationUniqueData(testVariation),
         baselineName: testVariation.baselineName,
         baselineBranchName: testVariation.branchName,
         ignoreAreas: testVariation.ignoreAreas,
@@ -235,7 +231,10 @@ export class TestRunsService {
     }
     const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, ignoreAreas);
 
-    const testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
+    let testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
+
+    testRunWithResult = await this.tryAutoApproveBasedOnHistory(testVariation, testRunWithResult, image, ignoreAreas);
+
     this.eventsGateway.testRunCreated(testRunWithResult);
     return testRunWithResult;
   }
@@ -333,5 +332,71 @@ export class TestRunsService {
       }
     });
     return image.data;
+  }
+
+  private async tryAutoApproveBasedOnHistory(
+    testVariation: TestVariation,
+    testRun: TestRun,
+    image: PNG,
+    ignoreAreas: IgnoreAreaDto[]
+  ): Promise<TestRun> {
+    if (process.env.AUTO_APPROVE_BASED_ON_HISTORY && testRun.status !== TestStatus.ok) {
+      this.logger.log(`Try auto approve testRun: ${testRun.id}`);
+
+      const alreadyApprovedTestRuns: TestRun[] = await this.prismaService.testRun.findMany({
+        where: {
+          ...getTestVariationUniqueData(testVariation),
+          baselineName: testVariation.baselineName,
+          status: TestStatus.approved,
+        },
+      });
+
+      let autoApproved = false;
+      for (const approvedTestRun of alreadyApprovedTestRuns) {
+        this.logger.log(
+          `Found already approved baseline for testRun: ${testRun.id}
+        testVariation: ${approvedTestRun.testVariationId}
+        branch: ${approvedTestRun.branchName}
+        testRun: ${approvedTestRun.id}
+        build: ${approvedTestRun.buildId}`
+        );
+
+        const approvedTestVariation = await this.prismaService.testVariation.findUnique({
+          where: {
+            id: approvedTestRun.testVariationId,
+          },
+        });
+
+        const approvedBaseline = this.staticService.getImage(approvedTestVariation.baselineName);
+        const diffResult = this.getDiff(approvedBaseline, image, testRun.diffTollerancePercent, ignoreAreas);
+
+        if (diffResult.status === TestStatus.ok) {
+          autoApproved = true;
+          const baseline = await this.prismaService.baseline.findFirst({
+            where: {
+              testVariationId: approvedTestVariation.id,
+              baselineName: approvedTestVariation.baselineName,
+            },
+            include: {
+              testRun: true,
+            },
+          });
+          this.logger.log(
+            `Found reason to auto approve testRun: ${testRun.id}
+          testVariation: ${baseline.testVariationId}
+          baseline: ${baseline.id}
+          branch: ${approvedTestVariation.branchName}
+          testRun: ${baseline.testRunId}
+          build: ${baseline.testRun.buildId}`
+          );
+        }
+      }
+
+      if (autoApproved) {
+        return this.approve(testRun.id, false, true);
+      }
+      this.logger.log(`Cannot auto approve testRun: ${testRun.id}`);
+    }
+    return testRun;
   }
 }
