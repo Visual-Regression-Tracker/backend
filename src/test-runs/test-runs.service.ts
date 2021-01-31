@@ -15,6 +15,7 @@ import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { TestRunDto } from './dto/testRun.dto';
 import { PaginatedTestRunDto } from './dto/testRun-paginated.dto';
 import { getTestVariationUniqueData } from '../utils';
+import { BuildsService } from '../builds/builds.service';
 
 @Injectable()
 export class TestRunsService {
@@ -23,6 +24,8 @@ export class TestRunsService {
   constructor(
     @Inject(forwardRef(() => TestVariationsService))
     private testVariationService: TestVariationsService,
+    @Inject(forwardRef(() => BuildsService))
+    private buildsService: BuildsService,
     private prismaService: PrismaService,
     private staticService: StaticService,
     private eventsGateway: EventsGateway
@@ -150,6 +153,7 @@ export class TestRunsService {
     }
 
     this.eventsGateway.testRunUpdated(testRunUpdated);
+    this.buildsService.emitUpdateBuildEvent(testRunUpdated.buildId);
     return testRunUpdated;
   }
 
@@ -162,6 +166,7 @@ export class TestRunsService {
     });
 
     this.eventsGateway.testRunUpdated(testRun);
+    this.buildsService.emitUpdateBuildEvent(testRun.buildId);
     return testRun;
   }
 
@@ -188,6 +193,7 @@ export class TestRunsService {
     const updatedTestRun = await this.saveDiffResult(id, diffResult);
 
     this.eventsGateway.testRunUpdated(testRun);
+    this.buildsService.emitUpdateBuildEvent(testRun.buildId);
     return updatedTestRun;
   }
 
@@ -236,6 +242,7 @@ export class TestRunsService {
     testRunWithResult = await this.tryAutoApproveBasedOnHistory(testVariation, testRunWithResult, image, ignoreAreas);
 
     this.eventsGateway.testRunCreated(testRunWithResult);
+    this.buildsService.emitUpdateBuildEvent(testRunWithResult.buildId);
     return testRunWithResult;
   }
 
@@ -251,6 +258,7 @@ export class TestRunsService {
     ]);
 
     this.eventsGateway.testRunDeleted(testRun);
+    this.buildsService.emitUpdateBuildEvent(testRun.buildId);
     return testRun;
   }
 

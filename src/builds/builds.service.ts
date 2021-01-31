@@ -148,7 +148,11 @@ export class BuildsService {
     );
 
     const buildDto = new BuildDto(build);
-    this.eventsGateway.buildUpdated(buildDto);
     return buildDto;
+  }
+
+  async emitUpdateBuildEvent(buildId: string) {
+    const build = await this.findOne(buildId);
+    this.eventsGateway.buildUpdated(build);
   }
 }

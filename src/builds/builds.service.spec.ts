@@ -304,14 +304,13 @@ describe('BuildsService', () => {
   });
 
   it('approve', async () => {
-    const eventsBuildUpdatedMock = jest.fn();
     const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
     const testRunApproveMock = jest.fn().mockResolvedValueOnce({
       ...build.testRuns[0],
       status: TestStatus.approved,
     });
     mocked(BuildDto).mockReturnValueOnce(buildDto);
-    service = await initService({ eventsBuildUpdatedMock, buildFindUniqueMock, testRunApproveMock });
+    service = await initService({ buildFindUniqueMock, testRunApproveMock });
 
     await service.approve('someId', true);
 
@@ -337,6 +336,16 @@ describe('BuildsService', () => {
         },
       ],
     });
+  });
+
+  it('emitUpdateBuildEvent', async () => {
+    const eventsBuildUpdatedMock = jest.fn();
+    service = await initService({ eventsBuildUpdatedMock });
+    service.findOne = jest.fn().mockResolvedValueOnce(buildDto);
+
+    await service.emitUpdateBuildEvent('someId');
+
+    expect(service.findOne).toHaveBeenCalledWith('someId');
     expect(eventsBuildUpdatedMock).toHaveBeenCalledWith(buildDto);
   });
 });

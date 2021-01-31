@@ -15,6 +15,7 @@ import { CommentDto } from '../shared/dto/comment.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { TestRunDto } from './dto/testRun.dto';
+import { BuildsService } from '../builds/builds.service';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -32,13 +33,13 @@ const initService = async ({
   eventTestRunUpdatedMock = jest.fn(),
   eventTestRunCreatedMock = jest.fn(),
   eventTestRunDeletedMock = jest.fn(),
-  eventBuildUpdatedMock = jest.fn(),
   eventBuildCreatedMock = jest.fn(),
   testVariationCreateMock = jest.fn(),
   testVariationFindManyMock = jest.fn(),
   baselineCreateMock = jest.fn(),
   testVariationFindOrCreateMock = jest.fn(),
   projectFindOneMock = jest.fn(),
+  buildEmitUpdateBuildEventMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -80,7 +81,6 @@ const initService = async ({
           testRunUpdated: eventTestRunUpdatedMock,
           testRunCreated: eventTestRunCreatedMock,
           testRunDeleted: eventTestRunDeletedMock,
-          buildUpdated: eventBuildUpdatedMock,
           buildCreated: eventBuildCreatedMock,
         },
       },
@@ -88,6 +88,12 @@ const initService = async ({
         provide: TestVariationsService,
         useValue: {
           findOrCreate: testVariationFindOrCreateMock,
+        },
+      },
+      {
+        provide: BuildsService,
+        useValue: {
+          emitUpdateBuildEvent: buildEmitUpdateBuildEventMock,
         },
       },
     ],
@@ -130,9 +136,11 @@ describe('TestRunsService', () => {
     };
     const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
     const eventTestRunUpdatedMock = jest.fn();
+    const buildEmitUpdateBuildEventMock = jest.fn();
     service = await initService({
       testRunUpdateMock,
       eventTestRunUpdatedMock,
+      buildEmitUpdateBuildEventMock,
     });
 
     await service.reject(testRun.id);
@@ -144,6 +152,7 @@ describe('TestRunsService', () => {
       },
     });
     expect(eventTestRunUpdatedMock).toBeCalledWith(testRun);
+    expect(buildEmitUpdateBuildEventMock).toBeCalledWith(testRun.buildId);
   });
 
   describe('approve', () => {
@@ -178,6 +187,7 @@ describe('TestRunsService', () => {
         status: TestStatus.approved,
       });
       const eventTestRunUpdatedMock = jest.fn();
+      const buildEmitUpdateBuildEventMock = jest.fn();
       const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
       const baselineName = 'some baseline name';
       const saveImageMock = jest.fn().mockReturnValueOnce(baselineName);
@@ -192,6 +202,7 @@ describe('TestRunsService', () => {
         saveImageMock,
         getImageMock,
         eventTestRunUpdatedMock,
+        buildEmitUpdateBuildEventMock,
       });
       service.findOne = testRunFindOneMock;
 
@@ -225,6 +236,7 @@ describe('TestRunsService', () => {
         ...testRun,
         status: TestStatus.approved,
       });
+      expect(buildEmitUpdateBuildEventMock).toHaveBeenCalledWith(testRun.buildId);
     });
 
     it('should approve merge', async () => {
@@ -258,6 +270,7 @@ describe('TestRunsService', () => {
         status: TestStatus.approved,
       });
       const eventTestRunUpdatedMock = jest.fn();
+      const buildEmitUpdateBuildEventMock = jest.fn();
       const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
       const baselineName = 'some baseline name';
       const saveImageMock = jest.fn().mockReturnValueOnce(baselineName);
@@ -272,6 +285,7 @@ describe('TestRunsService', () => {
         saveImageMock,
         getImageMock,
         eventTestRunUpdatedMock,
+        buildEmitUpdateBuildEventMock,
       });
       service.findOne = testRunFindOneMock;
 
@@ -305,6 +319,7 @@ describe('TestRunsService', () => {
         ...testRun,
         status: TestStatus.approved,
       });
+      expect(buildEmitUpdateBuildEventMock).toBeCalledWith(testRun.buildId);
     });
 
     it('should approve different branch', async () => {
@@ -370,6 +385,7 @@ describe('TestRunsService', () => {
         status: TestStatus.approved,
       });
       const eventTestRunUpdatedMock = jest.fn();
+      const buildEmitUpdateBuildEventMock = jest.fn();
       const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
       const baselineName = 'some baseline name';
       const saveImageMock = jest.fn().mockReturnValueOnce(baselineName);
@@ -388,6 +404,7 @@ describe('TestRunsService', () => {
         testVariationCreateMock,
         baselineCreateMock,
         eventTestRunUpdatedMock,
+        buildEmitUpdateBuildEventMock,
       });
       service.findOne = testRunFindOneMock;
 
@@ -436,6 +453,7 @@ describe('TestRunsService', () => {
         ...testRun,
         status: TestStatus.approved,
       });
+      expect(buildEmitUpdateBuildEventMock).toBeCalledWith(testRun.buildId);
     });
   });
 
@@ -463,6 +481,7 @@ describe('TestRunsService', () => {
     };
     const testRunWithResult = {
       id: 'id',
+      buildId: 'buildId',
       imageName: 'imageName',
       baselineName: 'baselineName',
       diffTollerancePercent: 1,
@@ -502,7 +521,14 @@ describe('TestRunsService', () => {
     const baseline = 'baseline';
     const getImageMock = jest.fn().mockReturnValueOnce(baseline).mockReturnValueOnce(image);
     const eventTestRunCreatedMock = jest.fn();
-    service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventTestRunCreatedMock });
+    const buildEmitUpdateBuildEventMock = jest.fn();
+    service = await initService({
+      testRunCreateMock,
+      saveImageMock,
+      getImageMock,
+      eventTestRunCreatedMock,
+      buildEmitUpdateBuildEventMock,
+    });
     const diffResult: DiffResult = {
       status: TestStatus.unresolved,
       diffName: 'diff image name',
@@ -581,6 +607,7 @@ describe('TestRunsService', () => {
       },
     ]);
     expect(eventTestRunCreatedMock).toHaveBeenCalledWith(testRunWithResult);
+    expect(buildEmitUpdateBuildEventMock).toHaveBeenCalledWith(testRunWithResult.buildId);
     expect(result).toBe(testRunWithResult);
   });
 
@@ -718,6 +745,7 @@ describe('TestRunsService', () => {
     const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
     const testRunUpdateMock = jest.fn();
     const eventTestRunUpdatedMock = jest.fn();
+    const buildEmitUpdateBuildEventMock = jest.fn();
     const baselineMock = 'baseline image';
     const imageeMock = 'image';
     const getImageMock = jest.fn().mockReturnValueOnce(baselineMock).mockReturnValueOnce(imageeMock);
@@ -731,6 +759,7 @@ describe('TestRunsService', () => {
       eventTestRunUpdatedMock,
       getImageMock,
       deleteImageMock,
+      buildEmitUpdateBuildEventMock,
     });
     service.findOne = testRunFindOneMock;
     service.getDiff = getDiffMock;
@@ -748,6 +777,7 @@ describe('TestRunsService', () => {
       JSON.parse(testRun.ignoreAreas)
     );
     expect(eventTestRunUpdatedMock).toBeCalledWith(testRun);
+    expect(buildEmitUpdateBuildEventMock).toBeCalledWith(testRun.buildId);
   });
 
   describe('saveDiffResult', () => {
@@ -854,6 +884,7 @@ describe('TestRunsService', () => {
   it('delete', async () => {
     const id = 'some id';
     const testRun = {
+      buildId: 'buildId',
       diffName: 'diffName',
       imageName: 'imageName',
     };
@@ -861,10 +892,12 @@ describe('TestRunsService', () => {
     const deleteImageMock = jest.fn();
     const testRunDeleteMock = jest.fn();
     const eventTestRunDeletedMock = jest.fn();
+    const buildEmitUpdateBuildEventMock = jest.fn();
     service = await initService({
       deleteImageMock,
       testRunDeleteMock,
       eventTestRunDeletedMock,
+      buildEmitUpdateBuildEventMock,
     });
     service.findOne = findOneMock;
 
@@ -877,6 +910,7 @@ describe('TestRunsService', () => {
       where: { id },
     });
     expect(eventTestRunDeletedMock).toHaveBeenCalledWith(testRun);
+    expect(buildEmitUpdateBuildEventMock).toHaveBeenCalledWith(testRun.buildId);
   });
 
   it('updateIgnoreAreas', async () => {
