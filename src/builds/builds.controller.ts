@@ -25,7 +25,7 @@ import { PaginatedBuildDto } from './dto/build-paginated.dto';
 @Controller('builds')
 @ApiTags('builds')
 export class BuildsController {
-  constructor(private buildsService: BuildsService) {}
+  constructor(private buildsService: BuildsService) { }
 
   @Get()
   @ApiOkResponse({ type: PaginatedBuildDto })
@@ -67,8 +67,8 @@ export class BuildsController {
   @ApiSecurity('api_key')
   @ApiBearerAuth()
   @UseGuards(MixedGuard)
-  stop(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
-    return this.buildsService.stop(id);
+  update(@Param('id', new ParseUUIDPipe()) id: string,@Body() body: {}): Promise<BuildDto> {
+    return this.buildsService.update(id, body);
   }
 
   @Patch(':id/approve')

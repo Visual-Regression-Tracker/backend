@@ -1,7 +1,7 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build, TestStatus } from '@prisma/client';
+import { Build, Prisma, TestStatus } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
@@ -17,7 +17,7 @@ export class BuildsService {
     private testRunsService: TestRunsService,
     @Inject(forwardRef(() => ProjectsService))
     private projectService: ProjectsService
-  ) {}
+  ) { }
 
   async findOne(id: string): Promise<BuildDto> {
     return this.prismaService.build
@@ -99,18 +99,18 @@ export class BuildsService {
     return new BuildDto(build);
   }
 
-  async stop(id: string): Promise<BuildDto> {
+  async update(id: string, body: {}): Promise<BuildDto> {
     const build = await this.prismaService.build.update({
       where: { id },
       include: {
         testRuns: true,
       },
-      data: {
-        isRunning: false,
-      },
+      data: body as Prisma.BuildUpdateInput
     });
     const buildDto = new BuildDto(build);
-    this.eventsGateway.buildFinished(buildDto);
+    if(!buildDto.isRunning){
+      this.eventsGateway.buildFinished(buildDto);
+    }
     return buildDto;
   }
 
