@@ -288,16 +288,14 @@ describe('BuildsService', () => {
     mocked(BuildDto).mockReturnValueOnce(buildDto);
     service = await initService({ buildUpdateMock, eventsBuildFinishedMock });
 
-    const result = await service.stop(id);
+    const result = await service.update(id, { "isRunning": false });
 
     expect(buildUpdateMock).toHaveBeenCalledWith({
       where: { id },
       include: {
         testRuns: true,
       },
-      data: {
-        isRunning: false,
-      },
+      data: { "isRunning": false }
     });
     expect(eventsBuildFinishedMock).toHaveBeenCalledWith(buildDto);
     expect(result).toBe(buildDto);

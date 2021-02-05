@@ -99,7 +99,7 @@ export class BuildsService {
     return new BuildDto(build);
   }
 
-  async update(id: string, body: {}): Promise<BuildDto> {
+  async update(id: string, body: Record<string, unknown>): Promise<BuildDto> {
     const build = await this.prismaService.build.update({
       where: { id },
       include: {
@@ -108,9 +108,7 @@ export class BuildsService {
       data: body as Prisma.BuildUpdateInput
     });
     const buildDto = new BuildDto(build);
-    if(!buildDto.isRunning){
-      this.eventsGateway.buildFinished(buildDto);
-    }
+    this.eventsGateway.buildUpdated(buildDto);
     return buildDto;
   }
 

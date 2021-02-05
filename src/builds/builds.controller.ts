@@ -67,7 +67,7 @@ export class BuildsController {
   @ApiSecurity('api_key')
   @ApiBearerAuth()
   @UseGuards(MixedGuard)
-  update(@Param('id', new ParseUUIDPipe()) id: string,@Body() body: {}): Promise<BuildDto> {
+  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: Record<string, unknown>): Promise<BuildDto> {
     return this.buildsService.update(id, body);
   }
 
