@@ -21,6 +21,7 @@ import { Build } from '@prisma/client';
 import { BuildDto } from './dto/build.dto';
 import { MixedGuard } from '../auth/guards/mixed.guard';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
+import { ModifyBuildDto } from './dto/build-modify.dto';
 
 @Controller('builds')
 @ApiTags('builds')
@@ -67,8 +68,8 @@ export class BuildsController {
   @ApiSecurity('api_key')
   @ApiBearerAuth()
   @UseGuards(MixedGuard)
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: Record<string, unknown>): Promise<BuildDto> {
-    return this.buildsService.update(id, body);
+  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() modifyBuildDto: ModifyBuildDto): Promise<BuildDto> {
+    return this.buildsService.update(id, modifyBuildDto);
   }
 
   @Patch(':id/approve')

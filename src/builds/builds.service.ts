@@ -1,12 +1,13 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build, Prisma, TestStatus } from '@prisma/client';
+import { Build, TestStatus } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
+import { ModifyBuildDto } from './dto/build-modify.dto';
 
 @Injectable()
 export class BuildsService {
@@ -99,13 +100,13 @@ export class BuildsService {
     return new BuildDto(build);
   }
 
-  async update(id: string, body: Record<string, unknown>): Promise<BuildDto> {
+  async update(id: string, modifyBuildDto: ModifyBuildDto): Promise<BuildDto> {
     const build = await this.prismaService.build.update({
       where: { id },
       include: {
         testRuns: true,
       },
-      data: body as Prisma.BuildUpdateInput
+      data: modifyBuildDto
     });
     const buildDto = new BuildDto(build);
     this.eventsGateway.buildUpdated(buildDto);
