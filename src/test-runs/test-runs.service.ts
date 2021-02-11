@@ -5,7 +5,7 @@ import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestRun, TestStatus, TestVariation } from '@prisma/client';
+import { Baseline, TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
@@ -233,6 +233,11 @@ export class TestRunsService {
 
     let testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
 
+    testRunWithResult = await this.tryAutoApproveNewFeatureBranchBasedOnHistory(
+      testVariation,
+      testRunWithResult,
+      ignoreAreas
+    );
     testRunWithResult = await this.tryAutoApproveBasedOnHistory(testVariation, testRunWithResult, image, ignoreAreas);
 
     this.eventsGateway.testRunCreated(testRunWithResult);
@@ -334,6 +339,31 @@ export class TestRunsService {
     return image.data;
   }
 
+  private async tryAutoApproveNewFeatureBranchBasedOnHistory(
+    testVariation: TestVariation,
+    testRun: TestRun,
+    ignoreAreas: IgnoreAreaDto[]
+  ): Promise<TestRun> {
+    if (
+      !process.env.AUTO_APPROVE_BASED_ON_HISTORY ||
+      testRun.status === TestStatus.ok ||
+      testRun.branchName === testRun.baselineBranchName
+    ) {
+      return testRun;
+    }
+
+    this.logger.log(`Try pass based on history for testRun: ${testRun.id}`);
+    const testVariationHistory = await this.testVariationService.getDetails(testVariation.id);
+    for (const baseline of testVariationHistory.baselines) {
+      if (this.shouldAutoApprove(baseline, testRun, ignoreAreas)) {
+        return this.approve(testRun.id, false, true);
+      }
+    }
+
+    this.logger.log(`Cannot auto approve FEATURE testRun: ${testRun.id}`);
+    return testRun;
+  }
+
   private async tryAutoApproveBasedOnHistory(
     testVariation: TestVariation,
     testRun: TestRun,
@@ -398,5 +428,16 @@ export class TestRunsService {
       this.logger.log(`Cannot auto approve testRun: ${testRun.id}`);
     }
     return testRun;
+  }
+
+  private shouldAutoApprove(baseline: Baseline, testRun: TestRun, ignoreAreas: Array<IgnoreAreaDto>): boolean {
+    const approvedImage = this.staticService.getImage(baseline.baselineName);
+    const image = this.staticService.getImage(testRun.imageName);
+    const diffResult = this.getDiff(approvedImage, image, testRun.diffTollerancePercent, ignoreAreas);
+
+    if (diffResult.status === TestStatus.ok) {
+      this.logger.log(`TestRun ${testRun.id} could be approved based on Baseline ${baseline.id}`);
+      return true;
+    }
   }
 }
