@@ -6,10 +6,8 @@ import { haveTestRunCreated, haveUserLogged } from './preconditions';
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { ProjectsService } from '../src/projects/projects.service';
-import { Project, TestStatus } from '../prisma/node_modules/@prisma/client';
+import { Project, TestStatus } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
-import { BuildDto } from '../src/builds/dto/build.dto';
-import { TestVariationsService } from '../src/test-variations/test-variations.service';
 
 jest.setTimeout(20000);
 

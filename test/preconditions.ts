@@ -5,7 +5,6 @@ import request, { Test } from 'supertest';
 import { BuildsService } from 'src/builds/builds.service';
 import { TestRunsService } from 'src/test-runs/test-runs.service';
 import { readFileSync } from 'fs';
-import { TestRun } from 'prisma/node_modules/@prisma/client';
 import { TestRunResultDto } from 'src/test-runs/dto/testRunResult.dto';
 
 export const generateUser = (
