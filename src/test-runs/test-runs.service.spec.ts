@@ -514,8 +514,10 @@ describe('TestRunsService', () => {
     service.getDiff = getDiffMock;
     const saveDiffResultMock = jest.fn();
     service.saveDiffResult = saveDiffResultMock.mockResolvedValueOnce(testRunWithResult);
-    const tryAutoApproveBasedOnHistory = jest.fn();
-    service['tryAutoApproveBasedOnHistory'] = tryAutoApproveBasedOnHistory.mockResolvedValueOnce(testRunWithResult);
+    const tryAutoApproveByPastBaselines = jest.fn();
+    service['tryAutoApproveByPastBaselines'] = tryAutoApproveByPastBaselines.mockResolvedValueOnce(testRunWithResult);
+    const tryAutoApproveByNewBaselines = jest.fn();
+    service['tryAutoApproveByNewBaselines'] = tryAutoApproveByNewBaselines.mockResolvedValueOnce(testRunWithResult);
 
     const result = await service.create(testVariation, createTestRequestDto);
 
@@ -566,7 +568,21 @@ describe('TestRunsService', () => {
       },
     ]);
     expect(saveDiffResultMock).toHaveBeenCalledWith(testRun.id, diffResult);
-    expect(tryAutoApproveBasedOnHistory).toHaveBeenCalledWith(testVariation, testRunWithResult, image, [
+    expect(tryAutoApproveByPastBaselines).toHaveBeenCalledWith(testVariation, testRunWithResult, [
+      {
+        x: 3,
+        y: 4,
+        width: 500,
+        height: 600,
+      },
+      {
+        x: 1,
+        y: 2,
+        width: 100,
+        height: 200,
+      },
+    ]);
+    expect(tryAutoApproveByNewBaselines).toHaveBeenCalledWith(testVariation, testRunWithResult, [
       {
         x: 3,
         y: 4,
