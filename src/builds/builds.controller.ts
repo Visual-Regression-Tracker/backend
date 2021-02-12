@@ -21,11 +21,12 @@ import { Build } from '@prisma/client';
 import { BuildDto } from './dto/build.dto';
 import { MixedGuard } from '../auth/guards/mixed.guard';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
+import { ModifyBuildDto } from './dto/build-modify.dto';
 
 @Controller('builds')
 @ApiTags('builds')
 export class BuildsController {
-  constructor(private buildsService: BuildsService) {}
+  constructor(private buildsService: BuildsService) { }
 
   @Get()
   @ApiOkResponse({ type: PaginatedBuildDto })
@@ -67,8 +68,12 @@ export class BuildsController {
   @ApiSecurity('api_key')
   @ApiBearerAuth()
   @UseGuards(MixedGuard)
-  stop(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
-    return this.buildsService.stop(id);
+  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() modifyBuildDto?: ModifyBuildDto): Promise<BuildDto> {
+    //In future, no or empty body will do nothing as this check will be removed. It will expect a proper body to perform any patch.
+    if (modifyBuildDto === null || Object.keys(modifyBuildDto).length === 0) {
+      modifyBuildDto.isRunning = false;
+    }
+    return this.buildsService.update(id, modifyBuildDto);
   }
 
   @Patch(':id/approve')

@@ -7,6 +7,7 @@ import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
+import { ModifyBuildDto } from './dto/build-modify.dto';
 
 @Injectable()
 export class BuildsService {
@@ -17,7 +18,7 @@ export class BuildsService {
     private testRunsService: TestRunsService,
     @Inject(forwardRef(() => ProjectsService))
     private projectService: ProjectsService
-  ) {}
+  ) { }
 
   async findOne(id: string): Promise<BuildDto> {
     return this.prismaService.build
@@ -99,18 +100,16 @@ export class BuildsService {
     return new BuildDto(build);
   }
 
-  async stop(id: string): Promise<BuildDto> {
+  async update(id: string, modifyBuildDto: ModifyBuildDto): Promise<BuildDto> {
     const build = await this.prismaService.build.update({
       where: { id },
       include: {
         testRuns: true,
       },
-      data: {
-        isRunning: false,
-      },
+      data: modifyBuildDto
     });
     const buildDto = new BuildDto(build);
-    this.eventsGateway.buildFinished(buildDto);
+    this.eventsGateway.buildUpdated(buildDto);
     return buildDto;
   }
 
