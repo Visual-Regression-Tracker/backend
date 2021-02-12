@@ -21,7 +21,7 @@ export class TestVariationsService {
     private testRunsService: TestRunsService,
     @Inject(forwardRef(() => BuildsService))
     private buildsService: BuildsService
-  ) {}
+  ) { }
 
   async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
     return this.prismaService.testVariation.findUnique({
@@ -138,7 +138,7 @@ export class TestVariationsService {
     });
 
     // stop build
-    return this.buildsService.stop(build.id);
+    return this.buildsService.update(build.id, { "isRunning": false });
   }
 
   async delete(id: string): Promise<TestVariation> {

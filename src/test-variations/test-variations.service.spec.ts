@@ -22,7 +22,7 @@ const initModule = async ({
   baselineDeleteMock = jest.fn(),
   projectFindUniqueMock = jest.fn(),
   buildCreateMock = jest.fn(),
-  buildStopMock = jest.fn(),
+  buildUpdateMock = jest.fn(),
   testRunCreateMock = jest.fn(),
   testRunFindMany = jest.fn(),
   testRunDeleteMock = jest.fn(),
@@ -41,7 +41,7 @@ const initModule = async ({
         provide: BuildsService,
         useValue: {
           create: buildCreateMock,
-          stop: buildStopMock,
+          update: buildUpdateMock,
         },
       },
       {
@@ -417,11 +417,11 @@ describe('TestVariationsService', () => {
       .mockResolvedValueOnce(testVariationMainBranch)
       .mockResolvedValueOnce(testVariationMainBranch);
     const testRunCreateMock = jest.fn();
-    const buildStopMock = jest.fn();
+    const buildUpdateMock = jest.fn();
     const service = await initModule({
       projectFindUniqueMock,
       buildCreateMock,
-      buildStopMock,
+      buildUpdateMock,
       testRunCreateMock,
       variationFindManyMock,
       getImageMock,
@@ -466,7 +466,7 @@ describe('TestVariationsService', () => {
       ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
     });
     expect(testRunCreateMock).toHaveBeenCalledTimes(2);
-    expect(buildStopMock).toHaveBeenCalledWith(build.id);
+    expect(buildUpdateMock).toHaveBeenCalledWith(build.id, { "isRunning": false });
   });
 
   it('delete', async () => {

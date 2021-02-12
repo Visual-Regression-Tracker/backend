@@ -23,7 +23,6 @@ const initService = async ({
   testRunApproveMock = jest.fn(),
   eventsBuildUpdatedMock = jest.fn(),
   eventsBuildCreatedMock = jest.fn(),
-  eventsBuildFinishedMock = jest.fn(),
   projectFindOneMock = jest.fn(),
   projectUpdateMock = jest.fn(),
 }) => {
@@ -58,8 +57,7 @@ const initService = async ({
         provide: EventsGateway,
         useValue: {
           buildUpdated: eventsBuildUpdatedMock,
-          buildCreated: eventsBuildCreatedMock,
-          buildFinished: eventsBuildFinishedMock,
+          buildCreated: eventsBuildCreatedMock
         },
       },
       {
@@ -284,22 +282,20 @@ describe('BuildsService', () => {
   it('should stop', async () => {
     const id = 'some id';
     const buildUpdateMock = jest.fn();
-    const eventsBuildFinishedMock = jest.fn();
+    const eventsBuildUpdatedMock = jest.fn();
     mocked(BuildDto).mockReturnValueOnce(buildDto);
-    service = await initService({ buildUpdateMock, eventsBuildFinishedMock });
+    service = await initService({ buildUpdateMock, eventsBuildUpdatedMock });
 
-    const result = await service.stop(id);
+    const result = await service.update(id, { "isRunning": false });
 
     expect(buildUpdateMock).toHaveBeenCalledWith({
       where: { id },
       include: {
         testRuns: true,
       },
-      data: {
-        isRunning: false,
-      },
+      data: { "isRunning": false }
     });
-    expect(eventsBuildFinishedMock).toHaveBeenCalledWith(buildDto);
+    expect(eventsBuildUpdatedMock).toHaveBeenCalledWith(buildDto);
     expect(result).toBe(buildDto);
   });
 
