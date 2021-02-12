@@ -234,7 +234,7 @@ export class TestRunsService {
     let testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
 
     testRunWithResult = await this.tryAutoApproveByPastBaselines(testVariation, testRunWithResult, ignoreAreas);
-    testRunWithResult = await this.tryAutoApproveByNewBaselines(testVariation, testRunWithResult, image, ignoreAreas);
+    testRunWithResult = await this.tryAutoApproveByNewBaselines(testVariation, testRunWithResult, ignoreAreas);
 
     this.eventsGateway.testRunCreated(testRunWithResult);
     return testRunWithResult;
@@ -355,7 +355,7 @@ export class TestRunsService {
       return testRun;
     }
 
-    this.logger.log(`Try pass based on history for testRun: ${testRun.id}`);
+    this.logger.log(`Try AutoApproveByPastBaselines testRun: ${testRun.id}`);
     const testVariationHistory = await this.testVariationService.getDetails(testVariation.id);
     // TODO: skip first baseline as it was used by default in general flow
     for (const baseline of testVariationHistory.baselines) {
@@ -364,7 +364,6 @@ export class TestRunsService {
       }
     }
 
-    this.logger.log(`Cannot auto approve FEATURE testRun: ${testRun.id}`);
     return testRun;
   }
 
@@ -381,66 +380,30 @@ export class TestRunsService {
   private async tryAutoApproveByNewBaselines(
     testVariation: TestVariation,
     testRun: TestRun,
-    image: PNG,
     ignoreAreas: IgnoreAreaDto[]
   ): Promise<TestRun> {
-    if (process.env.AUTO_APPROVE_BASED_ON_HISTORY && testRun.status !== TestStatus.ok) {
-      this.logger.log(`Try auto approve testRun: ${testRun.id}`);
+    if (!process.env.AUTO_APPROVE_BASED_ON_HISTORY || testRun.status === TestStatus.ok) {
+      return testRun;
+    }
+    this.logger.log(`Try AutoApproveByNewBaselines testRun: ${testRun.id}`);
 
-      const alreadyApprovedTestRuns: TestRun[] = await this.prismaService.testRun.findMany({
-        where: {
-          ...getTestVariationUniqueData(testVariation),
-          baselineName: testVariation.baselineName,
-          status: TestStatus.approved,
-        },
-      });
+    const alreadyApprovedTestRuns: TestRun[] = await this.prismaService.testRun.findMany({
+      where: {
+        ...getTestVariationUniqueData(testVariation),
+        baselineName: testVariation.baselineName,
+        status: TestStatus.approved,
+      },
+    });
 
-      let autoApproved = false;
-      for (const approvedTestRun of alreadyApprovedTestRuns) {
-        this.logger.log(
-          `Found already approved baseline for testRun: ${testRun.id}
-        testVariation: ${approvedTestRun.testVariationId}
-        branch: ${approvedTestRun.branchName}
-        testRun: ${approvedTestRun.id}
-        build: ${approvedTestRun.buildId}`
-        );
+    for (const approvedTestRun of alreadyApprovedTestRuns) {
+      const approvedTestVariation = await this.testVariationService.getDetails(approvedTestRun.testVariationId);
+      const baseline = approvedTestVariation.baselines.shift();
 
-        const approvedTestVariation = await this.prismaService.testVariation.findUnique({
-          where: {
-            id: approvedTestRun.testVariationId,
-          },
-        });
-
-        const approvedBaseline = this.staticService.getImage(approvedTestVariation.baselineName);
-        const diffResult = this.getDiff(approvedBaseline, image, testRun.diffTollerancePercent, ignoreAreas);
-
-        if (diffResult.status === TestStatus.ok) {
-          autoApproved = true;
-          const baseline = await this.prismaService.baseline.findFirst({
-            where: {
-              testVariationId: approvedTestVariation.id,
-              baselineName: approvedTestVariation.baselineName,
-            },
-            include: {
-              testRun: true,
-            },
-          });
-          this.logger.log(
-            `Found reason to auto approve testRun: ${testRun.id}
-          testVariation: ${baseline.testVariationId}
-          baseline: ${baseline.id}
-          branch: ${approvedTestVariation.branchName}
-          testRun: ${baseline.testRunId}
-          build: ${baseline.testRun.buildId}`
-          );
-        }
-      }
-
-      if (autoApproved) {
+      if (this.shouldAutoApprove(baseline, testRun, ignoreAreas)) {
         return this.approve(testRun.id, false, true);
       }
-      this.logger.log(`Cannot auto approve testRun: ${testRun.id}`);
     }
+
     return testRun;
   }
 
@@ -450,7 +413,7 @@ export class TestRunsService {
     const diffResult = this.getDiff(approvedImage, image, testRun.diffTollerancePercent, ignoreAreas);
 
     if (diffResult.status === TestStatus.ok) {
-      this.logger.log(`TestRun ${testRun.id} could be approved based on Baseline ${baseline.id}`);
+      this.logger.log(`TestRun ${testRun.id} could be auto approved based on Baseline ${baseline.id}`);
       return true;
     }
   }
