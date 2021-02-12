@@ -357,8 +357,8 @@ export class TestRunsService {
 
     this.logger.log(`Try AutoApproveByPastBaselines testRun: ${testRun.id}`);
     const testVariationHistory = await this.testVariationService.getDetails(testVariation.id);
-    // TODO: skip first baseline as it was used by default in general flow
-    for (const baseline of testVariationHistory.baselines) {
+    // skip first baseline as it was used by default in general flow
+    for (const baseline of testVariationHistory.baselines.slice(1)) {
       if (this.shouldAutoApprove(baseline, testRun, ignoreAreas)) {
         return this.approve(testRun.id, false, true);
       }
