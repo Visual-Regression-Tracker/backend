@@ -233,12 +233,8 @@ export class TestRunsService {
 
     let testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
 
-    testRunWithResult = await this.tryAutoApproveNewFeatureBranchBasedOnHistory(
-      testVariation,
-      testRunWithResult,
-      ignoreAreas
-    );
-    testRunWithResult = await this.tryAutoApproveBasedOnHistory(testVariation, testRunWithResult, image, ignoreAreas);
+    testRunWithResult = await this.tryAutoApproveByPastBaselines(testVariation, testRunWithResult, ignoreAreas);
+    testRunWithResult = await this.tryAutoApproveByNewBaselines(testVariation, testRunWithResult, image, ignoreAreas);
 
     this.eventsGateway.testRunCreated(testRunWithResult);
     return testRunWithResult;
@@ -339,7 +335,14 @@ export class TestRunsService {
     return image.data;
   }
 
-  private async tryAutoApproveNewFeatureBranchBasedOnHistory(
+  /**
+   * Reason: not rebased code from feature branch is compared agains new main branch baseline thus diff is expected
+   * Tries to find past baseline in main branch and autoApprove in case matched
+   * @param testVariation
+   * @param testRun
+   * @param ignoreAreas
+   */
+  private async tryAutoApproveByPastBaselines(
     testVariation: TestVariation,
     testRun: TestRun,
     ignoreAreas: IgnoreAreaDto[]
@@ -354,6 +357,7 @@ export class TestRunsService {
 
     this.logger.log(`Try pass based on history for testRun: ${testRun.id}`);
     const testVariationHistory = await this.testVariationService.getDetails(testVariation.id);
+    // TODO: skip first baseline as it was used by default in general flow
     for (const baseline of testVariationHistory.baselines) {
       if (this.shouldAutoApprove(baseline, testRun, ignoreAreas)) {
         return this.approve(testRun.id, false, true);
@@ -364,7 +368,17 @@ export class TestRunsService {
     return testRun;
   }
 
-  private async tryAutoApproveBasedOnHistory(
+  /**
+   * Reason: branch got another one merged thus diff is expected
+   * Tries to find latest baseline in test variation
+   * that has already approved test agains the same baseline image
+   * and autoApprove in case matched
+   * @param testVariation
+   * @param testRun
+   * @param image
+   * @param ignoreAreas
+   */
+  private async tryAutoApproveByNewBaselines(
     testVariation: TestVariation,
     testRun: TestRun,
     image: PNG,

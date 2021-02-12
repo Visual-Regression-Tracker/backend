@@ -51,7 +51,7 @@ describe('TestRuns (e2e)', () => {
   describe('POST /', () => {
     const image_v1 = './test/image.png';
     const image_v2 = './test/image_edited.png';
-    it('Auto approve feature branch based on history', async () => {
+    it('Auto approve not rebased feature branch', async () => {
       const testRun1 = await haveTestRunCreated(
         buildsService,
         testRunsService,
@@ -70,6 +70,38 @@ describe('TestRuns (e2e)', () => {
       await testRunsService.approve(testRun2.id, false, false);
 
       const testRun = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
+
+      expect(testRun.status).toBe(TestStatus.autoApproved);
+    });
+
+    it('Auto approve merged feature into feature branch', async () => {
+      const testRun1 = await haveTestRunCreated(buildsService, testRunsService, project.id, 'feature1', image_v1);
+      await testRunsService.approve(testRun1.id, false, false);
+
+      const testRun = await haveTestRunCreated(buildsService, testRunsService, project.id, 'feature2', image_v1);
+
+      expect(testRun.status).toBe(TestStatus.autoApproved);
+    });
+
+    it('Auto approve merged feature into main branch', async () => {
+      const testRun1 = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v1
+      );
+      await testRunsService.approve(testRun1.id, false, false);
+      const testRun2 = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v2);
+      await testRunsService.approve(testRun2.id, false, false);
+
+      const testRun = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v2
+      );
 
       expect(testRun.status).toBe(TestStatus.autoApproved);
     });
