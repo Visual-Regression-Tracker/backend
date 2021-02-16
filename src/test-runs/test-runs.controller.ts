@@ -21,7 +21,7 @@ import { CommentDto } from '../shared/dto/comment.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
-import { PaginatedTestRunDto } from './dto/testRun-paginated.dto';
+import { TestRunDto } from './dto/testRun.dto';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
@@ -29,15 +29,11 @@ export class TestRunsController {
   constructor(private testRunsService: TestRunsService) {}
 
   @Get()
-  @ApiOkResponse({ type: PaginatedTestRunDto })
+  @ApiOkResponse({ type: [TestRunDto] })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  get(
-    @Query('buildId', new ParseUUIDPipe()) buildId: string,
-    @Query('take', new ParseIntPipe()) take: number,
-    @Query('skip', new ParseIntPipe()) skip: number
-  ): Promise<PaginatedTestRunDto> {
-    return this.testRunsService.findMany(buildId, take, skip);
+  get(@Query('buildId', new ParseUUIDPipe()) buildId: string): Promise<TestRunDto[]> {
+    return this.testRunsService.findMany(buildId);
   }
 
   @Get('recalculateDiff/:id')
