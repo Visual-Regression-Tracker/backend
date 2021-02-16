@@ -9,10 +9,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     let status: number;
-    try {
-      status = exception.getStatus();
-    } catch {
-      status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let message = exception.message;
+    if (message.includes("Unique constraint failed on the fields")) {
+      message = (message.includes("build.update()")) ? "There is already a build with this ci build id."
+        : (message.includes("project.create()")) ? "Project exists with this name."
+          : (message.includes("user.create()")) ? "This user already exists." : message;
+
+      status = HttpStatus.BAD_REQUEST
+    } else {
+      try {
+        status = exception.getStatus();
+      } catch {
+        status = HttpStatus.INTERNAL_SERVER_ERROR;
+      }
     }
 
     Logger.error(exception, exception.stack);
@@ -20,7 +29,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json({
       path: request.url,
       name: exception.name,
-      message: exception.message,
+      message: message,
       exception: exception,
       stack: exception.stack,
     });
