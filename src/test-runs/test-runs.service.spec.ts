@@ -843,28 +843,16 @@ describe('TestRunsService', () => {
       merge: false,
     };
     const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
-    const testRunCountMock = jest.fn().mockResolvedValueOnce(30);
     service = await initService({
       testRunFindManyMock,
-      testRunCountMock,
     });
 
-    const result = await service.findMany(buildId, 10, 1);
+    const result = await service.findMany(buildId);
 
     expect(testRunFindManyMock).toHaveBeenCalledWith({
       where: { buildId },
-      take: 10,
-      skip: 1,
     });
-    expect(testRunCountMock).toHaveBeenCalledWith({
-      where: { buildId },
-    });
-    expect(result).toEqual({
-      data: [new TestRunDto(testRun)],
-      take: 10,
-      skip: 1,
-      total: 30,
-    });
+    expect(result).toEqual([new TestRunDto(testRun)]);
   });
 
   it('delete', async () => {

@@ -28,21 +28,11 @@ export class TestRunsService {
     private eventsGateway: EventsGateway
   ) {}
 
-  async findMany(buildId: string, take: number, skip: number): Promise<PaginatedTestRunDto> {
-    const [total, list] = await Promise.all([
-      this.prismaService.testRun.count({ where: { buildId } }),
-      this.prismaService.testRun.findMany({
-        where: { buildId },
-        take,
-        skip,
-      }),
-    ]);
-    return {
-      data: list.map((item) => new TestRunDto(item)),
-      total,
-      take,
-      skip,
-    };
+  async findMany(buildId: string): Promise<TestRunDto[]> {
+    const list = await this.prismaService.testRun.findMany({
+      where: { buildId },
+    });
+    return list.map((item) => new TestRunDto(item));
   }
 
   async findOne(
