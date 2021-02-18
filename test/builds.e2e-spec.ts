@@ -10,6 +10,8 @@ import { Project } from '@prisma/client';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 
+jest.useFakeTimers();
+
 describe('Builds (e2e)', () => {
   let app: INestApplication;
   let buildsService: BuildsService;
@@ -44,6 +46,7 @@ describe('Builds (e2e)', () => {
   });
 
   afterAll(async () => {
+    jest.runOnlyPendingTimers();
     await app.close();
   });
 

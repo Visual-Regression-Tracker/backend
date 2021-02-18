@@ -381,6 +381,9 @@ export class TestRunsService {
         ...getTestVariationUniqueData(testVariation),
         baselineName: testVariation.baselineName,
         status: TestStatus.approved,
+        testVariation: {
+          projectId: testVariation.projectId,
+        },
       },
     });
 
