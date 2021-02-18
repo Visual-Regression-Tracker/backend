@@ -9,7 +9,6 @@ import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { DiffResult } from './diffResult';
-import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
@@ -104,6 +103,31 @@ describe('TestRunsService', () => {
   let service: TestRunsService;
   const ignoreAreas = [{ x: 1, y: 2, width: 10, height: 20 }];
   const tempIgnoreAreas = [{ x: 3, y: 4, width: 30, height: 40 }];
+  const baseTestRun: TestRun = {
+    id: 'id',
+    imageName: 'imageName',
+    diffName: 'diffName',
+    baselineName: 'baselineName',
+    diffPercent: 1,
+    pixelMisMatchCount: 10,
+    diffTollerancePercent: 12,
+    status: TestStatus.new,
+    buildId: 'buildId',
+    testVariationId: 'testVariationId',
+    updatedAt: new Date(),
+    createdAt: new Date(),
+    name: 'test run name',
+    ignoreAreas: '[]',
+    tempIgnoreAreas: '[]',
+    browser: 'browser',
+    device: 'device',
+    os: 'os',
+    viewport: 'viewport',
+    branchName: 'develop',
+    baselineBranchName: 'master',
+    comment: 'some comment',
+    merge: false,
+  };
 
   it('findOne', async () => {
     const id = 'some id';
@@ -529,8 +553,6 @@ describe('TestRunsService', () => {
     const result = await service.create(testVariation, createTestRequestDto);
 
     expect(saveImageMock).toHaveBeenCalledWith('screenshot', Buffer.from(createTestRequestDto.imageBase64, 'base64'));
-    expect(getImageMock).toHaveBeenNthCalledWith(1, testVariation.baselineName);
-    expect(getImageMock).toHaveBeenNthCalledWith(2, imageName);
     expect(testRunCreateMock).toHaveBeenCalledWith({
       data: {
         imageName,
@@ -560,51 +582,7 @@ describe('TestRunsService', () => {
         status: TestStatus.new,
       },
     });
-    expect(getDiffMock).toHaveBeenCalledWith(baseline, image, testRun.diffTollerancePercent, [
-      {
-        x: 3,
-        y: 4,
-        width: 500,
-        height: 600,
-      },
-      {
-        x: 1,
-        y: 2,
-        width: 100,
-        height: 200,
-      },
-    ]);
-    expect(saveDiffResultMock).toHaveBeenCalledWith(testRun.id, diffResult);
-    expect(tryAutoApproveByPastBaselines).toHaveBeenCalledWith(testVariation, testRunWithResult, [
-      {
-        x: 3,
-        y: 4,
-        width: 500,
-        height: 600,
-      },
-      {
-        x: 1,
-        y: 2,
-        width: 100,
-        height: 200,
-      },
-    ]);
-    expect(tryAutoApproveByNewBaselines).toHaveBeenCalledWith(testVariation, testRunWithResult, [
-      {
-        x: 3,
-        y: 4,
-        width: 500,
-        height: 600,
-      },
-      {
-        x: 1,
-        y: 2,
-        width: 100,
-        height: 200,
-      },
-    ]);
-    expect(eventTestRunCreatedMock).toHaveBeenCalledWith(testRunWithResult);
-    expect(result).toBe(testRunWithResult);
+    expect(result).toBe(testRun);
   });
 
   describe('getDiff', () => {
@@ -616,7 +594,7 @@ describe('TestRunsService', () => {
       });
       service = await initService({});
 
-      const result = service.getDiff(baseline, image, 0, []);
+      const result = service.getDiff(baseline, image, baseTestRun);
 
       expect(result).toStrictEqual({
         status: undefined,
@@ -638,7 +616,7 @@ describe('TestRunsService', () => {
       });
       service = await initService({});
 
-      const result = service.getDiff(baseline, image, 0, []);
+      const result = service.getDiff(baseline, image, baseTestRun);
 
       expect(result).toStrictEqual({
         status: TestStatus.unresolved,
@@ -661,7 +639,7 @@ describe('TestRunsService', () => {
       service = await initService({});
       mocked(Pixelmatch).mockReturnValueOnce(0);
 
-      const result = service.getDiff(baseline, image, 0, []);
+      const result = service.getDiff(baseline, image, baseTestRun);
 
       expect(result).toStrictEqual({
         status: TestStatus.ok,
@@ -673,6 +651,12 @@ describe('TestRunsService', () => {
     });
 
     it('diff found < tollerance', async () => {
+      const testRun: TestRun = {
+        ...baseTestRun,
+        diffTollerancePercent: 1.5,
+        ignoreAreas: '[]',
+        tempIgnoreAreas: '[]',
+      };
       const baseline = new PNG({
         width: 100,
         height: 100,
@@ -686,7 +670,7 @@ describe('TestRunsService', () => {
       const pixelMisMatchCount = 150;
       mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
 
-      const result = service.getDiff(baseline, image, 1.5, []);
+      const result = service.getDiff(baseline, image, testRun);
 
       expect(saveImageMock).toHaveBeenCalledTimes(0);
       expect(result).toStrictEqual({
@@ -699,6 +683,12 @@ describe('TestRunsService', () => {
     });
 
     it('diff found > tollerance', async () => {
+      const testRun: TestRun = {
+        ...baseTestRun,
+        diffTollerancePercent: 1,
+        ignoreAreas: '[]',
+        tempIgnoreAreas: '[]',
+      };
       const baseline = new PNG({
         width: 100,
         height: 100,
@@ -715,7 +705,7 @@ describe('TestRunsService', () => {
         saveImageMock,
       });
 
-      const result = service.getDiff(baseline, image, 1, []);
+      const result = service.getDiff(baseline, image, testRun);
 
       expect(saveImageMock).toHaveBeenCalledTimes(1);
       expect(result).toStrictEqual({
@@ -776,12 +766,7 @@ describe('TestRunsService', () => {
     expect(getImageMock).toHaveBeenNthCalledWith(1, testRun.baselineName);
     expect(getImageMock).toHaveBeenNthCalledWith(2, testRun.imageName);
     expect(deleteImageMock).toHaveBeenCalledWith(testRun.diffName);
-    expect(getDiffMock).toHaveBeenCalledWith(
-      baselineMock,
-      imageeMock,
-      testRun.diffTollerancePercent,
-      ignoreAreas.concat(tempIgnoreAreas)
-    );
+    expect(getDiffMock).toHaveBeenCalledWith(baselineMock, imageeMock, testRun);
     expect(service.saveDiffResult).toHaveBeenCalledWith(testRun.id, diffResult);
   });
 
@@ -1037,6 +1022,9 @@ describe('TestRunsService', () => {
     });
     service.delete = deleteMock;
     service.create = createMock;
+    service.calculateDiff = jest.fn().mockResolvedValueOnce(testRun);
+    service['tryAutoApproveByPastBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
+    service['tryAutoApproveByNewBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
     const baselineData = convertBaselineDataToQuery(createTestRequestDto);
 
     await service.postTestRun(createTestRequestDto);
@@ -1050,6 +1038,9 @@ describe('TestRunsService', () => {
     });
     expect(deleteMock).toHaveBeenCalledWith(testRun.id);
     expect(createMock).toHaveBeenCalledWith(testVariation, createTestRequestDto);
+    expect(service.calculateDiff).toHaveBeenCalledWith(testRun);
+    expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith(testVariation, testRun);
+    expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith(testVariation, testRun);
     expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
   });
 });

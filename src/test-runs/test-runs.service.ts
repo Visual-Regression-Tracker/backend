@@ -62,7 +62,6 @@ export class TestRunsService {
         ...baselineData,
       },
     });
-
     if (!!previousTestRun) {
       await this.delete(previousTestRun.id);
     }
@@ -70,7 +69,13 @@ export class TestRunsService {
     // create test run result
     const testRun = await this.create(testVariation, createTestRequestDto);
 
-    return new TestRunResultDto(testRun, testVariation);
+    // calculate diff
+    let testRunWithResult = await this.calculateDiff(testRun);
+
+    // try auto approve
+    testRunWithResult = await this.tryAutoApproveByPastBaselines(testVariation, testRunWithResult);
+    testRunWithResult = await this.tryAutoApproveByNewBaselines(testVariation, testRunWithResult);
+    return new TestRunResultDto(testRunWithResult, testVariation);
   }
 
   async approve(id: string, merge: boolean, autoApprove?: boolean): Promise<TestRun> {
@@ -177,11 +182,7 @@ export class TestRunsService {
     const image = this.staticService.getImage(testRun.imageName);
     this.staticService.deleteImage(testRun.diffName);
 
-    let ignoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas);
-    if (testRun.ignoreAreas?.length > 0) {
-      ignoreAreas = ignoreAreas.concat(JSON.parse(testRun.tempIgnoreAreas));
-    }
-    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, ignoreAreas);
+    const diffResult = this.getDiff(baseline, image, testRun);
     return this.saveDiffResult(testRun.id, diffResult);
   }
 
@@ -216,22 +217,8 @@ export class TestRunsService {
       },
     });
 
-    const baseline = this.staticService.getImage(testRun.baselineName);
-    const image = this.staticService.getImage(imageName);
-
-    let ignoreAreas: IgnoreAreaDto[] = JSON.parse(testVariation.ignoreAreas);
-    if (createTestRequestDto.ignoreAreas?.length > 0) {
-      ignoreAreas = ignoreAreas.concat(createTestRequestDto.ignoreAreas);
-    }
-    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, ignoreAreas);
-
-    let testRunWithResult = await this.saveDiffResult(testRun.id, diffResult);
-
-    testRunWithResult = await this.tryAutoApproveByPastBaselines(testVariation, testRunWithResult, ignoreAreas);
-    testRunWithResult = await this.tryAutoApproveByNewBaselines(testVariation, testRunWithResult, ignoreAreas);
-
-    this.eventsGateway.testRunCreated(testRunWithResult);
-    return testRunWithResult;
+    this.eventsGateway.testRunCreated(testRun);
+    return testRun;
   }
 
   async delete(id: string): Promise<TestRun> {
@@ -274,7 +261,7 @@ export class TestRunsService {
       });
   }
 
-  getDiff(baseline: PNG, image: PNG, diffTollerancePercent: number, ignoreAreas: IgnoreAreaDto[]): DiffResult {
+  getDiff(baseline: PNG, image: PNG, testRun: TestRun): DiffResult {
     const result: DiffResult = {
       status: undefined,
       diffName: null,
@@ -292,6 +279,7 @@ export class TestRunsService {
           height: baseline.height,
         });
 
+        const ignoreAreas = this.getIgnoteAreas(testRun);
         // compare
         result.pixelMisMatchCount = Pixelmatch(
           this.applyIgnoreAreas(baseline, ignoreAreas),
@@ -305,7 +293,7 @@ export class TestRunsService {
         );
         result.diffPercent = (result.pixelMisMatchCount * 100) / (image.width * image.height);
 
-        if (result.diffPercent > diffTollerancePercent) {
+        if (result.diffPercent > testRun.diffTollerancePercent) {
           // save diff
           result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
           result.status = TestStatus.unresolved;
@@ -336,6 +324,14 @@ export class TestRunsService {
     return image.data;
   }
 
+  private getIgnoteAreas(testRun: TestRun): IgnoreAreaDto[] {
+    let ignoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas);
+    if (testRun.ignoreAreas?.length > 0) {
+      ignoreAreas = ignoreAreas.concat(JSON.parse(testRun.tempIgnoreAreas));
+    }
+    return ignoreAreas;
+  }
+
   /**
    * Reason: not rebased code from feature branch is compared agains new main branch baseline thus diff is expected
    * Tries to find past baseline in main branch and autoApprove in case matched
@@ -343,11 +339,7 @@ export class TestRunsService {
    * @param testRun
    * @param ignoreAreas
    */
-  private async tryAutoApproveByPastBaselines(
-    testVariation: TestVariation,
-    testRun: TestRun,
-    ignoreAreas: IgnoreAreaDto[]
-  ): Promise<TestRun> {
+  private async tryAutoApproveByPastBaselines(testVariation: TestVariation, testRun: TestRun): Promise<TestRun> {
     if (
       !process.env.AUTO_APPROVE_BASED_ON_HISTORY ||
       testRun.status === TestStatus.ok ||
@@ -360,7 +352,7 @@ export class TestRunsService {
     const testVariationHistory = await this.testVariationService.getDetails(testVariation.id);
     // skip first baseline as it was used by default in general flow
     for (const baseline of testVariationHistory.baselines.slice(1)) {
-      if (this.shouldAutoApprove(baseline, testRun, ignoreAreas)) {
+      if (this.shouldAutoApprove(baseline, testRun)) {
         return this.approve(testRun.id, false, true);
       }
     }
@@ -378,11 +370,7 @@ export class TestRunsService {
    * @param image
    * @param ignoreAreas
    */
-  private async tryAutoApproveByNewBaselines(
-    testVariation: TestVariation,
-    testRun: TestRun,
-    ignoreAreas: IgnoreAreaDto[]
-  ): Promise<TestRun> {
+  private async tryAutoApproveByNewBaselines(testVariation: TestVariation, testRun: TestRun): Promise<TestRun> {
     if (!process.env.AUTO_APPROVE_BASED_ON_HISTORY || testRun.status === TestStatus.ok) {
       return testRun;
     }
@@ -400,7 +388,7 @@ export class TestRunsService {
       const approvedTestVariation = await this.testVariationService.getDetails(approvedTestRun.testVariationId);
       const baseline = approvedTestVariation.baselines.shift();
 
-      if (this.shouldAutoApprove(baseline, testRun, ignoreAreas)) {
+      if (this.shouldAutoApprove(baseline, testRun)) {
         return this.approve(testRun.id, false, true);
       }
     }
@@ -408,10 +396,10 @@ export class TestRunsService {
     return testRun;
   }
 
-  private shouldAutoApprove(baseline: Baseline, testRun: TestRun, ignoreAreas: Array<IgnoreAreaDto>): boolean {
+  private shouldAutoApprove(baseline: Baseline, testRun: TestRun): boolean {
     const approvedImage = this.staticService.getImage(baseline.baselineName);
     const image = this.staticService.getImage(testRun.imageName);
-    const diffResult = this.getDiff(approvedImage, image, testRun.diffTollerancePercent, ignoreAreas);
+    const diffResult = this.getDiff(approvedImage, image, testRun);
 
     if (diffResult.status === TestStatus.ok) {
       this.logger.log(`TestRun ${testRun.id} could be auto approved based on Baseline ${baseline.id}`);

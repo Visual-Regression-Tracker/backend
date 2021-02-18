@@ -1,14 +1,13 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build, TestRun, TestStatus } from '@prisma/client';
+import { Build, TestStatus } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
-import _ from 'lodash';
 
 @Injectable()
 export class BuildsService {

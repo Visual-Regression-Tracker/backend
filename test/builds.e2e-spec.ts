@@ -200,7 +200,23 @@ describe('Builds (e2e)', () => {
   });
 
   describe('PATCH /:id/approve', () => {
-    it('200', async () => {
+    it('200 default', async () => {
+      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
+      await testRunsService.postTestRun({
+        projectId: build.projectId,
+        branchName: build.branchName,
+        imageBase64: readFileSync('./test/image.png').toString('base64'),
+        buildId: build.id,
+        name: 'Image name',
+        merge: false,
+      });
+
+      const result = await buildsService.approve(build.id, false);
+
+      expect(result).toEqual({ ...build, status: 'passed', passedCount: 1, merge: false });
+    });
+
+    it('200 with merge', async () => {
       const build = await buildsService.create({ project: project.id, branchName: 'develop' });
       await testRunsService.postTestRun({
         projectId: build.projectId,
@@ -211,13 +227,9 @@ describe('Builds (e2e)', () => {
         merge: true,
       });
 
-      return requestWithAuth(app, 'patch', `/builds/${build.id}/approve?merge=true`, {}, user.token)
-        .expect(200)
-        .expect((resp) => {
-          expect(JSON.stringify(resp.body)).toBe(
-            JSON.stringify({ ...build, status: 'passed', passedCount: 1, merge: true })
-          );
-        });
+      const result = await buildsService.approve(build.id, true);
+
+      expect(result).toEqual({ ...build, status: 'passed', passedCount: 1, merge: true });
     });
   });
 });
