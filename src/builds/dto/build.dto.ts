@@ -64,6 +64,7 @@ export class BuildDto {
       // calculate statistics
       build.testRuns.forEach((testRun) => {
         switch (testRun.status) {
+          case TestStatus.autoApproved:
           case TestStatus.approved:
           case TestStatus.ok: {
             this.passedCount += 1;

@@ -10,6 +10,7 @@ import { Project, TestStatus } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
 
 jest.setTimeout(20000);
+jest.useFakeTimers();
 
 describe('TestRuns (e2e)', () => {
   let app: INestApplication;
@@ -45,6 +46,7 @@ describe('TestRuns (e2e)', () => {
   });
 
   afterAll(async () => {
+    jest.runOnlyPendingTimers();
     await app.close();
   });
 

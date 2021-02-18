@@ -2,7 +2,7 @@ import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { Build, TestRun } from '@prisma/client';
 import { BuildDto } from '../../builds/dto/build.dto';
-import _ from 'lodash';
+import { debounce } from 'lodash';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @WebSocketGateway()
@@ -46,7 +46,7 @@ export class EventsGateway {
     this.buildUpdated(testRun.buildId);
   }
 
-  private testRunUpdatedDebounced = _.debounce(
+  private testRunUpdatedDebounced = debounce(
     () => {
       this.server.emit('testRun_updated', this.testRunsUpdatedQueued);
       this.testRunsUpdatedQueued = [];
@@ -58,7 +58,7 @@ export class EventsGateway {
     }
   );
 
-  private testRunCreatedDebounced = _.debounce(
+  private testRunCreatedDebounced = debounce(
     () => {
       this.server.emit('testRun_created', this.testRunsCreatedQueued);
       this.testRunsCreatedQueued = [];
@@ -70,7 +70,7 @@ export class EventsGateway {
     }
   );
 
-  private testRunDeletedDebounced = _.debounce(
+  private testRunDeletedDebounced = debounce(
     () => {
       this.server.emit('testRun_deleted', this.testRunsDeletedQueued);
       this.testRunsDeletedQueued = [];
@@ -82,7 +82,7 @@ export class EventsGateway {
     }
   );
 
-  private buildUpdatedDebounced = _.debounce(
+  private buildUpdatedDebounced = debounce(
     () => {
       this.prismaService.build
         .findMany({
