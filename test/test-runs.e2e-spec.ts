@@ -10,6 +10,7 @@ import { Project, TestStatus } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
 
 jest.setTimeout(20000);
+jest.useFakeTimers();
 
 describe('TestRuns (e2e)', () => {
   let app: INestApplication;
@@ -45,14 +46,22 @@ describe('TestRuns (e2e)', () => {
   });
 
   afterAll(async () => {
+    jest.runOnlyPendingTimers();
     await app.close();
   });
 
   describe('POST /', () => {
     const image_v1 = './test/image.png';
     const image_v2 = './test/image_edited.png';
-    it('Auto approve not rebased feature branch', async () => {
-      const testRun1 = await haveTestRunCreated(
+
+    it('New if no baseline', async () => {
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
+
+      expect(testRun.status).toBe(TestStatus.new);
+    });
+
+    it('Unresolved if diff found', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
         project.id,
@@ -60,7 +69,37 @@ describe('TestRuns (e2e)', () => {
         image_v1
       );
       await testRunsService.approve(testRun1.id, false, false);
-      const testRun2 = await haveTestRunCreated(
+
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v2);
+
+      expect(testRun.status).toBe(TestStatus.unresolved);
+    });
+
+    it('Ok', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v1
+      );
+      await testRunsService.approve(testRun1.id, false, false);
+
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
+
+      expect(testRun.status).toBe(TestStatus.ok);
+    });
+
+    it('Auto approve not rebased feature branch', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v1
+      );
+      await testRunsService.approve(testRun1.id, false, false);
+      const { testRun: testRun2 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
         project.id,
@@ -69,22 +108,28 @@ describe('TestRuns (e2e)', () => {
       );
       await testRunsService.approve(testRun2.id, false, false);
 
-      const testRun = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
 
       expect(testRun.status).toBe(TestStatus.autoApproved);
     });
 
     it('Auto approve merged feature into feature branch', async () => {
-      const testRun1 = await haveTestRunCreated(buildsService, testRunsService, project.id, 'feature1', image_v1);
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'feature1',
+        image_v1
+      );
       await testRunsService.approve(testRun1.id, false, false);
 
-      const testRun = await haveTestRunCreated(buildsService, testRunsService, project.id, 'feature2', image_v1);
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'feature2', image_v1);
 
       expect(testRun.status).toBe(TestStatus.autoApproved);
     });
 
     it('Auto approve merged feature into main branch', async () => {
-      const testRun1 = await haveTestRunCreated(
+      const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
         project.id,
@@ -92,10 +137,16 @@ describe('TestRuns (e2e)', () => {
         image_v1
       );
       await testRunsService.approve(testRun1.id, false, false);
-      const testRun2 = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v2);
+      const { testRun: testRun2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v2
+      );
       await testRunsService.approve(testRun2.id, false, false);
 
-      const testRun = await haveTestRunCreated(
+      const { testRun } = await haveTestRunCreated(
         buildsService,
         testRunsService,
         project.id,

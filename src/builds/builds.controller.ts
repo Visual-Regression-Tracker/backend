@@ -26,7 +26,7 @@ import { ModifyBuildDto } from './dto/build-modify.dto';
 @Controller('builds')
 @ApiTags('builds')
 export class BuildsController {
-  constructor(private buildsService: BuildsService) { }
+  constructor(private buildsService: BuildsService) {}
 
   @Get()
   @ApiOkResponse({ type: PaginatedBuildDto })

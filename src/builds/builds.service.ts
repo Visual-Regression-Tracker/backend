@@ -18,7 +18,7 @@ export class BuildsService {
     private testRunsService: TestRunsService,
     @Inject(forwardRef(() => ProjectsService))
     private projectService: ProjectsService
-  ) { }
+  ) {}
 
   async findOne(id: string): Promise<BuildDto> {
     return this.prismaService.build
@@ -106,11 +106,10 @@ export class BuildsService {
       include: {
         testRuns: true,
       },
-      data: modifyBuildDto
+      data: modifyBuildDto,
     });
-    const buildDto = new BuildDto(build);
-    this.eventsGateway.buildUpdated(buildDto);
-    return buildDto;
+    this.eventsGateway.buildUpdated(id);
+    return new BuildDto(build);
   }
 
   async remove(id: string): Promise<Build> {
@@ -146,8 +145,6 @@ export class BuildsService {
       build.testRuns.map((testRun) => this.testRunsService.approve(testRun.id, merge))
     );
 
-    const buildDto = new BuildDto(build);
-    this.eventsGateway.buildUpdated(buildDto);
-    return buildDto;
+    return new BuildDto(build);
   }
 }

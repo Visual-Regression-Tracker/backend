@@ -6,6 +6,7 @@ import { BuildsService } from 'src/builds/builds.service';
 import { TestRunsService } from 'src/test-runs/test-runs.service';
 import { readFileSync } from 'fs';
 import { TestRunResultDto } from 'src/test-runs/dto/testRunResult.dto';
+import { BuildDto } from 'src/builds/dto/build.dto';
 
 export const generateUser = (
   password: string
@@ -51,15 +52,20 @@ export const haveTestRunCreated = async (
   testRunsService: TestRunsService,
   projectId: string,
   branchName: string,
-  imagePath: string
-): Promise<TestRunResultDto> => {
+  imagePath: string,
+  merge?: boolean
+): Promise<{ testRun: TestRunResultDto; build: BuildDto }> => {
   const build = await buildsService.create({ project: projectId, branchName });
-  return testRunsService.postTestRun({
+  const testRun = await testRunsService.postTestRun({
     projectId: build.projectId,
     branchName: build.branchName,
     imageBase64: readFileSync(imagePath).toString('base64'),
     buildId: build.id,
     name: 'Image name',
-    merge: false,
+    merge,
   });
+  return {
+    build,
+    testRun,
+  };
 };
