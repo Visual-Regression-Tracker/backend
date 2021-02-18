@@ -15,6 +15,7 @@ import { CommentDto } from '../shared/dto/comment.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { TestRunDto } from './dto/testRun.dto';
+import { BuildsService } from '../builds/builds.service';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -90,6 +91,10 @@ const initService = async ({
           findOrCreate: testVariationFindOrCreateMock,
         },
       },
+      {
+        provide: BuildsService,
+        useValue: {},
+      },
     ],
   }).compile();
 
@@ -97,6 +102,8 @@ const initService = async ({
 };
 describe('TestRunsService', () => {
   let service: TestRunsService;
+  const ignoreAreas = [{ x: 1, y: 2, width: 10, height: 20 }];
+  const tempIgnoreAreas = [{ x: 3, y: 4, width: 30, height: 40 }];
 
   it('findOne', async () => {
     const id = 'some id';
@@ -721,19 +728,33 @@ describe('TestRunsService', () => {
     });
   });
 
-  it('recalculateDiff', async () => {
-    const testRun = {
+  it('calculateDiff', async () => {
+    const testRun: TestRun = {
       id: 'id',
       buildId: 'buildId',
       imageName: 'imageName',
       baselineName: 'baselineName',
+      diffName: 'diffName',
       diffTollerancePercent: 12,
-      ignoreAreas: '[]',
-      diffName: null,
+      diffPercent: 12,
+      pixelMisMatchCount: 123,
+      status: 'new',
+      testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      name: 'ss2f77',
+      browser: 'chromium',
+      device: null,
+      os: null,
+      viewport: '1800x1600',
+      ignoreAreas: JSON.stringify(ignoreAreas),
+      tempIgnoreAreas: JSON.stringify(tempIgnoreAreas),
+      comment: 'some comment',
+      baselineBranchName: 'master',
+      branchName: 'develop',
+      merge: false,
     };
-    const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
     const testRunUpdateMock = jest.fn();
-    const eventTestRunUpdatedMock = jest.fn();
     const baselineMock = 'baseline image';
     const imageeMock = 'image';
     const getImageMock = jest.fn().mockReturnValueOnce(baselineMock).mockReturnValueOnce(imageeMock);
@@ -744,16 +765,14 @@ describe('TestRunsService', () => {
     const getDiffMock = jest.fn().mockReturnValue(diffResult);
     service = await initService({
       testRunUpdateMock,
-      eventTestRunUpdatedMock,
       getImageMock,
       deleteImageMock,
     });
-    service.findOne = testRunFindOneMock;
     service.getDiff = getDiffMock;
+    service.saveDiffResult = jest.fn();
 
-    await service.recalculateDiff(testRun.id);
+    await service.calculateDiff(testRun);
 
-    expect(testRunFindOneMock).toHaveBeenCalledWith(testRun.id);
     expect(getImageMock).toHaveBeenNthCalledWith(1, testRun.baselineName);
     expect(getImageMock).toHaveBeenNthCalledWith(2, testRun.imageName);
     expect(deleteImageMock).toHaveBeenCalledWith(testRun.diffName);
@@ -761,17 +780,44 @@ describe('TestRunsService', () => {
       baselineMock,
       imageeMock,
       testRun.diffTollerancePercent,
-      JSON.parse(testRun.ignoreAreas)
+      ignoreAreas.concat(tempIgnoreAreas)
     );
-    expect(eventTestRunUpdatedMock).toBeCalledWith(testRun);
+    expect(service.saveDiffResult).toHaveBeenCalledWith(testRun.id, diffResult);
   });
 
   describe('saveDiffResult', () => {
+    const testRun: TestRun = {
+      id: 'id',
+      buildId: 'buildId',
+      imageName: 'imageName',
+      baselineName: 'baselineName',
+      diffName: 'diffName',
+      diffTollerancePercent: 12,
+      diffPercent: 12,
+      pixelMisMatchCount: 123,
+      status: 'new',
+      testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      name: 'ss2f77',
+      browser: 'chromium',
+      device: null,
+      os: null,
+      viewport: '1800x1600',
+      ignoreAreas: JSON.stringify(ignoreAreas),
+      tempIgnoreAreas: JSON.stringify(tempIgnoreAreas),
+      comment: 'some comment',
+      baselineBranchName: 'master',
+      branchName: 'develop',
+      merge: false,
+    };
     it('no results', async () => {
       const id = 'some id';
-      const testRunUpdateMock = jest.fn();
+      const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
+      const eventTestRunUpdatedMock = jest.fn();
       service = await initService({
         testRunUpdateMock,
+        eventTestRunUpdatedMock,
       });
 
       await service.saveDiffResult(id, null);
@@ -785,6 +831,7 @@ describe('TestRunsService', () => {
           diffPercent: null,
         },
       });
+      expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
     });
 
     it('with results', async () => {
@@ -796,9 +843,11 @@ describe('TestRunsService', () => {
         isSameDimension: true,
       };
       const id = 'some id';
-      const testRunUpdateMock = jest.fn();
+      const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
+      const eventTestRunUpdatedMock = jest.fn();
       service = await initService({
         testRunUpdateMock,
+        eventTestRunUpdatedMock,
       });
 
       await service.saveDiffResult(id, diff);
@@ -812,6 +861,7 @@ describe('TestRunsService', () => {
           diffPercent: diff.diffPercent,
         },
       });
+      expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
     });
   });
 
@@ -885,11 +935,11 @@ describe('TestRunsService', () => {
 
   it('updateIgnoreAreas', async () => {
     const id = 'some id';
-    const ignoreAreas: IgnoreAreaDto[] = [{ x: 1, y: 2, width: 10, height: 20 }];
-    const testRunUpdateMock = jest.fn();
+    const testRunUpdateMock = jest.fn().mockResolvedValueOnce(id);
     service = await initService({
       testRunUpdateMock,
     });
+    service.calculateDiff = jest.fn();
 
     await service.updateIgnoreAreas(id, ignoreAreas);
 
@@ -899,6 +949,7 @@ describe('TestRunsService', () => {
         ignoreAreas: JSON.stringify(ignoreAreas),
       },
     });
+    expect(service.calculateDiff).toHaveBeenCalled();
   });
 
   it('updateComment', async () => {
@@ -906,9 +957,11 @@ describe('TestRunsService', () => {
     const commentDto: CommentDto = {
       comment: 'random comment',
     };
-    const testRunUpdateMock = jest.fn();
+    const testRunUpdateMock = jest.fn().mockResolvedValueOnce(id);
+    const eventTestRunUpdatedMock = jest.fn();
     service = await initService({
       testRunUpdateMock,
+      eventTestRunUpdatedMock,
     });
 
     await service.updateComment(id, commentDto);
@@ -919,6 +972,7 @@ describe('TestRunsService', () => {
         comment: commentDto.comment,
       },
     });
+    expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(id);
   });
 
   it('postTestRun', async () => {

@@ -1,13 +1,14 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build, TestStatus } from '@prisma/client';
+import { Build, TestRun, TestStatus } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
+import _ from 'lodash';
 
 @Injectable()
 export class BuildsService {
@@ -18,7 +19,7 @@ export class BuildsService {
     private testRunsService: TestRunsService,
     @Inject(forwardRef(() => ProjectsService))
     private projectService: ProjectsService
-  ) { }
+  ) {}
 
   async findOne(id: string): Promise<BuildDto> {
     return this.prismaService.build
@@ -106,11 +107,10 @@ export class BuildsService {
       include: {
         testRuns: true,
       },
-      data: modifyBuildDto
+      data: modifyBuildDto,
     });
-    const buildDto = new BuildDto(build);
-    this.eventsGateway.buildUpdated(buildDto);
-    return buildDto;
+    this.eventsGateway.buildUpdated(id);
+    return new BuildDto(build);
   }
 
   async remove(id: string): Promise<Build> {
@@ -146,8 +146,6 @@ export class BuildsService {
       build.testRuns.map((testRun) => this.testRunsService.approve(testRun.id, merge))
     );
 
-    const buildDto = new BuildDto(build);
-    this.eventsGateway.buildUpdated(buildDto);
-    return buildDto;
+    return new BuildDto(build);
   }
 }

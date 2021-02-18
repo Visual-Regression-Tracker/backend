@@ -13,7 +13,6 @@ import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { TestRunDto } from './dto/testRun.dto';
-import { PaginatedTestRunDto } from './dto/testRun-paginated.dto';
 import { getTestVariationUniqueData } from '../utils';
 
 @Injectable()
@@ -75,6 +74,7 @@ export class TestRunsService {
   }
 
   async approve(id: string, merge: boolean, autoApprove?: boolean): Promise<TestRun> {
+    this.logger.log(`Approving testRun: ${id} merge: ${merge} autoApprove: ${autoApprove}`);
     const status = autoApprove ? TestStatus.autoApproved : TestStatus.approved;
     const testRun = await this.findOne(id);
 
@@ -156,29 +156,33 @@ export class TestRunsService {
   }
 
   async saveDiffResult(id: string, diffResult: DiffResult): Promise<TestRun> {
-    return this.prismaService.testRun.update({
-      where: { id },
-      data: {
-        diffName: diffResult && diffResult.diffName,
-        pixelMisMatchCount: diffResult && diffResult.pixelMisMatchCount,
-        diffPercent: diffResult && diffResult.diffPercent,
-        status: diffResult ? diffResult.status : TestStatus.new,
-      },
-    });
+    return this.prismaService.testRun
+      .update({
+        where: { id },
+        data: {
+          diffName: diffResult && diffResult.diffName,
+          pixelMisMatchCount: diffResult && diffResult.pixelMisMatchCount,
+          diffPercent: diffResult && diffResult.diffPercent,
+          status: diffResult ? diffResult.status : TestStatus.new,
+        },
+      })
+      .then((testRun) => {
+        this.eventsGateway.testRunUpdated(testRun);
+        return testRun;
+      });
   }
 
-  async recalculateDiff(id: string): Promise<TestRun> {
-    const testRun = await this.findOne(id);
-
+  async calculateDiff(testRun: TestRun): Promise<TestRun> {
     const baseline = this.staticService.getImage(testRun.baselineName);
     const image = this.staticService.getImage(testRun.imageName);
-    await this.staticService.deleteImage(testRun.diffName);
+    this.staticService.deleteImage(testRun.diffName);
 
-    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, JSON.parse(testRun.ignoreAreas));
-    const updatedTestRun = await this.saveDiffResult(id, diffResult);
-
-    this.eventsGateway.testRunUpdated(testRun);
-    return updatedTestRun;
+    let ignoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas);
+    if (testRun.ignoreAreas?.length > 0) {
+      ignoreAreas = ignoreAreas.concat(JSON.parse(testRun.tempIgnoreAreas));
+    }
+    const diffResult = this.getDiff(baseline, image, testRun.diffTollerancePercent, ignoreAreas);
+    return this.saveDiffResult(testRun.id, diffResult);
   }
 
   async create(testVariation: TestVariation, createTestRequestDto: CreateTestRequestDto): Promise<TestRun> {
@@ -246,21 +250,28 @@ export class TestRunsService {
   }
 
   async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
-    return this.prismaService.testRun.update({
-      where: { id },
-      data: {
-        ignoreAreas: JSON.stringify(ignoreAreas),
-      },
-    });
+    return this.prismaService.testRun
+      .update({
+        where: { id },
+        data: {
+          ignoreAreas: JSON.stringify(ignoreAreas),
+        },
+      })
+      .then((testRun) => this.calculateDiff(testRun));
   }
 
   async updateComment(id: string, commentDto: CommentDto): Promise<TestRun> {
-    return this.prismaService.testRun.update({
-      where: { id },
-      data: {
-        comment: commentDto.comment,
-      },
-    });
+    return this.prismaService.testRun
+      .update({
+        where: { id },
+        data: {
+          comment: commentDto.comment,
+        },
+      })
+      .then((testRun) => {
+        this.eventsGateway.testRunUpdated(testRun);
+        return testRun;
+      });
   }
 
   getDiff(baseline: PNG, image: PNG, diffTollerancePercent: number, ignoreAreas: IgnoreAreaDto[]): DiffResult {

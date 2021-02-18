@@ -36,14 +36,6 @@ export class TestRunsController {
     return this.testRunsService.findMany(buildId);
   }
 
-  @Get('recalculateDiff/:id')
-  @ApiParam({ name: 'id', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  recalculateDiff(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRun> {
-    return this.testRunsService.recalculateDiff(id);
-  }
-
   @Get('approve')
   @ApiQuery({ name: 'id', required: true })
   @ApiQuery({ name: 'merge', required: false })
