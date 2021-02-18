@@ -53,6 +53,43 @@ describe('TestRuns (e2e)', () => {
   describe('POST /', () => {
     const image_v1 = './test/image.png';
     const image_v2 = './test/image_edited.png';
+
+    it('New if no baseline', async () => {
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
+
+      expect(testRun.status).toBe(TestStatus.new);
+    });
+
+    it('Unresolved if diff found', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v1
+      );
+      await testRunsService.approve(testRun1.id, false, false);
+
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v2);
+
+      expect(testRun.status).toBe(TestStatus.unresolved);
+    });
+
+    it('Ok', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v1
+      );
+      await testRunsService.approve(testRun1.id, false, false);
+
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
+
+      expect(testRun.status).toBe(TestStatus.ok);
+    });
+
     it('Auto approve not rebased feature branch', async () => {
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
