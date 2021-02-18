@@ -21,7 +21,7 @@ export class TestVariationsService {
     private testRunsService: TestRunsService,
     @Inject(forwardRef(() => BuildsService))
     private buildsService: BuildsService
-  ) { }
+  ) {}
 
   async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
     return this.prismaService.testVariation.findUnique({
@@ -138,19 +138,11 @@ export class TestVariationsService {
     });
 
     // stop build
-    return this.buildsService.update(build.id, { "isRunning": false });
+    return this.buildsService.update(build.id, { isRunning: false });
   }
 
   async delete(id: string): Promise<TestVariation> {
-    const [testVariation, testRuns] = await Promise.all([
-      this.getDetails(id),
-      this.prismaService.testRun.findMany({
-        where: { testVariationId: id },
-      }),
-    ]);
-
-    // delete testRun
-    await Promise.all(testRuns.map((item) => this.testRunsService.delete(item.id)));
+    const testVariation = await this.getDetails(id);
 
     // delete baseline
     await Promise.all(testVariation.baselines.map((baseline) => this.deleteBaseline(baseline)));
