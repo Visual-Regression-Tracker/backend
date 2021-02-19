@@ -2,14 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
-import { haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
+import { haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
 import { BuildsService } from '../src/builds/builds.service';
 import { CreateBuildDto } from '../src/builds/dto/build-create.dto';
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { Project } from '@prisma/client';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
-import { readFileSync } from 'fs';
+
+jest.useFakeTimers();
 
 describe('Builds (e2e)', () => {
   let app: INestApplication;
@@ -45,6 +46,7 @@ describe('Builds (e2e)', () => {
   });
 
   afterAll(async () => {
+    jest.runOnlyPendingTimers();
     await app.close();
   });
 
@@ -200,24 +202,34 @@ describe('Builds (e2e)', () => {
   });
 
   describe('PATCH /:id/approve', () => {
-    it('200', async () => {
-      const build = await buildsService.create({ project: project.id, branchName: 'develop' });
-      await testRunsService.postTestRun({
-        projectId: build.projectId,
-        branchName: build.branchName,
-        imageBase64: readFileSync('./test/image.png').toString('base64'),
-        buildId: build.id,
-        name: 'Image name',
-        merge: true,
-      });
+    it('200 default', async () => {
+      const { build } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        './test/image.png',
+        false
+      );
 
-      return requestWithAuth(app, 'patch', `/builds/${build.id}/approve?merge=true`, {}, user.token)
-        .expect(200)
-        .expect((resp) => {
-          expect(JSON.stringify(resp.body)).toBe(
-            JSON.stringify({ ...build, status: 'passed', passedCount: 1, merge: true })
-          );
-        });
+      const result = await buildsService.approve(build.id, false);
+
+      expect(result).toEqual({ ...build, status: 'passed', passedCount: 1, merge: false });
+    });
+
+    it('200 with merge', async () => {
+      const { build } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        './test/image.png',
+        true
+      );
+
+      const result = await buildsService.approve(build.id, true);
+
+      expect(result).toEqual({ ...build, status: 'passed', passedCount: 1, merge: true });
     });
   });
 });

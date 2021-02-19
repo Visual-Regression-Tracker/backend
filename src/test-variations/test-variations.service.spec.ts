@@ -466,37 +466,12 @@ describe('TestVariationsService', () => {
       ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
     });
     expect(testRunCreateMock).toHaveBeenCalledTimes(2);
-    expect(buildUpdateMock).toHaveBeenCalledWith(build.id, { "isRunning": false });
+    expect(buildUpdateMock).toHaveBeenCalledWith(build.id, { isRunning: false });
   });
 
   it('delete', async () => {
     const testRunId = 'test run id';
     const testVariationId = 'test variation id';
-    const testRun: TestRun = {
-      id: testRunId,
-      imageName: '1592423768112.screenshot.png',
-      diffName: null,
-      diffPercent: null,
-      diffTollerancePercent: 1,
-      pixelMisMatchCount: null,
-      status: 'new',
-      buildId: '146e7a8d-89f0-4565-aa2c-e61efabb0afd',
-      testVariationId: testVariationId,
-      updatedAt: new Date(),
-      createdAt: new Date(),
-      name: 'ss2f77',
-      browser: 'chromium',
-      device: null,
-      os: null,
-      viewport: '1800x1600',
-      baselineName: null,
-      ignoreAreas: '[]',
-      tempIgnoreAreas: '[]',
-      comment: 'some comment',
-      baselineBranchName: 'master',
-      branchName: 'develop',
-      merge: false,
-    };
     const variation: TestVariation & {
       baselines: Baseline[];
     } = {
@@ -526,14 +501,10 @@ describe('TestVariationsService', () => {
     };
 
     const variationDeleteMock = jest.fn();
-    const testRunFindMany = jest.fn().mockResolvedValueOnce([testRun]);
-    const testRunDeleteMock = jest.fn();
     const getDetailsMock = jest.fn().mockResolvedValueOnce(variation);
     const deleteBaselineMock = jest.fn().mockResolvedValueOnce(variation.baselines[0]);
     const service = await initModule({
       variationDeleteMock,
-      testRunFindMany,
-      testRunDeleteMock,
     });
     service.getDetails = getDetailsMock;
     service.deleteBaseline = deleteBaselineMock;
@@ -541,10 +512,6 @@ describe('TestVariationsService', () => {
     await service.delete(testVariationId);
 
     expect(service.getDetails).toHaveBeenCalledWith(testVariationId);
-    expect(testRunFindMany).toHaveBeenCalledWith({
-      where: { testVariationId },
-    });
-    expect(testRunDeleteMock).toHaveBeenCalledWith(testRunId);
     expect(service.deleteBaseline).toHaveBeenCalledWith(variation.baselines[0]);
     expect(variationDeleteMock).toHaveBeenCalledWith({
       where: { id: testVariationId },
