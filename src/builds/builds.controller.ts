@@ -21,12 +21,13 @@ import { Build } from '@prisma/client';
 import { BuildDto } from './dto/build.dto';
 import { MixedGuard } from '../auth/guards/mixed.guard';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
-import { ModifyBuildDto } from './dto/build-modify.dto';
+import * as jsonpatch from 'fast-json-patch';
+import { Operation } from 'fast-json-patch';
 
 @Controller('builds')
 @ApiTags('builds')
 export class BuildsController {
-  constructor(private buildsService: BuildsService) {}
+  constructor(private buildsService: BuildsService) { }
 
   @Get()
   @ApiOkResponse({ type: PaginatedBuildDto })
@@ -68,12 +69,17 @@ export class BuildsController {
   @ApiSecurity('api_key')
   @ApiBearerAuth()
   @UseGuards(MixedGuard)
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() modifyBuildDto?: ModifyBuildDto): Promise<BuildDto> {
+  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() patchObject?: object[]): Promise<BuildDto> {
     //In future, no or empty body will do nothing as this check will be removed. It will expect a proper body to perform any patch.
-    if (modifyBuildDto === null || Object.keys(modifyBuildDto).length === 0) {
-      modifyBuildDto.isRunning = false;
+    if (patchObject === null || Object.keys(patchObject).length === 0) {
+      return this.buildsService.update(id, { "isRunning": false });
+    } else {
+      let target = {};
+      (patchObject as Operation[]).forEach(eachOpeartion => {
+        jsonpatch.applyOperation(target, eachOpeartion);
+      });
+      return this.buildsService.update(id, target);
     }
-    return this.buildsService.update(id, modifyBuildDto);
   }
 
   @Patch(':id/approve')

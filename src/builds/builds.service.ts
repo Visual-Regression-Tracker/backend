@@ -7,7 +7,6 @@ import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
-import { ModifyBuildDto } from './dto/build-modify.dto';
 
 @Injectable()
 export class BuildsService {
@@ -100,7 +99,7 @@ export class BuildsService {
     return new BuildDto(build);
   }
 
-  async update(id: string, modifyBuildDto: ModifyBuildDto): Promise<BuildDto> {
+  async update(id: string, modifyBuildDto: object): Promise<BuildDto> {
     const build = await this.prismaService.build.update({
       where: { id },
       include: {

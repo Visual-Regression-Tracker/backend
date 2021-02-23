@@ -466,7 +466,7 @@ describe('TestVariationsService', () => {
       ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
     });
     expect(testRunCreateMock).toHaveBeenCalledTimes(2);
-    expect(buildUpdateMock).toHaveBeenCalledWith(build.id, { isRunning: false });
+    expect(buildUpdateMock).toHaveBeenCalledWith(build.id, [{"op": "replace", "path": "/isRunning", "value": false}]);
   });
 
   it('delete', async () => {

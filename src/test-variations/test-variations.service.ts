@@ -138,7 +138,7 @@ export class TestVariationsService {
     });
 
     // stop build
-    return this.buildsService.update(build.id, { isRunning: false });
+    return this.buildsService.update(build.id, [{ "op": "replace", "path": "/isRunning", "value": false }]);
   }
 
   async delete(id: string): Promise<TestVariation> {
