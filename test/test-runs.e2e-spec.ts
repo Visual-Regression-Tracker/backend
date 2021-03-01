@@ -9,7 +9,6 @@ import { ProjectsService } from '../src/projects/projects.service';
 import { Project, TestStatus } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
 
-jest.setTimeout(20000);
 jest.useFakeTimers();
 
 describe('TestRuns (e2e)', () => {

@@ -144,10 +144,15 @@ export class TestVariationsService {
   async delete(id: string): Promise<TestVariation> {
     const testVariation = await this.getDetails(id);
 
-    // delete baseline
+    // delete Baselines
     await Promise.all(testVariation.baselines.map((baseline) => this.deleteBaseline(baseline)));
 
-    // delete testVariation
+    // disconnect TestRuns
+    // workaround due to  https://github.com/prisma/prisma/issues/2810
+    await this.prismaService
+      .$executeRaw`UPDATE "public"."TestRun" SET "testVariationId" = NULL::text WHERE "testVariationId" = ${id}`;
+
+    // delete TestVariation
     return this.prismaService.testVariation.delete({
       where: { id },
     });
