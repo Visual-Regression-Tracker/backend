@@ -226,7 +226,7 @@ describe('TestRunsService', () => {
       });
       service.findOne = testRunFindOneMock;
 
-      await service.approve(testRun.id, false);
+      await service.approve(testRun.id);
 
       expect(testRunFindOneMock).toHaveBeenCalledWith(testRun.id);
       expect(getImageMock).toHaveBeenCalledWith(testRun.imageName);
@@ -238,14 +238,14 @@ describe('TestRunsService', () => {
           testVariation: {
             update: {
               baselineName,
-              baselines: {
-                create: {
-                  baselineName,
-                  testRun: {
-                    connect: {
-                      id: testRun.id,
-                    },
-                  },
+            },
+          },
+          baseline: {
+            create: {
+              baselineName,
+              testVariation: {
+                connect: {
+                  id: testRun.testVariationId,
                 },
               },
             },
@@ -318,14 +318,14 @@ describe('TestRunsService', () => {
           testVariation: {
             update: {
               baselineName,
-              baselines: {
-                create: {
-                  baselineName,
-                  testRun: {
-                    connect: {
-                      id: testRun.id,
-                    },
-                  },
+            },
+          },
+          baseline: {
+            create: {
+              baselineName,
+              testVariation: {
+                connect: {
+                  id: testRun.testVariationId,
                 },
               },
             },
@@ -427,39 +427,37 @@ describe('TestRunsService', () => {
       expect(testRunFindOneMock).toHaveBeenCalledWith(testRun.id);
       expect(getImageMock).toHaveBeenCalledWith(testRun.imageName);
       expect(saveImageMock).toHaveBeenCalledTimes(1);
-      expect(testVariationCreateMock).toBeCalledWith({
-        data: {
-          project: { connect: { id: testRun.testVariation.projectId } },
-          baselineName,
-          name: testRun.name,
-          browser: testRun.browser,
-          device: testRun.device,
-          os: testRun.os,
-          viewport: testRun.viewport,
-          ignoreAreas: testRun.ignoreAreas,
-          comment: testRun.comment,
-          branchName: testRun.branchName,
-        },
-      });
-      expect(baselineCreateMock).toHaveBeenCalledWith({
-        data: {
-          baselineName,
-          testVariation: {
-            connect: { id: newTestVariation.id },
-          },
-          testRun: {
-            connect: {
-              id: testRun.id,
-            },
-          },
-        },
-      });
       expect(testRunUpdateMock).toHaveBeenCalledWith({
         where: { id: testRun.id },
         data: {
           status: TestStatus.approved,
-          testVariation: {
-            connect: { id: newTestVariation.id },
+          baseline: {
+            create: {
+              baselineName,
+              testVariation: {
+                create: {
+                  baselineName,
+                  name: testRun.name,
+                  browser: testRun.browser,
+                  device: testRun.device,
+                  os: testRun.os,
+                  viewport: testRun.viewport,
+                  ignoreAreas: testRun.ignoreAreas,
+                  comment: testRun.comment,
+                  branchName: testRun.branchName,
+                  project: {
+                    connect: {
+                      id: testRun.testVariation.projectId,
+                    },
+                  },
+                  testRuns: {
+                    connect: {
+                      id: testRun.id,
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       });

@@ -57,7 +57,7 @@ describe('TestVariations (e2e)', () => {
 
     it('can delete', async () => {
       const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
-      await testRunsService.approve(testRun.id, false);
+      await testRunsService.approve(testRun.id);
 
       await testVariationsService.delete(testRun.testVariationId);
 
