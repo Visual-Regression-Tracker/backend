@@ -26,6 +26,7 @@ const initModule = async ({
   testRunCreateMock = jest.fn(),
   testRunFindMany = jest.fn(),
   testRunDeleteMock = jest.fn(),
+  $executeRawMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -54,6 +55,7 @@ const initModule = async ({
       {
         provide: PrismaService,
         useValue: {
+          $executeRaw: $executeRawMock,
           testVariation: {
             findUnique: variationfindUniqueMock,
             findMany: variationFindManyMock,
@@ -500,11 +502,13 @@ describe('TestVariationsService', () => {
       ],
     };
 
+    const $executeRawMock = jest.fn();
     const variationDeleteMock = jest.fn();
     const getDetailsMock = jest.fn().mockResolvedValueOnce(variation);
     const deleteBaselineMock = jest.fn().mockResolvedValueOnce(variation.baselines[0]);
     const service = await initModule({
       variationDeleteMock,
+      $executeRawMock,
     });
     service.getDetails = getDetailsMock;
     service.deleteBaseline = deleteBaselineMock;
@@ -513,6 +517,7 @@ describe('TestVariationsService', () => {
 
     expect(service.getDetails).toHaveBeenCalledWith(testVariationId);
     expect(service.deleteBaseline).toHaveBeenCalledWith(variation.baselines[0]);
+    expect($executeRawMock).toHaveBeenCalled();
     expect(variationDeleteMock).toHaveBeenCalledWith({
       where: { id: testVariationId },
     });
