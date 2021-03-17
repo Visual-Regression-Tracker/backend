@@ -90,7 +90,7 @@ describe('TestRuns (e2e)', () => {
       expect(testRun.status).toBe(TestStatus.ok);
     });
 
-    it('Auto approve not rebased feature branch', async () => {
+    it('Auto approve not rebased feature branch then Ok after rebase', async () => {
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
@@ -108,9 +108,18 @@ describe('TestRuns (e2e)', () => {
       );
       await testRunsService.approve(testRun2.id, false, false);
 
-      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
+      const { testRun: notRebasedTestRun } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+      expect(notRebasedTestRun.status).toBe(TestStatus.autoApproved);
 
-      expect(testRun.status).toBe(TestStatus.autoApproved);
+      const { testRun: rebasedTestRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v2);
+
+      expect(rebasedTestRun.status).toBe(TestStatus.ok);
     });
 
     it('Auto approve merged feature into feature branch', async () => {
