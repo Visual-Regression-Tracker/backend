@@ -15,8 +15,9 @@ import { TestVariationsService } from '../test-variations/test-variations.servic
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { TestRunDto } from './dto/testRun.dto';
 import { BuildsService } from '../builds/builds.service';
+import fs from 'fs';
 
-jest.mock('pixelmatch');
+// jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
 
 const initService = async ({
@@ -99,6 +100,21 @@ const initService = async ({
 
   return module.get<TestRunsService>(TestRunsService);
 };
+
+const fillPng = (png, r,g,b, pixelsCount = 0, alpha=255) => {
+  for (let y = 0; y < png.height; y++) {
+    for (let x = 0; x < png.width; x++) {
+      const idx = (png.width * y + x) << 2;
+      if (pixelsCount === 0 || idx < pixelsCount*4) {
+        png.data[idx] = r;
+        png.data[idx+1] = g;
+        png.data[idx+2] = b;
+        png.data[idx+3] = alpha;
+      }
+    }
+  }
+}
+
 describe('TestRunsService', () => {
   let service: TestRunsService;
   const ignoreAreas = [{ x: 1, y: 2, width: 10, height: 20 }];
@@ -603,7 +619,8 @@ describe('TestRunsService', () => {
       });
     });
 
-    it('diff image dimensions mismatch', async () => {
+    it('diff image dimensions mismatch ', async () => {
+
       const baseline = new PNG({
         width: 10,
         height: 10,
@@ -612,15 +629,19 @@ describe('TestRunsService', () => {
         width: 20,
         height: 20,
       });
-      service = await initService({});
+      fillPng(baseline, 0, 0, 0)
+      fillPng(image, 0, 0, 0)
+      const saveImageMock = jest.fn();
+      service = await initService({saveImageMock});
 
       const result = service.getDiff(baseline, image, baseTestRun);
 
+      expect(saveImageMock).toHaveBeenCalledTimes(1);
       expect(result).toStrictEqual({
         status: TestStatus.unresolved,
-        diffName: null,
-        pixelMisMatchCount: undefined,
-        diffPercent: undefined,
+        diffName: undefined,
+        pixelMisMatchCount: 20*20 - 10*10,
+        diffPercent: 75,
         isSameDimension: false,
       });
     });
@@ -634,8 +655,10 @@ describe('TestRunsService', () => {
         width: 10,
         height: 10,
       });
+      fillPng(baseline, 0, 0, 0)
+      fillPng(image, 0, 0, 0)
       service = await initService({});
-      mocked(Pixelmatch).mockReturnValueOnce(0);
+      // mocked(Pixelmatch).mockReturnValueOnce(0);
 
       const result = service.getDiff(baseline, image, baseTestRun);
 
@@ -663,10 +686,18 @@ describe('TestRunsService', () => {
         width: 100,
         height: 100,
       });
+      fillPng(baseline, 0, 0, 0)
+      fillPng(image, 0, 0, 0)
+      await baseline.pack().pipe(fs.createWriteStream('image1.png'))
+
+      const pixelMisMatchCount = 150;
+      fillPng(image, 255,0,0, pixelMisMatchCount)
+
+      await image.pack().pipe(fs.createWriteStream('image2.png'))
       const saveImageMock = jest.fn();
       service = await initService({ saveImageMock });
-      const pixelMisMatchCount = 150;
-      mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
+
+      // mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
 
       const result = service.getDiff(baseline, image, testRun);
 
@@ -695,8 +726,11 @@ describe('TestRunsService', () => {
         width: 100,
         height: 100,
       });
+      fillPng(baseline, 0, 0, 0, 255)
+      fillPng(image, 0, 0, 0, 255)
       const pixelMisMatchCount = 200;
-      mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
+      fillPng(image, 255,0,0,pixelMisMatchCount)
+      // mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
       const diffName = 'diff name';
       const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
       service = await initService({

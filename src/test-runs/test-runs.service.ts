@@ -271,6 +271,17 @@ export class TestRunsService {
       });
   }
 
+  prepareImage(image: PNG, width: number, height: number) {
+    let preparedImage
+    if (width > image.width || height > image.height) {
+      preparedImage = new PNG({width, height, fill: true})
+      PNG.bitblt(image, preparedImage, 0, 0, image.width, image.height, 0, 0)
+      return  preparedImage
+    } else {
+      return image
+    }
+  }
+
   getDiff(baseline: PNG, image: PNG, testRun: TestRun): DiffResult {
     const result: DiffResult = {
       status: undefined,
@@ -283,20 +294,27 @@ export class TestRunsService {
     if (baseline) {
       result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
 
-      if (result.isSameDimension) {
+      const width = Math.max(baseline.width, image.width)
+      const height = Math.max(baseline.height, image.height)
+
+      const prepearedBaseline = this.prepareImage(baseline, width, height)
+      const preparedImage = this.prepareImage(image, width, height)
+
+
+      // if (result.isSameDimension) {
         const diff = new PNG({
-          width: baseline.width,
-          height: baseline.height,
+          width,
+          height,
         });
 
         const ignoreAreas = this.getIgnoteAreas(testRun);
         // compare
         result.pixelMisMatchCount = Pixelmatch(
-          this.applyIgnoreAreas(baseline, ignoreAreas),
-          this.applyIgnoreAreas(image, ignoreAreas),
+          this.applyIgnoreAreas(prepearedBaseline, ignoreAreas),
+          this.applyIgnoreAreas(preparedImage, ignoreAreas),
           diff.data,
-          baseline.width,
-          baseline.height,
+          width,
+          height,
           {
             includeAA: true,
           }
@@ -310,10 +328,10 @@ export class TestRunsService {
         } else {
           result.status = TestStatus.ok;
         }
-      } else {
-        // diff dimensions
-        result.status = TestStatus.unresolved;
-      }
+      // } else {
+      //   // diff dimensions
+      //   result.status = TestStatus.unresolved;
+      // }
     }
 
     return result;
