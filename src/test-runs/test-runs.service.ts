@@ -272,13 +272,13 @@ export class TestRunsService {
   }
 
   prepareImage(image: PNG, width: number, height: number) {
-    let preparedImage
+    let preparedImage;
     if (width > image.width || height > image.height) {
-      preparedImage = new PNG({width, height, fill: true})
-      PNG.bitblt(image, preparedImage, 0, 0, image.width, image.height, 0, 0)
-      return  preparedImage
+      preparedImage = new PNG({ width, height, fill: true });
+      PNG.bitblt(image, preparedImage, 0, 0, image.width, image.height, 0, 0);
+      return preparedImage;
     } else {
-      return image
+      return image;
     }
   }
 
@@ -294,40 +294,39 @@ export class TestRunsService {
     if (baseline) {
       result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
 
-      const width = Math.max(baseline.width, image.width)
-      const height = Math.max(baseline.height, image.height)
+      const width = Math.max(baseline.width, image.width);
+      const height = Math.max(baseline.height, image.height);
 
-      const prepearedBaseline = this.prepareImage(baseline, width, height)
-      const preparedImage = this.prepareImage(image, width, height)
-
+      const prepearedBaseline = this.prepareImage(baseline, width, height);
+      const preparedImage = this.prepareImage(image, width, height);
 
       // if (result.isSameDimension) {
-        const diff = new PNG({
-          width,
-          height,
-        });
+      const diff = new PNG({
+        width,
+        height,
+      });
 
-        const ignoreAreas = this.getIgnoteAreas(testRun);
-        // compare
-        result.pixelMisMatchCount = Pixelmatch(
-          this.applyIgnoreAreas(prepearedBaseline, ignoreAreas),
-          this.applyIgnoreAreas(preparedImage, ignoreAreas),
-          diff.data,
-          width,
-          height,
-          {
-            includeAA: true,
-          }
-        );
-        result.diffPercent = (result.pixelMisMatchCount * 100) / (image.width * image.height);
-
-        if (result.diffPercent > testRun.diffTollerancePercent) {
-          // save diff
-          result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
-          result.status = TestStatus.unresolved;
-        } else {
-          result.status = TestStatus.ok;
+      const ignoreAreas = this.getIgnoteAreas(testRun);
+      // compare
+      result.pixelMisMatchCount = Pixelmatch(
+        this.applyIgnoreAreas(prepearedBaseline, ignoreAreas),
+        this.applyIgnoreAreas(preparedImage, ignoreAreas),
+        diff.data,
+        width,
+        height,
+        {
+          includeAA: true,
         }
+      );
+      result.diffPercent = (result.pixelMisMatchCount * 100) / (image.width * image.height);
+
+      if (result.diffPercent > testRun.diffTollerancePercent) {
+        // save diff
+        result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
+        result.status = TestStatus.unresolved;
+      } else {
+        result.status = TestStatus.ok;
+      }
       // } else {
       //   // diff dimensions
       //   result.status = TestStatus.unresolved;
