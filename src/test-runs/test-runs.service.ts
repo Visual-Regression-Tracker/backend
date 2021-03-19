@@ -272,9 +272,8 @@ export class TestRunsService {
   }
 
   prepareImage(image: PNG, width: number, height: number) {
-    let preparedImage;
     if (width > image.width || height > image.height) {
-      preparedImage = new PNG({ width, height, fill: true });
+      const preparedImage = new PNG({ width, height, fill: true });
       PNG.bitblt(image, preparedImage, 0, 0, image.width, image.height, 0, 0);
       return preparedImage;
     } else {
