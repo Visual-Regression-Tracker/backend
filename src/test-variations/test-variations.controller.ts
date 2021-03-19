@@ -52,15 +52,17 @@ export class TestVariationsController {
 
   @Get('merge/')
   @ApiQuery({ name: 'projectId', required: true })
-  @ApiQuery({ name: 'branchName', required: true })
+  @ApiQuery({ name: 'fromBranch', required: true })
+  @ApiQuery({ name: 'toBranch', required: true })
   @ApiOkResponse({ type: BuildDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   merge(
     @Query('projectId', new ParseUUIDPipe()) projectId: string,
-    @Query('branchName') branchName: string
+    @Query('fromBranch') fromBranch: string,
+    @Query('toBranch') toBranch: string
   ): Promise<BuildDto> {
-    return this.testVariations.merge(projectId, branchName);
+    return this.testVariations.merge(projectId, fromBranch, toBranch);
   }
 
   @Delete(':id')

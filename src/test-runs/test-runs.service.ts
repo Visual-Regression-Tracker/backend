@@ -69,13 +69,7 @@ export class TestRunsService {
     // create test run result
     const testRun = await this.create(testVariation, createTestRequestDto);
 
-    // calculate diff
-    let testRunWithResult = await this.calculateDiff(testRun);
-
-    // try auto approve
-    testRunWithResult = await this.tryAutoApproveByPastBaselines(testVariation, testRunWithResult);
-    testRunWithResult = await this.tryAutoApproveByNewBaselines(testVariation, testRunWithResult);
-    return new TestRunResultDto(testRunWithResult, testVariation);
+    return new TestRunResultDto(testRun, testVariation);
   }
 
   /**
@@ -228,7 +222,15 @@ export class TestRunsService {
     });
 
     this.eventsGateway.testRunCreated(testRun);
-    return testRun;
+
+     // calculate diff
+     let testRunWithResult = await this.calculateDiff(testRun);
+
+     // try auto approve
+     testRunWithResult = await this.tryAutoApproveByPastBaselines(testVariation, testRunWithResult);
+     testRunWithResult = await this.tryAutoApproveByNewBaselines(testVariation, testRunWithResult);
+
+    return testRunWithResult;
   }
 
   async delete(id: string): Promise<TestRun> {

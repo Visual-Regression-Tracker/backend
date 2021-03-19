@@ -39,7 +39,7 @@ export class TestVariationsService {
     });
   }
 
-  async findOrCreate(projectId: string, baselineData: BaselineDataDto): Promise<TestVariation> {
+  async findOrCreate(projectId: string, baselineData: BaselineDataDto, mainBranchName?: string): Promise<TestVariation> {
     const project = await this.prismaService.project.findUnique({ where: { id: projectId } });
 
     const [[mainBranchTestVariation], [currentBranchTestVariation]] = await Promise.all([
@@ -47,7 +47,7 @@ export class TestVariationsService {
       this.prismaService.testVariation.findMany({
         where: {
           projectId,
-          branchName: project.mainBranchName,
+          branchName: mainBranchName ?? project.mainBranchName,
           ...getTestVariationUniqueData(baselineData),
         },
       }),
@@ -92,18 +92,18 @@ export class TestVariationsService {
     });
   }
 
-  async merge(projectId: string, branchName: string): Promise<BuildDto> {
+  async merge(projectId: string, fromBranch: string, toBranch: string): Promise<BuildDto> {
     const project: Project = await this.prismaService.project.findUnique({ where: { id: projectId } });
 
     // create build
     const build: BuildDto = await this.buildsService.create({
-      branchName: project.mainBranchName,
+      branchName: toBranch,
       project: projectId,
     });
 
     // find side branch variations
     const testVariations: TestVariation[] = await this.prismaService.testVariation.findMany({
-      where: { projectId, branchName },
+      where: { projectId, branchName: fromBranch },
     });
 
     // compare to main branch variations
@@ -113,10 +113,10 @@ export class TestVariationsService {
         try {
           const imageBase64 = PNG.sync.write(baseline).toString('base64');
 
-          // get main branch variation
+          // get destination branch variation
           const baselineData = convertBaselineDataToQuery({
             ...sideBranchTestVariation,
-            branchName: project.mainBranchName,
+            branchName: toBranch,
           });
           const mainBranchTestVariation = await this.findOrCreate(projectId, baselineData);
 
