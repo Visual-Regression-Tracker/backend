@@ -99,6 +99,7 @@ const initService = async ({
   return module.get<TestRunsService>(TestRunsService);
 };
 
+// Helper fills PNG with specified color, or fills number of pixels in png if specified
 const fillPng = (png, r, g, b, pixelsCount = 0, alpha = 255) => {
   for (let y = 0; y < png.height; y++) {
     for (let x = 0; x < png.width; x++) {
