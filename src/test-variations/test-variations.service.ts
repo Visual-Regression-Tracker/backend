@@ -39,7 +39,11 @@ export class TestVariationsService {
     });
   }
 
-  async findOrCreate(projectId: string, baselineData: BaselineDataDto, mainBranchName?: string): Promise<TestVariation> {
+  async findOrCreate(
+    projectId: string,
+    baselineData: BaselineDataDto,
+    mainBranchName?: string
+  ): Promise<TestVariation> {
     const project = await this.prismaService.project.findUnique({ where: { id: projectId } });
 
     const [[mainBranchTestVariation], [currentBranchTestVariation]] = await Promise.all([
@@ -130,7 +134,9 @@ export class TestVariationsService {
             ignoreAreas: JSON.parse(sideBranchTestVariation.ignoreAreas),
           };
 
-          return this.testRunsService.create(mainBranchTestVariation, createTestRequestDto);
+          const testRun = await this.testRunsService.create(mainBranchTestVariation, createTestRequestDto);
+
+          return this.testRunsService.calculateDiff(testRun);
         } catch (err) {
           console.log(err);
         }
