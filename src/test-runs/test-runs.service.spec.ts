@@ -662,6 +662,7 @@ describe('TestRunsService', () => {
           includeAA: true,
         }
       );
+      expect(saveImageMock).toHaveBeenCalledTimes(1);
       expect(result).toStrictEqual({
         status: TestStatus.unresolved,
         diffName,
