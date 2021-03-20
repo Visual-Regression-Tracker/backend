@@ -276,9 +276,8 @@ export class TestRunsService {
       const preparedImage = new PNG({ width, height, fill: true });
       PNG.bitblt(image, preparedImage, 0, 0, image.width, image.height);
       return preparedImage;
-    } else {
-      return image;
     }
+    return image;
   }
 
   getDiff(baseline: PNG, image: PNG, testRun: TestRun): DiffResult {
@@ -302,11 +301,9 @@ export class TestRunsService {
       result.status = TestStatus.unresolved;
       return result;
     }
-
+    // scale image to max size
     const maxWidth = Math.max(baseline.width, image.width);
     const maxHeight = Math.max(baseline.height, image.height);
-
-    // scale to image to size
     const scaledBaseline = this.scaleImageToSize(baseline, maxWidth, maxHeight);
     const scaledImage = this.scaleImageToSize(image, maxWidth, maxHeight);
 
@@ -333,7 +330,6 @@ export class TestRunsService {
     } else {
       result.status = TestStatus.ok;
     }
-
     return result;
   }
 
