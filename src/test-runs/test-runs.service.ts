@@ -271,14 +271,13 @@ export class TestRunsService {
       });
   }
 
-  prepareImage(image: PNG, width: number, height: number) {
+  private scaleImageToSize(image: PNG, width: number, height: number): PNG {
     if (width > image.width || height > image.height) {
       const preparedImage = new PNG({ width, height, fill: true });
-      PNG.bitblt(image, preparedImage, 0, 0, image.width, image.height, 0, 0);
+      PNG.bitblt(image, preparedImage, 0, 0, image.width, image.height);
       return preparedImage;
-    } else {
-      return image;
     }
+    return image;
   }
 
   getDiff(baseline: PNG, image: PNG, testRun: TestRun): DiffResult {
@@ -290,48 +289,47 @@ export class TestRunsService {
       isSameDimension: undefined,
     };
 
-    if (baseline) {
-      result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
-
-      const width = Math.max(baseline.width, image.width);
-      const height = Math.max(baseline.height, image.height);
-
-      const prepearedBaseline = this.prepareImage(baseline, width, height);
-      const preparedImage = this.prepareImage(image, width, height);
-
-      // if (result.isSameDimension) {
-      const diff = new PNG({
-        width,
-        height,
-      });
-
-      const ignoreAreas = this.getIgnoteAreas(testRun);
-      // compare
-      result.pixelMisMatchCount = Pixelmatch(
-        this.applyIgnoreAreas(prepearedBaseline, ignoreAreas),
-        this.applyIgnoreAreas(preparedImage, ignoreAreas),
-        diff.data,
-        width,
-        height,
-        {
-          includeAA: true,
-        }
-      );
-      result.diffPercent = (result.pixelMisMatchCount * 100) / (image.width * image.height);
-
-      if (result.diffPercent > testRun.diffTollerancePercent) {
-        // save diff
-        result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
-        result.status = TestStatus.unresolved;
-      } else {
-        result.status = TestStatus.ok;
-      }
-      // } else {
-      //   // diff dimensions
-      //   result.status = TestStatus.unresolved;
-      // }
+    if (!baseline) {
+      // no baseline
+      return result;
     }
 
+    result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
+
+    if (!result.isSameDimension && !process.env.ALLOW_DIFF_DIMENSIONS) {
+      // diff dimensions
+      result.status = TestStatus.unresolved;
+      return result;
+    }
+    // scale image to max size
+    const maxWidth = Math.max(baseline.width, image.width);
+    const maxHeight = Math.max(baseline.height, image.height);
+    const scaledBaseline = this.scaleImageToSize(baseline, maxWidth, maxHeight);
+    const scaledImage = this.scaleImageToSize(image, maxWidth, maxHeight);
+
+    // apply ignore areas
+    const ignoreAreas = this.getIgnoteAreas(testRun);
+    const baselineData = this.applyIgnoreAreas(scaledBaseline, ignoreAreas);
+    const imageData = this.applyIgnoreAreas(scaledImage, ignoreAreas);
+
+    // compare
+    const diff = new PNG({
+      width: maxWidth,
+      height: maxHeight,
+    });
+    result.pixelMisMatchCount = Pixelmatch(baselineData, imageData, diff.data, maxWidth, maxHeight, {
+      includeAA: true,
+    });
+    result.diffPercent = (result.pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
+
+    // process result
+    if (result.diffPercent > testRun.diffTollerancePercent) {
+      // save diff
+      result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
+      result.status = TestStatus.unresolved;
+    } else {
+      result.status = TestStatus.ok;
+    }
     return result;
   }
 
