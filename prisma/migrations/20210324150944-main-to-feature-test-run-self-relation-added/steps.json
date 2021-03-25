@@ -1,0 +1,104 @@
+{
+  "version": "0.3.14-fixed",
+  "steps": [
+    {
+      "tag": "CreateField",
+      "model": "TestRun",
+      "field": "mainBranchTestRunId",
+      "type": "String",
+      "arity": "Optional"
+    },
+    {
+      "tag": "CreateField",
+      "model": "TestRun",
+      "field": "mainBranchTestRun",
+      "type": "TestRun",
+      "arity": "Optional"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "mainBranchTestRun"
+        },
+        "directive": "relation"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "mainBranchTestRun"
+        },
+        "directive": "relation"
+      },
+      "argument": "",
+      "value": "\"MainToFeatureTestRun\""
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "mainBranchTestRun"
+        },
+        "directive": "relation"
+      },
+      "argument": "fields",
+      "value": "[mainBranchTestRunId]"
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "mainBranchTestRun"
+        },
+        "directive": "relation"
+      },
+      "argument": "references",
+      "value": "[id]"
+    },
+    {
+      "tag": "CreateField",
+      "model": "TestRun",
+      "field": "featureTestRun",
+      "type": "TestRun",
+      "arity": "Optional"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "featureTestRun"
+        },
+        "directive": "relation"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "featureTestRun"
+        },
+        "directive": "relation"
+      },
+      "argument": "",
+      "value": "\"MainToFeatureTestRun\""
+    }
+  ]
+}
