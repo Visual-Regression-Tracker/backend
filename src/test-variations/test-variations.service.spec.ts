@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { StaticService } from '../shared/static/static.service';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
-import { TestVariation, Baseline, Project, Build, TestRun } from '@prisma/client';
+import { TestVariation, Baseline, Project, Build } from '@prisma/client';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { PNG } from 'pngjs';

@@ -13,8 +13,9 @@ import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
-import { TestRunDto } from './dto/testRun.dto';
+import { TestRunDto } from '../test-runs/dto/testRun.dto';
 import { BuildsService } from '../builds/builds.service';
+import { TEST_PROJECT } from '../_data_';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -38,7 +39,7 @@ const initService = async ({
   testVariationFindManyMock = jest.fn(),
   baselineCreateMock = jest.fn(),
   testVariationFindOrCreateMock = jest.fn(),
-  projectFindOneMock = jest.fn(),
+  projectFindUniqueMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -62,7 +63,7 @@ const initService = async ({
             create: baselineCreateMock,
           },
           project: {
-            findOne: projectFindOneMock,
+            findUnique: projectFindUniqueMock,
           },
         },
       },
@@ -1006,6 +1007,7 @@ describe('TestRunsService', () => {
   });
 
   it('postTestRun', async () => {
+    delete process.env.AUTO_APPROVE_BASED_ON_HISTORY;
     const createTestRequestDto: CreateTestRequestDto = {
       buildId: 'buildId',
       projectId: 'projectId',
@@ -1057,11 +1059,13 @@ describe('TestRunsService', () => {
       branchName: 'develop',
       merge: false,
     };
+    const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
     const testVariationFindOrCreateMock = jest.fn().mockResolvedValueOnce(testVariation);
     const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
     const deleteMock = jest.fn();
     const createMock = jest.fn().mockResolvedValueOnce(testRun);
     const service = await initService({
+      projectFindUniqueMock,
       testVariationFindOrCreateMock,
       testRunFindManyMock,
     });

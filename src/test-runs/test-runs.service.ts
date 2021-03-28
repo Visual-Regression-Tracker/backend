@@ -50,6 +50,9 @@ export class TestRunsService {
   }
 
   async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
+    const project: Project = await this.prismaService.project.findUnique({
+      where: { id: createTestRequestDto.projectId },
+    });
     const baselineData = convertBaselineDataToQuery(createTestRequestDto);
 
     // creates variatioin if does not exist
@@ -68,7 +71,7 @@ export class TestRunsService {
 
     // create test run result
     const testRun = await this.create(testVariation, createTestRequestDto);
-    const testRunAgainstMainBranch = await this.createAgainstMainBranch({ testVariation, testRun });
+    const testRunAgainstMainBranch = await this.createAgainstMainBranch({ project, testVariation, testRun });
 
     // calculate diff
     let testRunWithResult = await this.calculateDiff(testRun);
@@ -236,15 +239,15 @@ export class TestRunsService {
   /**
    * Emulate merge feature to main branch for autoApprove logic
    */
-  async createAgainstMainBranch({
+  private async createAgainstMainBranch({
+    project,
     testVariation,
     testRun,
   }: {
+    project: Project;
     testVariation: TestVariation;
     testRun: TestRun;
   }): Promise<TestRun | undefined> {
-    const project: Project = await this.prismaService.project.findUnique({ where: { id: testVariation.projectId } });
-
     if (
       !process.env.AUTO_APPROVE_BASED_ON_HISTORY ||
       testRun.branchName === project.mainBranchName ||
