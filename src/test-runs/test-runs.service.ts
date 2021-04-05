@@ -59,15 +59,15 @@ export class TestRunsService {
     const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto.projectId, baselineData);
 
     // delete previous test run if exists
-    const [previousTestRun] = await this.prismaService.testRun.findMany({
+    const previousTestRuns = await this.prismaService.testRun.findMany({
       where: {
-        buildId: createTestRequestDto.buildId,
-        ...baselineData,
+        OR: [
+          { buildId: createTestRequestDto.buildId, ...baselineData },
+          { buildId: createTestRequestDto.buildId, ...baselineData, branchName: project.mainBranchName },
+        ],
       },
     });
-    if (!!previousTestRun) {
-      await this.delete(previousTestRun.id);
-    }
+    await Promise.all(previousTestRuns.map((tr) => this.delete(tr.id)));
 
     // create test run result
     const testRun = await this.create(testVariation, createTestRequestDto);
@@ -257,13 +257,18 @@ export class TestRunsService {
       return;
     }
     this.logger.log(`Creating testRun agains main branch for ${testRun.id}`);
-    const [mainBranchTestVariation] = await this.prismaService.testVariation.findMany({
+    const mainBranchTestVariation = await this.prismaService.testVariation.findUnique({
       where: {
-        projectId: project.id,
-        branchName: project.mainBranchName,
-        ...getTestVariationUniqueData(testVariation),
+        projectId_name_browser_device_os_viewport_branchName: {
+          projectId: project.id,
+          branchName: project.mainBranchName,
+          ...getTestVariationUniqueData(testVariation),
+        },
       },
     });
+    if (!mainBranchTestVariation) {
+      return;
+    }
     return this.prismaService.testRun.create({
       data: {
         imageName: testRun.imageName,

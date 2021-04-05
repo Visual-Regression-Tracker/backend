@@ -42,20 +42,25 @@ export class TestVariationsService {
   async findOrCreate(projectId: string, baselineData: BaselineDataDto): Promise<TestVariation> {
     const project = await this.prismaService.project.findUnique({ where: { id: projectId } });
 
-    const [[mainBranchTestVariation], [currentBranchTestVariation]] = await Promise.all([
+    const [mainBranchTestVariation, currentBranchTestVariation] = await Promise.all([
       // search main branch variation
-      this.prismaService.testVariation.findMany({
+      this.prismaService.testVariation.findUnique({
         where: {
-          projectId,
-          branchName: project.mainBranchName,
-          ...getTestVariationUniqueData(baselineData),
+          projectId_name_browser_device_os_viewport_branchName: {
+            projectId,
+            branchName: project.mainBranchName,
+            ...getTestVariationUniqueData(baselineData),
+          },
         },
       }),
       // search current branch variation
-      this.prismaService.testVariation.findMany({
+      this.prismaService.testVariation.findUnique({
         where: {
-          projectId,
-          ...baselineData,
+          projectId_name_browser_device_os_viewport_branchName: {
+            projectId,
+            branchName: baselineData.branchName,
+            ...getTestVariationUniqueData(baselineData),
+          },
         },
       }),
     ]);
