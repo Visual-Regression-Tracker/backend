@@ -74,7 +74,8 @@ export class TestVariationsService {
     return this.prismaService.testVariation.create({
       data: {
         project: { connect: { id: projectId } },
-        ...baselineData,
+        branchName: baselineData.branchName,
+        ...getTestVariationUniqueData(baselineData),
       },
     });
   }
