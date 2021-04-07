@@ -106,11 +106,7 @@ export class TestVariationsService {
     ]);
 
     if (!!currentBranchTestVariation) {
-      if (
-        process.env.AUTO_APPROVE_BASED_ON_HISTORY &&
-        mainBranchTestVariation &&
-        mainBranchTestVariation.updatedAt > currentBranchTestVariation.updatedAt
-      ) {
+      if (mainBranchTestVariation && mainBranchTestVariation.updatedAt > currentBranchTestVariation.updatedAt) {
         return mainBranchTestVariation;
       }
       return currentBranchTestVariation;

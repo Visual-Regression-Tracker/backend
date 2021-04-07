@@ -235,6 +235,83 @@ describe('TestVariationsService', () => {
       expect(result).toBe(variationMock);
     });
 
+    it('can find by current branch but main branch is more relevant', async () => {
+      const createRequest: CreateTestRequestDto = {
+        buildId: 'buildId',
+        projectId: projectMock.id,
+        name: 'Test name',
+        imageBase64: 'Image',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        branchName: 'develop',
+      };
+
+      const variationMainMock: TestVariation = {
+        id: '123',
+        projectId: projectMock.id,
+        name: 'Test name',
+        baselineName: 'baselineName',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        ignoreAreas: '[]',
+        comment: 'some comment',
+        branchName: 'master',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const variationFeatureMock: TestVariation = {
+        id: '123',
+        projectId: projectMock.id,
+        name: 'Test name',
+        baselineName: 'baselineName',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        ignoreAreas: '[]',
+        comment: 'some comment',
+        branchName: 'develop',
+        createdAt: new Date(),
+        updatedAt: new Date(variationMainMock.updatedAt.getDate() - 1),
+      };
+      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
+      service = await initModule({ projectFindUniqueMock });
+      service.findUnique = jest
+        .fn()
+        .mockResolvedValueOnce(variationMainMock)
+        .mockResolvedValueOnce(variationFeatureMock);
+
+      const result = await service.findOrCreate(createRequest.projectId, {
+        ...getTestVariationUniqueData(createRequest),
+        branchName: createRequest.branchName,
+      });
+
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        branchName: projectMock.mainBranchName,
+      });
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        branchName: createRequest.branchName,
+      });
+      expect(result).toBe(variationMainMock);
+    });
+
     it('can create if not found', async () => {
       const createRequest: CreateTestRequestDto = {
         buildId: 'buildId',
