@@ -12,10 +12,11 @@ import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
-import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { TestRunDto } from '../test-runs/dto/testRun.dto';
 import { BuildsService } from '../builds/builds.service';
 import { TEST_PROJECT } from '../_data_';
+import { getTestVariationUniqueData } from '../utils';
+import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -147,7 +148,7 @@ describe('TestRunsService', () => {
     });
   });
 
-  it('reject', async () => {
+  it('setStatus', async () => {
     const testRun = {
       id: 'id',
       imageName: 'imageName',
@@ -167,7 +168,7 @@ describe('TestRunsService', () => {
       eventTestRunUpdatedMock,
     });
 
-    await service.reject(testRun.id);
+    await service.setStatus(testRun.id, TestStatus.failed);
 
     expect(testRunUpdateMock).toHaveBeenCalledWith({
       where: { id: testRun.id },
@@ -176,297 +177,6 @@ describe('TestRunsService', () => {
       },
     });
     expect(eventTestRunUpdatedMock).toBeCalledWith(testRun);
-  });
-
-  describe('approve', () => {
-    it('should approve the same branch', async () => {
-      const testRun: TestRun = {
-        id: 'id',
-        imageName: 'imageName',
-        diffName: 'diffName',
-        baselineName: 'baselineName',
-        diffPercent: 1,
-        pixelMisMatchCount: 10,
-        diffTollerancePercent: 12,
-        status: TestStatus.new,
-        buildId: 'buildId',
-        testVariationId: 'testVariationId',
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        name: 'test run name',
-        ignoreAreas: '[]',
-        tempIgnoreAreas: '[]',
-        browser: 'browser',
-        device: 'device',
-        os: 'os',
-        viewport: 'viewport',
-        branchName: 'master',
-        baselineBranchName: 'master',
-        comment: 'some comment',
-        merge: false,
-      };
-      const testRunUpdateMock = jest.fn().mockResolvedValueOnce({
-        ...testRun,
-        status: TestStatus.approved,
-      });
-      const eventTestRunUpdatedMock = jest.fn();
-      const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
-      const baselineName = 'some baseline name';
-      const saveImageMock = jest.fn().mockReturnValueOnce(baselineName);
-      const getImageMock = jest.fn().mockReturnValueOnce(
-        new PNG({
-          width: 10,
-          height: 10,
-        })
-      );
-      service = await initService({
-        testRunUpdateMock,
-        saveImageMock,
-        getImageMock,
-        eventTestRunUpdatedMock,
-      });
-      service.findOne = testRunFindOneMock;
-
-      await service.approve(testRun.id);
-
-      expect(testRunFindOneMock).toHaveBeenCalledWith(testRun.id);
-      expect(getImageMock).toHaveBeenCalledWith(testRun.imageName);
-      expect(saveImageMock).toHaveBeenCalledTimes(1);
-      expect(testRunUpdateMock).toHaveBeenCalledWith({
-        where: { id: testRun.id },
-        data: {
-          status: TestStatus.approved,
-          testVariation: {
-            update: {
-              baselineName,
-            },
-          },
-          baseline: {
-            create: {
-              baselineName,
-              testVariation: {
-                connect: {
-                  id: testRun.testVariationId,
-                },
-              },
-            },
-          },
-        },
-      });
-      expect(eventTestRunUpdatedMock).toBeCalledWith({
-        ...testRun,
-        status: TestStatus.approved,
-      });
-    });
-
-    it('should approve merge', async () => {
-      const testRun: TestRun = {
-        id: 'id',
-        imageName: 'imageName',
-        diffName: 'diffName',
-        baselineName: 'baselineName',
-        diffPercent: 1,
-        pixelMisMatchCount: 10,
-        diffTollerancePercent: 12,
-        status: TestStatus.new,
-        buildId: 'buildId',
-        testVariationId: 'testVariationId',
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        name: 'test run name',
-        ignoreAreas: '[]',
-        tempIgnoreAreas: '[]',
-        browser: 'browser',
-        device: 'device',
-        os: 'os',
-        viewport: 'viewport',
-        branchName: 'develop',
-        baselineBranchName: 'master',
-        comment: 'some comment',
-        merge: false,
-      };
-      const testRunUpdateMock = jest.fn().mockResolvedValueOnce({
-        ...testRun,
-        status: TestStatus.approved,
-      });
-      const eventTestRunUpdatedMock = jest.fn();
-      const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
-      const baselineName = 'some baseline name';
-      const saveImageMock = jest.fn().mockReturnValueOnce(baselineName);
-      const getImageMock = jest.fn().mockReturnValueOnce(
-        new PNG({
-          width: 10,
-          height: 10,
-        })
-      );
-      service = await initService({
-        testRunUpdateMock,
-        saveImageMock,
-        getImageMock,
-        eventTestRunUpdatedMock,
-      });
-      service.findOne = testRunFindOneMock;
-
-      await service.approve(testRun.id, true);
-
-      expect(testRunFindOneMock).toHaveBeenCalledWith(testRun.id);
-      expect(getImageMock).toHaveBeenCalledWith(testRun.imageName);
-      expect(saveImageMock).toHaveBeenCalledTimes(1);
-      expect(testRunUpdateMock).toHaveBeenCalledWith({
-        where: { id: testRun.id },
-        data: {
-          status: TestStatus.approved,
-          testVariation: {
-            update: {
-              baselineName,
-            },
-          },
-          baseline: {
-            create: {
-              baselineName,
-              testVariation: {
-                connect: {
-                  id: testRun.testVariationId,
-                },
-              },
-            },
-          },
-        },
-      });
-      expect(eventTestRunUpdatedMock).toBeCalledWith({
-        ...testRun,
-        status: TestStatus.approved,
-      });
-    });
-
-    it('should approve different branch', async () => {
-      const testRun: TestRun & {
-        testVariation: TestVariation;
-      } = {
-        id: 'id',
-        imageName: 'imageName',
-        diffName: 'diffName',
-        baselineName: 'baselineName',
-        diffPercent: 1,
-        pixelMisMatchCount: 10,
-        diffTollerancePercent: 12,
-        status: TestStatus.new,
-        buildId: 'buildId',
-        testVariationId: 'testVariationId',
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        name: 'test run name',
-        ignoreAreas: '[]',
-        tempIgnoreAreas: '[]',
-        browser: 'browser',
-        device: 'device',
-        os: 'os',
-        viewport: 'viewport',
-        branchName: 'develop',
-        baselineBranchName: 'master',
-        comment: 'some comment',
-        merge: false,
-        testVariation: {
-          id: '123',
-          projectId: 'project Id',
-          name: 'Test name',
-          baselineName: 'baselineName',
-          os: 'OS',
-          browser: 'browser',
-          viewport: 'viewport',
-          device: 'device',
-          ignoreAreas: '[]',
-          comment: 'some comment',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          branchName: 'master',
-        },
-      };
-      const newTestVariation: TestVariation = {
-        id: '124',
-        projectId: 'project Id',
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        ignoreAreas: '[]',
-        comment: 'some comment',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        branchName: 'develop',
-      };
-      const testRunUpdateMock = jest.fn().mockResolvedValueOnce({
-        ...testRun,
-        status: TestStatus.approved,
-      });
-      const eventTestRunUpdatedMock = jest.fn();
-      const testRunFindOneMock = jest.fn().mockResolvedValueOnce(testRun);
-      const baselineName = 'some baseline name';
-      const saveImageMock = jest.fn().mockReturnValueOnce(baselineName);
-      const getImageMock = jest.fn().mockReturnValueOnce(
-        new PNG({
-          width: 10,
-          height: 10,
-        })
-      );
-      const testVariationCreateMock = jest.fn().mockResolvedValueOnce(newTestVariation);
-      const baselineCreateMock = jest.fn();
-      service = await initService({
-        testRunUpdateMock,
-        saveImageMock,
-        getImageMock,
-        testVariationCreateMock,
-        baselineCreateMock,
-        eventTestRunUpdatedMock,
-      });
-      service.findOne = testRunFindOneMock;
-
-      await service.approve(testRun.id, false);
-
-      expect(testRunFindOneMock).toHaveBeenCalledWith(testRun.id);
-      expect(getImageMock).toHaveBeenCalledWith(testRun.imageName);
-      expect(saveImageMock).toHaveBeenCalledTimes(1);
-      expect(testRunUpdateMock).toHaveBeenCalledWith({
-        where: { id: testRun.id },
-        data: {
-          status: TestStatus.approved,
-          baseline: {
-            create: {
-              baselineName,
-              testVariation: {
-                create: {
-                  baselineName,
-                  name: testRun.name,
-                  browser: testRun.browser,
-                  device: testRun.device,
-                  os: testRun.os,
-                  viewport: testRun.viewport,
-                  ignoreAreas: testRun.ignoreAreas,
-                  comment: testRun.comment,
-                  branchName: testRun.branchName,
-                  project: {
-                    connect: {
-                      id: testRun.testVariation.projectId,
-                    },
-                  },
-                  testRuns: {
-                    connect: {
-                      id: testRun.id,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
-      expect(eventTestRunUpdatedMock).toBeCalledWith({
-        ...testRun,
-        status: TestStatus.approved,
-      });
-    });
   });
 
   it('create', async () => {
@@ -1074,7 +784,10 @@ describe('TestRunsService', () => {
     service.calculateDiff = jest.fn().mockResolvedValueOnce(testRun);
     service['tryAutoApproveByPastBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
     service['tryAutoApproveByNewBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
-    const baselineData = convertBaselineDataToQuery(createTestRequestDto);
+    const baselineData: BaselineDataDto = {
+      ...getTestVariationUniqueData(createTestRequestDto),
+      branchName: createTestRequestDto.branchName,
+    };
 
     await service.postTestRun(createTestRequestDto);
 
@@ -1083,6 +796,7 @@ describe('TestRunsService', () => {
       where: {
         buildId: createTestRequestDto.buildId,
         ...baselineData,
+        NOT: { OR: [{ status: TestStatus.approved }, { status: TestStatus.autoApproved }] },
       },
     });
     expect(deleteMock).toHaveBeenCalledWith(testRun.id);
