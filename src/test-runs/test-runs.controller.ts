@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery, ApiSecurity, ApiOkResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
-import { TestRun } from '@prisma/client';
+import { TestRun, TestStatus } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { CommentDto } from '../shared/dto/comment.dto';
@@ -53,7 +53,7 @@ export class TestRunsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   rejectTestRun(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRun> {
-    return this.testRunsService.reject(id);
+    return this.testRunsService.setStatus(id, TestStatus.failed);
   }
 
   @Delete('/:id')

@@ -8,7 +8,6 @@ import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { Project, TestStatus } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
-import { PrismaService } from '../src/prisma/prisma.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
 
 jest.useFakeTimers();

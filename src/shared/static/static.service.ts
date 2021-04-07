@@ -1,12 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import path from 'path';
 import { writeFileSync, readFileSync, unlink, mkdirSync, existsSync } from 'fs';
 import { PNG, PNGWithMetadata } from 'pngjs';
 
-export const IMAGE_PATH = 'imageUploads/'
+export const IMAGE_PATH = 'imageUploads/';
 
 @Injectable()
 export class StaticService {
+  private readonly logger: Logger = new Logger(StaticService.name);
+
   saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): string {
     const imageName = `${Date.now()}.${type}.png`;
     writeFileSync(this.getImagePath(imageName), imageBuffer);
@@ -19,7 +21,7 @@ export class StaticService {
     try {
       image = PNG.sync.read(readFileSync(this.getImagePath(imageName)));
     } catch (ex) {
-      console.log(`Cannot image: ${imageName}. ${ex}`);
+      this.logger.error(`Cannot get image: ${imageName}. ${ex}`);
     }
     return image;
   }
@@ -29,7 +31,7 @@ export class StaticService {
     return new Promise((resolvePromise, reject) => {
       unlink(this.getImagePath(imageName), (err) => {
         if (err) {
-          reject(err);
+          this.logger.error(err);
         }
         resolvePromise(true);
       });
