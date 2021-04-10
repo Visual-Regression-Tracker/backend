@@ -41,6 +41,8 @@ export class EventsGateway {
   }
 
   testRunDeleted(testRun: TestRun): void {
+    this.testRunsCreatedQueued = this.testRunsCreatedQueued.filter((tr) => tr.id !== testRun.id);
+    this.testRunsUpdatedQueued = this.testRunsUpdatedQueued.filter((tr) => tr.id !== testRun.id);
     this.testRunsDeletedQueued.push(testRun);
     this.testRunDeletedDebounced();
     this.buildUpdated(testRun.buildId);
