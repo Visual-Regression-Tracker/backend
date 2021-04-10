@@ -56,7 +56,7 @@ export class TestVariationsService {
     });
   }
 
-  async createFeatureTestVariation({
+  async updateOrCreate({
     projectId,
     baselineName,
     testRun,
@@ -65,8 +65,30 @@ export class TestVariationsService {
     baselineName: string;
     testRun: TestRun;
   }) {
-    return this.prismaService.testVariation.create({
-      data: {
+    return this.prismaService.testVariation.upsert({
+      where: {
+        projectId_name_browser_device_os_viewport_branchName: {
+          projectId,
+          branchName: testRun.branchName,
+          ...getTestVariationUniqueData(testRun),
+        },
+      },
+      update: {
+        baselineName,
+        ignoreAreas: testRun.ignoreAreas,
+        comment: testRun.comment,
+        project: {
+          connect: {
+            id: projectId,
+          },
+        },
+        testRuns: {
+          connect: {
+            id: testRun.id,
+          },
+        },
+      },
+      create: {
         baselineName,
         ...getTestVariationUniqueData(testRun),
         ignoreAreas: testRun.ignoreAreas,

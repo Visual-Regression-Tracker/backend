@@ -91,34 +91,32 @@ export class TestRunsService {
   async approve(id: string, merge = false, autoApprove = false): Promise<TestRun> {
     this.logger.log(`Approving testRun: ${id} merge: ${merge} autoApprove: ${autoApprove}`);
     const testRun = await this.findOne(id);
-
-    // update status
-    const status = autoApprove ? TestStatus.autoApproved : TestStatus.approved;
-    testRun.status = (await this.setStatus(id, status)).status;
+    let testVariation = testRun.testVariation;
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName);
     const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
-    if (!autoApprove) {
-      if (testRun.baselineBranchName !== testRun.branchName && !merge) {
-        testRun.testVariation = await this.testVariationService.createFeatureTestVariation({
-          projectId: testRun.testVariation.projectId,
-          baselineName,
-          testRun,
-        });
-      }
+    if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
+      testVariation = await this.testVariationService.updateOrCreate({
+        projectId: testVariation.projectId,
+        baselineName,
+        testRun,
+      });
+    }
 
+    if (!autoApprove || (autoApprove && testRun.baselineBranchName === testRun.branchName)) {
       // add baseline
-      testRun.testVariation = await this.testVariationService.addBaseline({
-        id: testRun.testVariation.id,
+      await this.testVariationService.addBaseline({
+        id: testVariation.id,
         testRunId: testRun.id,
         baselineName,
       });
     }
 
-    this.eventsGateway.testRunUpdated(testRun);
-    return testRun;
+    // update status
+    const status = autoApprove ? TestStatus.autoApproved : TestStatus.approved;
+    return this.setStatus(id, status);
   }
 
   async setStatus(id: string, status: TestStatus): Promise<TestRun> {
@@ -130,7 +128,7 @@ export class TestRunsService {
     });
 
     this.eventsGateway.testRunUpdated(testRun);
-    return testRun;
+    return this.findOne(id);
   }
 
   async saveDiffResult(id: string, diffResult: DiffResult): Promise<TestRun> {
