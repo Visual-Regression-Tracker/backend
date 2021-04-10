@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Build, TestRun, TestStatus } from '@prisma/client';
+import { Build, TestStatus } from '@prisma/client';
+import { TestRunDto } from 'src/test-runs/dto/testRun.dto';
 
 export class BuildDto {
   @ApiProperty()
@@ -40,7 +41,7 @@ export class BuildDto {
   @ApiProperty()
   merge: boolean;
 
-  constructor(build: Build & { testRuns?: TestRun[] }) {
+  constructor(build: Build & { testRuns?: TestRunDto[] }) {
     this.id = build.id;
     this.ciBuildId = build.ciBuildId;
     this.number = build.number;

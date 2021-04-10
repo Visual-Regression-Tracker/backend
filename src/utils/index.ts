@@ -12,9 +12,9 @@ export const getTestVariationUniqueData = (
 } => {
   return {
     name: object.name,
-    os: object.os,
-    device: object.device,
-    browser: object.browser,
-    viewport: object.viewport,
+    os: object.os ?? '',
+    device: object.device ?? '',
+    browser: object.browser ?? '',
+    viewport: object.viewport ?? '',
   };
 };

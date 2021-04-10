@@ -11,7 +11,6 @@ import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
-import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
 import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData } from '../utils';
 
@@ -50,16 +49,19 @@ export class TestRunsService {
   }
 
   async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
-    const baselineData = convertBaselineDataToQuery(createTestRequestDto);
-
     // creates variatioin if does not exist
-    const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto.projectId, baselineData);
+    const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto.projectId, {
+      ...getTestVariationUniqueData(createTestRequestDto),
+      branchName: createTestRequestDto.branchName,
+    });
 
     // delete previous test run if exists
     const [previousTestRun] = await this.prismaService.testRun.findMany({
       where: {
         buildId: createTestRequestDto.buildId,
-        ...baselineData,
+        branchName: createTestRequestDto.branchName,
+        ...getTestVariationUniqueData(createTestRequestDto),
+        NOT: { OR: [{ status: TestStatus.approved }, { status: TestStatus.autoApproved }] },
       },
     });
     if (!!previousTestRun) {
@@ -88,86 +90,45 @@ export class TestRunsService {
    */
   async approve(id: string, merge = false, autoApprove = false): Promise<TestRun> {
     this.logger.log(`Approving testRun: ${id} merge: ${merge} autoApprove: ${autoApprove}`);
-    const status = autoApprove ? TestStatus.autoApproved : TestStatus.approved;
     const testRun = await this.findOne(id);
+    let testVariation = testRun.testVariation;
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName);
     const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
-    let testRunUpdated: TestRun;
-    if (merge || testRun.branchName === testRun.baselineBranchName) {
-      // update existing test variation
-      testRunUpdated = await this.prismaService.testRun.update({
-        where: { id },
-        data: {
-          status,
-          testVariation: {
-            update: {
-              baselineName,
-            },
-          },
-          baseline: {
-            create: {
-              baselineName,
-              testVariation: {
-                connect: {
-                  id: testRun.testVariationId,
-                },
-              },
-            },
-          },
-        },
-      });
-    } else {
-      // create new feature branch test variation
-      testRunUpdated = await this.prismaService.testRun.update({
-        where: { id },
-        data: {
-          status,
-          baseline: autoApprove
-            ? undefined
-            : {
-                create: {
-                  baselineName,
-                  testVariation: {
-                    create: {
-                      baselineName,
-                      ...getTestVariationUniqueData(testRun),
-                      ignoreAreas: testRun.ignoreAreas,
-                      comment: testRun.comment,
-                      branchName: testRun.branchName,
-                      project: {
-                        connect: {
-                          id: testRun.testVariation.projectId,
-                        },
-                      },
-                      testRuns: {
-                        connect: {
-                          id,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-        },
+
+    if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
+      testVariation = await this.testVariationService.updateOrCreate({
+        projectId: testVariation.projectId,
+        baselineName,
+        testRun,
       });
     }
 
-    this.eventsGateway.testRunUpdated(testRunUpdated);
-    return testRunUpdated;
+    if (!autoApprove || (autoApprove && testRun.baselineBranchName === testRun.branchName)) {
+      // add baseline
+      await this.testVariationService.addBaseline({
+        id: testVariation.id,
+        testRunId: testRun.id,
+        baselineName,
+      });
+    }
+
+    // update status
+    const status = autoApprove ? TestStatus.autoApproved : TestStatus.approved;
+    return this.setStatus(id, status);
   }
 
-  async reject(id: string): Promise<TestRun> {
+  async setStatus(id: string, status: TestStatus): Promise<TestRun> {
     const testRun = await this.prismaService.testRun.update({
       where: { id },
       data: {
-        status: TestStatus.failed,
+        status,
       },
     });
 
     this.eventsGateway.testRunUpdated(testRun);
-    return testRun;
+    return this.findOne(id);
   }
 
   async saveDiffResult(id: string, diffResult: DiffResult): Promise<TestRun> {

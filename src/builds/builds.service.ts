@@ -21,14 +21,16 @@ export class BuildsService {
   ) {}
 
   async findOne(id: string): Promise<BuildDto> {
-    return this.prismaService.build
-      .findUnique({
+    const [build, testRuns] = await Promise.all([
+      this.prismaService.build.findUnique({
         where: { id },
-        include: {
-          testRuns: true,
-        },
-      })
-      .then((build) => new BuildDto(build));
+      }),
+      this.testRunsService.findMany(id),
+    ]);
+    return new BuildDto({
+      ...build,
+      testRuns,
+    });
   }
 
   async findMany(projectId: string, take: number, skip: number): Promise<PaginatedBuildDto> {
@@ -38,15 +40,12 @@ export class BuildsService {
         where: { projectId },
         take,
         skip,
-        include: {
-          testRuns: true,
-        },
         orderBy: { createdAt: 'desc' },
       }),
     ]);
 
     return {
-      data: buildList.map((build) => new BuildDto(build)),
+      data: await Promise.all(buildList.map((build) => this.findOne(build.id))),
       total,
       take,
       skip,
@@ -101,15 +100,12 @@ export class BuildsService {
   }
 
   async update(id: string, modifyBuildDto: ModifyBuildDto): Promise<BuildDto> {
-    const build = await this.prismaService.build.update({
+    await this.prismaService.build.update({
       where: { id },
-      include: {
-        testRuns: true,
-      },
       data: modifyBuildDto,
     });
     this.eventsGateway.buildUpdated(id);
-    return new BuildDto(build);
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<Build> {
@@ -141,10 +137,8 @@ export class BuildsService {
       },
     });
 
-    build.testRuns = await Promise.all(
-      build.testRuns.map((testRun) => this.testRunsService.approve(testRun.id, merge))
-    );
+    await Promise.all(build.testRuns.map((testRun) => this.testRunsService.approve(testRun.id, merge)));
 
-    return new BuildDto(build);
+    return this.findOne(id);
   }
 }

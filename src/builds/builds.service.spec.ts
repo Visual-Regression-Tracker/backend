@@ -21,6 +21,7 @@ const initService = async ({
   buildCountMock = jest.fn(),
   testRunDeleteMock = jest.fn(),
   testRunApproveMock = jest.fn(),
+  testRunFindManyMock = jest.fn(),
   eventsBuildUpdatedMock = jest.fn(),
   eventsBuildCreatedMock = jest.fn(),
   projectFindOneMock = jest.fn(),
@@ -51,6 +52,7 @@ const initService = async ({
         useValue: {
           approve: testRunApproveMock,
           delete: testRunDeleteMock,
+          findMany: testRunFindManyMock,
         },
       },
       {
@@ -136,17 +138,13 @@ describe('BuildsService', () => {
 
   it('findOne', async () => {
     const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
+    const testRunFindManyMock = jest.fn().mockResolvedValueOnce(build.testRuns);
     mocked(BuildDto).mockReturnValueOnce(buildDto);
-    service = await initService({ buildFindUniqueMock });
+    service = await initService({ buildFindUniqueMock, testRunFindManyMock });
 
     const result = await service.findOne('someId');
 
-    expect(buildFindUniqueMock).toHaveBeenCalledWith({
-      where: { id: 'someId' },
-      include: {
-        testRuns: true,
-      },
-    });
+    expect(mocked(BuildDto)).toHaveBeenCalledWith({ ...build, testRuns: build.testRuns });
     expect(result).toBe(buildDto);
   });
 
@@ -163,7 +161,6 @@ describe('BuildsService', () => {
       where: { projectId },
     });
     expect(buildFindManyMock).toHaveBeenCalledWith({
-      include: { testRuns: true },
       take: 10,
       skip: 20,
       orderBy: { createdAt: 'desc' },
@@ -290,9 +287,6 @@ describe('BuildsService', () => {
 
     expect(buildUpdateMock).toHaveBeenCalledWith({
       where: { id },
-      include: {
-        testRuns: true,
-      },
       data: { isRunning: false },
     });
     expect(eventsBuildUpdatedMock).toHaveBeenCalledWith(id);
@@ -305,8 +299,8 @@ describe('BuildsService', () => {
       ...build.testRuns[0],
       status: TestStatus.approved,
     });
-    mocked(BuildDto).mockReturnValueOnce(buildDto);
     service = await initService({ buildFindUniqueMock, testRunApproveMock });
+    service.findOne = jest.fn();
 
     await service.approve('someId', true);
 
@@ -323,14 +317,6 @@ describe('BuildsService', () => {
       },
     });
     expect(testRunApproveMock).toHaveBeenCalledWith(build.testRuns[0].id, true);
-    expect(mocked(BuildDto)).toHaveBeenCalledWith({
-      ...build,
-      testRuns: [
-        {
-          ...build.testRuns[0],
-          status: TestStatus.approved,
-        },
-      ],
-    });
+    expect(service.findOne).toHaveBeenCalledWith('someId');
   });
 });
