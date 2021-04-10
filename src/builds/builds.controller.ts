@@ -83,7 +83,7 @@ export class BuildsController {
   approve(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Query('merge', new ParseBoolPipe()) merge: boolean
-  ): Promise<BuildDto> {
+  ): Promise<void> {
     return this.buildsService.approve(id, merge);
   }
 }
