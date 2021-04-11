@@ -212,8 +212,9 @@ describe('Builds (e2e)', () => {
         false
       );
 
-      const result = await buildsService.approve(build.id, false);
+      await buildsService.approve(build.id, false);
 
+      const result = await buildsService.findOne(build.id);
       expect(result).toEqual({ ...build, status: 'passed', passedCount: 1, merge: false });
     });
 
@@ -227,8 +228,9 @@ describe('Builds (e2e)', () => {
         true
       );
 
-      const result = await buildsService.approve(build.id, true);
+      await buildsService.approve(build.id, true);
 
+      const result = await buildsService.findOne(build.id);
       expect(result).toEqual({ ...build, status: 'passed', passedCount: 1, merge: true });
     });
   });

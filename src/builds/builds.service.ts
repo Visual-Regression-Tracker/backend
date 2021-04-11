@@ -123,7 +123,7 @@ export class BuildsService {
     });
   }
 
-  async approve(id: string, merge: boolean): Promise<BuildDto> {
+  async approve(id: string, merge: boolean): Promise<void> {
     const build = await this.prismaService.build.findUnique({
       where: { id },
       include: {
@@ -137,8 +137,8 @@ export class BuildsService {
       },
     });
 
-    await Promise.all(build.testRuns.map((testRun) => this.testRunsService.approve(testRun.id, merge)));
-
-    return this.findOne(id);
+    for(const testRun of build.testRuns) {
+      await this.testRunsService.approve(testRun.id, merge)
+    }
   }
 }
