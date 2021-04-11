@@ -317,6 +317,5 @@ describe('BuildsService', () => {
       },
     });
     expect(testRunApproveMock).toHaveBeenCalledWith(build.testRuns[0].id, true);
-    expect(service.findOne).toHaveBeenCalledWith('someId');
   });
 });
