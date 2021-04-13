@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TestVariation } from '@prisma/client';
 
 const prisma = new PrismaClient({
   // log: ['query'],
@@ -32,24 +32,14 @@ async function setEmptyTestVariationTags_github_243() {
     return;
   }
   console.info(`Going to apply migration ${migrationKey}...`);
-  const testVariations = await prisma.testVariation.findMany({
-    where: {
-      OR: [
-        {
-          os: undefined,
-        },
-        {
-          device: undefined,
-        },
-        {
-          browser: undefined,
-        },
-        {
-          viewport: undefined,
-        },
-      ],
-    },
-  });
+  const testVariations = (await prisma.$queryRaw`
+  SELECT * from "public"."TestVariation" 
+  WHERE 
+  "public"."TestVariation"."browser" IS NULL OR
+  "public"."TestVariation"."os" IS NULL OR
+  "public"."TestVariation"."device" IS NULL OR
+  "public"."TestVariation"."viewport" IS NULL
+  `) as Array<TestVariation>;
 
   return Promise.all(
     testVariations.map((testVariation) =>
