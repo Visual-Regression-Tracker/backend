@@ -36,16 +36,16 @@ async function setEmptyTestVariationTags_github_243() {
     where: {
       OR: [
         {
-          os: null,
+          os: undefined,
         },
         {
-          device: null,
+          device: undefined,
         },
         {
-          browser: null,
+          browser: undefined,
         },
         {
-          viewport: null,
+          viewport: undefined,
         },
       ],
     },
