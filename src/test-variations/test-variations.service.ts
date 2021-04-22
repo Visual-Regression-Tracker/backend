@@ -211,8 +211,6 @@ export class TestVariationsService {
       const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
       if (baseline) {
         try {
-          const imageBase64 = PNG.sync.write(baseline).toString('base64');
-
           // get main branch variation
           const mainBranchTestVariation = await this.findOrCreate(projectId, {
             ...getTestVariationUniqueData(sideBranchTestVariation),
@@ -223,13 +221,16 @@ export class TestVariationsService {
           const createTestRequestDto: CreateTestRequestDto = {
             ...sideBranchTestVariation,
             buildId: build.id,
-            imageBase64,
             diffTollerancePercent: 0,
             merge: true,
             ignoreAreas: JSON.parse(sideBranchTestVariation.ignoreAreas),
           };
 
-          return this.testRunsService.create(mainBranchTestVariation, createTestRequestDto);
+          return this.testRunsService.create({
+            testVariation: mainBranchTestVariation,
+            createTestRequestDto,
+            imageBuffer: PNG.sync.write(baseline),
+          });
         } catch (err) {
           console.log(err);
         }
