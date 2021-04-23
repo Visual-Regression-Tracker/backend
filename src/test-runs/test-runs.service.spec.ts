@@ -260,9 +260,9 @@ describe('TestRunsService', () => {
     const tryAutoApproveByNewBaselines = jest.fn();
     service['tryAutoApproveByNewBaselines'] = tryAutoApproveByNewBaselines.mockResolvedValueOnce(testRunWithResult);
 
-    const result = await service.create({testVariation, createTestRequestDto, imageBuffer});
+    const result = await service.create({ testVariation, createTestRequestDto, imageBuffer });
 
-    expect(saveImageMock).toHaveBeenCalledWith('screenshot', Buffer.from(createTestRequestDto.imageBase64, 'base64'));
+    expect(saveImageMock).toHaveBeenCalledWith('screenshot', imageBuffer);
     expect(testRunCreateMock).toHaveBeenCalledWith({
       data: {
         imageName,
@@ -800,7 +800,7 @@ describe('TestRunsService', () => {
       },
     });
     expect(deleteMock).toHaveBeenCalledWith(testRun.id);
-    expect(createMock).toHaveBeenCalledWith({testVariation, createTestRequestDto, imageBuffer});
+    expect(createMock).toHaveBeenCalledWith({ testVariation, createTestRequestDto, imageBuffer });
     expect(service.calculateDiff).toHaveBeenCalledWith(testRun);
     expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith(testVariation, testRun);
     expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith(testVariation, testRun);

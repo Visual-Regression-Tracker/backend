@@ -525,21 +525,27 @@ describe('TestVariationsService', () => {
     });
 
     await new Promise((r) => setTimeout(r, 1));
-    expect(testRunCreateMock).toHaveBeenNthCalledWith(1, testVariationMainBranch, {
-      ...testVariation,
-      buildId: build.id,
-      imageBase64: PNG.sync.write(image).toString('base64'),
-      diffTollerancePercent: 0,
-      merge: true,
-      ignoreAreas: JSON.parse(testVariation.ignoreAreas),
+    expect(testRunCreateMock).toHaveBeenNthCalledWith(1, {
+      testVariation: testVariationMainBranch,
+      createTestRequestDto: {
+        ...testVariation,
+        buildId: build.id,
+        diffTollerancePercent: 0,
+        merge: true,
+        ignoreAreas: JSON.parse(testVariation.ignoreAreas),
+      },
+      imageBuffer: PNG.sync.write(image),
     });
-    expect(testRunCreateMock).toHaveBeenNthCalledWith(2, testVariationMainBranch, {
-      ...testVariationSecond,
-      buildId: build.id,
-      imageBase64: PNG.sync.write(image).toString('base64'),
-      diffTollerancePercent: 0,
-      merge: true,
-      ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
+    expect(testRunCreateMock).toHaveBeenNthCalledWith(2, {
+      testVariation: testVariationMainBranch,
+      createTestRequestDto: {
+        ...testVariationSecond,
+        buildId: build.id,
+        diffTollerancePercent: 0,
+        merge: true,
+        ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
+      },
+      imageBuffer: PNG.sync.write(image),
     });
     expect(testRunCreateMock).toHaveBeenCalledTimes(2);
     expect(buildUpdateMock).toHaveBeenCalledWith(build.id, { isRunning: false });
