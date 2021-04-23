@@ -12,6 +12,8 @@ import {
   ParseBoolPipe,
   UseInterceptors,
   UploadedFile,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -115,9 +117,8 @@ export class TestRunsController {
   @ApiConsumes('multipart/form-data')
   @UseGuards(ApiGuard)
   @UseInterceptors(FileInterceptor('image'), FileToBodyInterceptor)
-  postTestRunMultipart(
-    @Body() createTestRequestDto: CreateTestRequestMultipartDto
-  ): Promise<TestRunResultDto> {
+  @UsePipes(new ValidationPipe({ transform: true }))
+  postTestRunMultipart(@Body() createTestRequestDto: CreateTestRequestMultipartDto): Promise<TestRunResultDto> {
     const imageBuffer = createTestRequestDto.image.buffer;
     return this.testRunsService.postTestRun({ createTestRequestDto, imageBuffer });
   }
