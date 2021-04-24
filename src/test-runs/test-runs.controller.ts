@@ -10,9 +10,21 @@ import {
   Query,
   Post,
   ParseBoolPipe,
-  ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery, ApiSecurity, ApiOkResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiParam,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiSecurity,
+  ApiOkResponse,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { TestRun, TestStatus } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
@@ -20,8 +32,11 @@ import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
-import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunDto } from './dto/testRun.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto';
+import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipart.dto';
+import { FileToBodyInterceptor } from '../shared/fite-to-body.interceptor';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
@@ -87,7 +102,24 @@ export class TestRunsController {
   @ApiSecurity('api_key')
   @ApiOkResponse({ type: TestRunResultDto })
   @UseGuards(ApiGuard)
-  postTestRun(@Body() createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
-    return this.testRunsService.postTestRun(createTestRequestDto);
+  postTestRun(@Body() createTestRequestDto: CreateTestRequestBase64Dto): Promise<TestRunResultDto> {
+    const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
+    return this.testRunsService.postTestRun({
+      createTestRequestDto,
+      imageBuffer,
+    });
+  }
+
+  @Post('/multipart')
+  @ApiSecurity('api_key')
+  @ApiBody({ type: CreateTestRequestMultipartDto })
+  @ApiOkResponse({ type: TestRunResultDto })
+  @ApiConsumes('multipart/form-data')
+  @UseGuards(ApiGuard)
+  @UseInterceptors(FileInterceptor('image'), FileToBodyInterceptor)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  postTestRunMultipart(@Body() createTestRequestDto: CreateTestRequestMultipartDto): Promise<TestRunResultDto> {
+    const imageBuffer = createTestRequestDto.image.buffer;
+    return this.testRunsService.postTestRun({ createTestRequestDto, imageBuffer });
   }
 }

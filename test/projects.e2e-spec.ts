@@ -52,55 +52,56 @@ describe('Projects (e2e)', () => {
 
   describe('POST /', () => {
     it('200', () => {
-      return requestWithAuth(app, 'post', '/projects', project, loggedUser.token)
+      return requestWithAuth(app, 'post', '/projects', loggedUser.token)
+        .send(project)
         .expect(201)
-        .expect(res => {
+        .expect((res) => {
           expect(res.body.name).toBe(project.name);
         });
     });
 
     it('401', () => {
-      return requestWithAuth(app, 'post', '/projects', project, '').expect(401);
+      return requestWithAuth(app, 'post', '/projects', '').send(project).expect(401);
     });
   });
 
   describe('GET /', () => {
     it('200', async () => {
-      const res = await requestWithAuth(app, 'get', '/projects', {}, loggedUser.token).expect(200);
+      const res = await requestWithAuth(app, 'get', '/projects', loggedUser.token).send().expect(200);
 
       expect(res.body).toEqual(expect.arrayContaining(projectServiceMock.findAll()));
     });
 
     it('401', async () => {
-      await requestWithAuth(app, 'get', '/projects', {}, '').expect(401);
+      await requestWithAuth(app, 'get', '/projects', '').send().expect(401);
     });
   });
 
   describe('DELETE /', () => {
     it('can delete', async () => {
-      const res = await requestWithAuth(app, 'delete', `/projects/${project.id}`, {}, loggedUser.token).expect(200);
+      const res = await requestWithAuth(app, 'delete', `/projects/${project.id}`, loggedUser.token).send().expect(200);
 
       expect(res.body).toStrictEqual(projectServiceMock.remove());
     });
 
     it('not valid UUID', async () => {
-      await requestWithAuth(app, 'delete', `/projects/123`, {}, loggedUser.token).expect(400);
+      await requestWithAuth(app, 'delete', `/projects/123`, loggedUser.token).send().expect(400);
     });
 
     it('not valid token', async () => {
-      await requestWithAuth(app, 'delete', `/projects/${project.id}`, {}, 'asd').expect(401);
+      await requestWithAuth(app, 'delete', `/projects/${project.id}`, 'asd').send().expect(401);
     });
   });
 
   describe('PUT /', () => {
     it('can edit', async () => {
-      const res = await requestWithAuth(app, 'put', `/projects`, project, loggedUser.token).expect(200);
+      const res = await requestWithAuth(app, 'put', `/projects`, loggedUser.token).send(project).expect(200);
 
       expect(res.body).toStrictEqual(projectServiceMock.update());
     });
 
     it('not valid token', async () => {
-      await requestWithAuth(app, 'put', `/projects`, project, 'asd').expect(401);
+      await requestWithAuth(app, 'put', `/projects`, 'asd').send(project).expect(401);
     });
   });
 });

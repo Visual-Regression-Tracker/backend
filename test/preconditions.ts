@@ -21,21 +21,18 @@ export const requestWithAuth = (
   app: INestApplication,
   method: 'post' | 'get' | 'put' | 'delete' | 'patch',
   url: string,
-  body = {},
   token: string
 ): Test =>
   request(app.getHttpServer())
     [method](url)
-    .set('Authorization', 'Bearer ' + token)
-    .send(body);
+    .set('Authorization', 'Bearer ' + token);
 
 export const requestWithApiKey = (
   app: INestApplication,
   method: 'post' | 'get' | 'put' | 'delete' | 'patch',
   url: string,
-  body = {},
   apiKey: string
-): Test => request(app.getHttpServer())[method](url).set('apiKey', apiKey).send(body);
+): Test => request(app.getHttpServer())[method](url).set('apiKey', apiKey);
 
 export const haveUserLogged = async (usersService: UsersService) => {
   const password = '123456';
@@ -57,12 +54,14 @@ export const haveTestRunCreated = async (
 ): Promise<{ testRun: TestRunResultDto; build: BuildDto }> => {
   const build = await buildsService.create({ project: projectId, branchName });
   const testRun = await testRunsService.postTestRun({
-    projectId: build.projectId,
-    branchName: build.branchName,
-    imageBase64: readFileSync(imagePath).toString('base64'),
-    buildId: build.id,
-    name: 'Image name',
-    merge,
+    createTestRequestDto: {
+      projectId: build.projectId,
+      branchName: build.branchName,
+      buildId: build.id,
+      name: 'Image name',
+      merge,
+    },
+    imageBuffer: readFileSync(imagePath),
   });
   return {
     build,

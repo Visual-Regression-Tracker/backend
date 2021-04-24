@@ -17,6 +17,7 @@ import { BuildsService } from '../builds/builds.service';
 import { TEST_PROJECT } from '../_data_';
 import { getTestVariationUniqueData } from '../utils';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
+import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -103,6 +104,7 @@ const initService = async ({
 };
 describe('TestRunsService', () => {
   let service: TestRunsService;
+  const imageBuffer = Buffer.from('Image');
   const ignoreAreas = [{ x: 1, y: 2, width: 10, height: 20 }];
   const tempIgnoreAreas = [{ x: 3, y: 4, width: 30, height: 40 }];
   const baseTestRun: TestRun = {
@@ -184,7 +186,6 @@ describe('TestRunsService', () => {
       buildId: 'buildId',
       projectId: 'projectId',
       name: 'Test name',
-      imageBase64: 'Image',
       os: 'OS',
       browser: 'browser',
       viewport: 'viewport',
@@ -259,9 +260,9 @@ describe('TestRunsService', () => {
     const tryAutoApproveByNewBaselines = jest.fn();
     service['tryAutoApproveByNewBaselines'] = tryAutoApproveByNewBaselines.mockResolvedValueOnce(testRunWithResult);
 
-    const result = await service.create(testVariation, createTestRequestDto);
+    const result = await service.create({ testVariation, createTestRequestDto, imageBuffer });
 
-    expect(saveImageMock).toHaveBeenCalledWith('screenshot', Buffer.from(createTestRequestDto.imageBase64, 'base64'));
+    expect(saveImageMock).toHaveBeenCalledWith('screenshot', imageBuffer);
     expect(testRunCreateMock).toHaveBeenCalledWith({
       data: {
         imageName,
@@ -722,7 +723,6 @@ describe('TestRunsService', () => {
       buildId: 'buildId',
       projectId: 'projectId',
       name: 'Test name',
-      imageBase64: 'Image',
       os: 'OS',
       browser: 'browser',
       viewport: 'viewport',
@@ -789,7 +789,7 @@ describe('TestRunsService', () => {
       branchName: createTestRequestDto.branchName,
     };
 
-    await service.postTestRun(createTestRequestDto);
+    await service.postTestRun({ createTestRequestDto, imageBuffer });
 
     expect(testVariationFindOrCreateMock).toHaveBeenCalledWith(createTestRequestDto.projectId, baselineData);
     expect(testRunFindManyMock).toHaveBeenCalledWith({
@@ -800,7 +800,7 @@ describe('TestRunsService', () => {
       },
     });
     expect(deleteMock).toHaveBeenCalledWith(testRun.id);
-    expect(createMock).toHaveBeenCalledWith(testVariation, createTestRequestDto);
+    expect(createMock).toHaveBeenCalledWith({ testVariation, createTestRequestDto, imageBuffer });
     expect(service.calculateDiff).toHaveBeenCalledWith(testRun);
     expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith(testVariation, testRun);
     expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith(testVariation, testRun);

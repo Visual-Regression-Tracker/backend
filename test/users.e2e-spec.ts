@@ -19,7 +19,7 @@ describe('Users (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    usersService = moduleFixture.get<UsersService>(UsersService)
+    usersService = moduleFixture.get<UsersService>(UsersService);
     await app.init();
   });
 
@@ -33,89 +33,86 @@ describe('Users (e2e)', () => {
       password: '123456',
       firstName: 'fName',
       lastName: 'lName',
-    }
+    };
     return request(app.getHttpServer())
       .post('/users/register')
       .send(user)
       .expect(201)
-      .expect(res => {
+      .expect((res) => {
         expect(res.body.email).toBe(user.email);
         expect(res.body.firstName).toBe(user.firstName);
         expect(res.body.lastName).toBe(user.lastName);
         expect(res.body.apiKey).not.toBeNull();
-      })
+      });
   });
 
   it('POST /login', async () => {
-    const password = '123456'
-    const user = await usersService.create(generateUser(password))
+    const password = '123456';
+    const user = await usersService.create(generateUser(password));
     const loginData: UserLoginRequestDto = {
       email: user.email,
-      password
-    }
+      password,
+    };
 
     return request(app.getHttpServer())
       .post('/users/login')
       .send(loginData)
       .expect(201)
-      .expect(res => {
+      .expect((res) => {
         expect(res.body.id).toBe(user.id);
         expect(res.body.email).toBe(user.email);
         expect(res.body.firstName).toBe(user.firstName);
         expect(res.body.lastName).toBe(user.lastName);
         expect(res.body.apiKey).toBe(user.apiKey);
         expect(res.body.token).not.toBeNull();
-      })
+      });
   });
 
   it('GET /newApiKey', async () => {
-    const password = '123456'
-    const user = await usersService.create(generateUser(password))
+    const password = '123456';
+    const user = await usersService.create(generateUser(password));
     const loggedUser = await usersService.login({
       email: user.email,
-      password
-    })
+      password,
+    });
 
-    const res = await requestWithAuth(app, 'get', '/users/newApiKey', {}, loggedUser.token)
-      .expect(200)
+    const res = await requestWithAuth(app, 'get', '/users/newApiKey', loggedUser.token).send().expect(200);
 
-    const newUser = await usersService.findOne(user.id)
+    const newUser = await usersService.findOne(user.id);
     expect(res.text).not.toBe(user.apiKey);
     expect(res.text).toBe(newUser.apiKey);
   });
 
   it('PUT /password', async () => {
-    const newPassword = 'newPassword'
-    const password = '123456'
-    const user = await usersService.create(generateUser(password))
+    const newPassword = 'newPassword';
+    const password = '123456';
+    const user = await usersService.create(generateUser(password));
     const loggedUser = await usersService.login({
       email: user.email,
-      password
-    })
+      password,
+    });
 
-    await requestWithAuth(app, 'put', '/users/password', { password: newPassword }, loggedUser.token)
-      .expect(200)
+    await requestWithAuth(app, 'put', '/users/password', loggedUser.token).send({ password: newPassword }).expect(200);
 
-    const newUser = await usersService.findOne(user.id)
+    const newUser = await usersService.findOne(user.id);
     expect(compareSync(newPassword, newUser.password)).toBe(true);
   });
 
   it('PUT /', async () => {
-    const password = '123456'
-    const user = await usersService.create(generateUser(password))
+    const password = '123456';
+    const user = await usersService.create(generateUser(password));
     const editedUser = {
       email: `${uuidAPIKey.create().uuid}@example.com'`,
       firstName: 'EDITEDfName',
       lastName: 'EDITEDlName',
-    }
+    };
 
     const loggedUser = await usersService.login({
       email: user.email,
-      password
-    })
+      password,
+    });
 
-    const res = await requestWithAuth(app, 'put', '/users', editedUser, loggedUser.token)
-      .expect(200)
+    const res = await requestWithAuth(app, 'put', '/users', loggedUser.token).send(editedUser).expect(200);
 
     expect(res.body.id).toBe(user.id);
     expect(res.body.email).toBe(editedUser.email);

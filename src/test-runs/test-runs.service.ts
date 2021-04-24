@@ -48,7 +48,13 @@ export class TestRunsService {
     });
   }
 
-  async postTestRun(createTestRequestDto: CreateTestRequestDto): Promise<TestRunResultDto> {
+  async postTestRun({
+    createTestRequestDto,
+    imageBuffer,
+  }: {
+    createTestRequestDto: CreateTestRequestDto;
+    imageBuffer: Buffer;
+  }): Promise<TestRunResultDto> {
     // creates variatioin if does not exist
     const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto.projectId, {
       ...getTestVariationUniqueData(createTestRequestDto),
@@ -69,7 +75,7 @@ export class TestRunsService {
     }
 
     // create test run result
-    const testRun = await this.create(testVariation, createTestRequestDto);
+    const testRun = await this.create({ testVariation, createTestRequestDto, imageBuffer });
 
     // calculate diff
     let testRunWithResult = await this.calculateDiff(testRun);
@@ -157,9 +163,16 @@ export class TestRunsService {
     return this.saveDiffResult(testRun.id, diffResult);
   }
 
-  async create(testVariation: TestVariation, createTestRequestDto: CreateTestRequestDto): Promise<TestRun> {
+  async create({
+    testVariation,
+    createTestRequestDto,
+    imageBuffer,
+  }: {
+    testVariation: TestVariation;
+    createTestRequestDto: CreateTestRequestDto;
+    imageBuffer: Buffer;
+  }): Promise<TestRun> {
     // save image
-    const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
     const imageName = this.staticService.saveImage('screenshot', imageBuffer);
 
     const testRun = await this.prismaService.testRun.create({
