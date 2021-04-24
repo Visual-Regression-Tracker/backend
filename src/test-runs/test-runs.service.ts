@@ -270,11 +270,20 @@ export class TestRunsService {
 
     result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
 
+    if (baseline.data.equals(image.data)) {
+      // equal images
+      result.status = TestStatus.ok;
+      result.pixelMisMatchCount = 0;
+      result.diffPercent = 0;
+      return result;
+    }
+
     if (!result.isSameDimension && !process.env.ALLOW_DIFF_DIMENSIONS) {
       // diff dimensions
       result.status = TestStatus.unresolved;
       return result;
     }
+
     // scale image to max size
     const maxWidth = Math.max(baseline.width, image.width);
     const maxHeight = Math.max(baseline.height, image.height);
