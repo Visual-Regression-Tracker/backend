@@ -11,6 +11,8 @@ import {
   Patch,
   ParseIntPipe,
   ParseBoolPipe,
+  forwardRef,
+  Inject,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
@@ -22,11 +24,18 @@ import { BuildDto } from './dto/build.dto';
 import { MixedGuard } from '../auth/guards/mixed.guard';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
+import { ProjectsService } from '../projects/projects.service';
+import { EventsGateway } from '../shared/events/events.gateway';
 
 @Controller('builds')
 @ApiTags('builds')
 export class BuildsController {
-  constructor(private buildsService: BuildsService) {}
+  constructor(
+    private buildsService: BuildsService,
+    private eventsGateway: EventsGateway,
+    @Inject(forwardRef(() => ProjectsService))
+    private projectService: ProjectsService
+  ) {}
 
   @Get()
   @ApiOkResponse({ type: PaginatedBuildDto })
@@ -59,8 +68,18 @@ export class BuildsController {
   @ApiOkResponse({ type: BuildDto })
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard)
-  create(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
-    return this.buildsService.create(createBuildDto);
+  async create(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
+    const project = await this.projectService.findOne(createBuildDto.project);
+    let build = await this.buildsService.findOrCreate({
+      projectId: project.id,
+      branchName: createBuildDto.branchName,
+      ciBuildId: createBuildDto.ciBuildId,
+    });
+    if (!build.number) {
+      build = await this.buildsService.incrementBuildNumber(build.id, project.id);
+      this.eventsGateway.buildCreated(new BuildDto(build));
+    }
+    return new BuildDto(build);
   }
 
   @Patch(':id')
