@@ -8,6 +8,7 @@ import {
   ProjectIdNameBrowserDeviceOsViewportBranchNameCompoundUniqueInput,
   Prisma,
   TestRun,
+  Build,
 } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
 import { CommentDto } from '../shared/dto/comment.dto';
@@ -196,9 +197,9 @@ export class TestVariationsService {
     const project: Project = await this.prismaService.project.findUnique({ where: { id: projectId } });
 
     // create build
-    const build: BuildDto = await this.buildsService.create({
+    const build: Build = await this.buildsService.findOrCreate({
       branchName: project.mainBranchName,
-      project: projectId,
+      projectId,
     });
 
     // find side branch variations

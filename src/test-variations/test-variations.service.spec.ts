@@ -21,7 +21,7 @@ const initModule = async ({
   variationDeleteMock = jest.fn(),
   baselineDeleteMock = jest.fn(),
   projectFindUniqueMock = jest.fn(),
-  buildCreateMock = jest.fn(),
+  buildFindOrCreateMock = jest.fn(),
   buildUpdateMock = jest.fn(),
   testRunCreateMock = jest.fn(),
   testRunFindMany = jest.fn(),
@@ -41,7 +41,7 @@ const initModule = async ({
       {
         provide: BuildsService,
         useValue: {
-          create: buildCreateMock,
+          findOrCreate: buildFindOrCreateMock,
           update: buildUpdateMock,
         },
       },
@@ -479,7 +479,7 @@ describe('TestVariationsService', () => {
       branchName: project.mainBranchName,
     };
     const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(project);
-    const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
+    const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(build);
     const variationFindManyMock = jest
       .fn()
       .mockResolvedValueOnce([testVariation, testVariationSecond, testVariationNoBaseline]);
@@ -496,7 +496,7 @@ describe('TestVariationsService', () => {
     const buildUpdateMock = jest.fn();
     const service = await initModule({
       projectFindUniqueMock,
-      buildCreateMock,
+      buildFindOrCreateMock,
       buildUpdateMock,
       testRunCreateMock,
       variationFindManyMock,
@@ -507,9 +507,9 @@ describe('TestVariationsService', () => {
     await service.merge(project.id, mergedBranch);
 
     expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: project.id } });
-    expect(buildCreateMock).toHaveBeenCalledWith({
+    expect(buildFindOrCreateMock).toHaveBeenCalledWith({
       branchName: project.mainBranchName,
-      project: project.id,
+      projectId: project.id,
     });
     expect(variationFindManyMock).toHaveBeenCalledWith({
       where: { projectId: project.id, branchName: mergedBranch },

@@ -6,7 +6,7 @@ import { BuildsService } from 'src/builds/builds.service';
 import { TestRunsService } from 'src/test-runs/test-runs.service';
 import { readFileSync } from 'fs';
 import { TestRunResultDto } from 'src/test-runs/dto/testRunResult.dto';
-import { BuildDto } from 'src/builds/dto/build.dto';
+import { Build } from '@prisma/client';
 
 export const generateUser = (
   password: string
@@ -51,8 +51,8 @@ export const haveTestRunCreated = async (
   branchName: string,
   imagePath: string,
   merge?: boolean
-): Promise<{ testRun: TestRunResultDto; build: BuildDto }> => {
-  const build = await buildsService.create({ project: projectId, branchName });
+): Promise<{ testRun: TestRunResultDto; build: Build }> => {
+  const build = await buildsService.findOrCreate({ projectId: projectId, branchName });
   const testRun = await testRunsService.postTestRun({
     createTestRequestDto: {
       projectId: build.projectId,

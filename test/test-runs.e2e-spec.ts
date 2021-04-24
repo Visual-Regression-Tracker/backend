@@ -183,7 +183,7 @@ describe('TestRuns (e2e)', () => {
     const url = '/test-runs/multipart';
 
     it('should post multipart', async () => {
-      const build = await buildsService.create({ project: project.id, branchName: project.mainBranchName });
+      const build = await buildsService.findOrCreate({ projectId: project.id, branchName: project.mainBranchName });
 
       await requestWithApiKey(app, 'post', url, user.apiKey)
         .set('Content-type', 'multipart/form-data')
