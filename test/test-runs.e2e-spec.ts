@@ -199,7 +199,7 @@ describe('TestRuns (e2e)', () => {
         .field('merge', 'false')
         .field('ignoreAreas', '[]')
         .attach('image', image_v1)
-        .expect(200);
+        .expect(201);
     });
   });
 
