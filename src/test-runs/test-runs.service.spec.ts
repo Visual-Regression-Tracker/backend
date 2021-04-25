@@ -17,7 +17,7 @@ import { BuildsService } from '../builds/builds.service';
 import { TEST_PROJECT } from '../_data_';
 import { getTestVariationUniqueData } from '../utils';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
-import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto';
+import { CompareService } from '../compare/compare.service';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -95,6 +95,10 @@ const initService = async ({
       },
       {
         provide: BuildsService,
+        useValue: {},
+      },
+      {
+        provide: CompareService,
         useValue: {},
       },
     ],
@@ -417,7 +421,7 @@ describe('TestRunsService', () => {
         width: 100,
         height: 100,
       });
-      baseline.data[0] = 1
+      baseline.data[0] = 1;
       const image = new PNG({
         width: 100,
         height: 100,
@@ -450,7 +454,7 @@ describe('TestRunsService', () => {
         width: 100,
         height: 100,
       });
-      baseline.data[0] = 1
+      baseline.data[0] = 1;
       const image = new PNG({
         width: 100,
         height: 100,

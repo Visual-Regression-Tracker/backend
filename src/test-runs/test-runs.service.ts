@@ -1,11 +1,10 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { PNG } from 'pngjs';
-import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { Baseline, Project, TestRun, TestStatus, TestVariation } from '@prisma/client';
+import { Baseline, TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
@@ -13,7 +12,6 @@ import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData } from '../utils';
-import { scaleImageToSize, applyIgnoreAreas } from '../compare/utils';
 import { CompareService } from '../compare/compare.service';
 
 @Injectable()
@@ -58,6 +56,8 @@ export class TestRunsService {
     createTestRequestDto: CreateTestRequestDto;
     imageBuffer: Buffer;
   }): Promise<TestRunResultDto> {
+    const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
+
     // creates variatioin if does not exist
     const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto.projectId, {
       ...getTestVariationUniqueData(createTestRequestDto),
@@ -81,12 +81,13 @@ export class TestRunsService {
     const testRun = await this.create({ testVariation, createTestRequestDto, imageBuffer });
 
     // calculate diff
-    const project = await this.prismaService.project.findUnique({ where: { id: testVariation.projectId } });
-    let testRunWithResult = await this.calculateDiff(project, testRun);
+    let testRunWithResult = await this.calculateDiff(createTestRequestDto.projectId, testRun);
 
     // try auto approve
-    testRunWithResult = await this.tryAutoApproveByPastBaselines(project, testVariation, testRunWithResult);
-    testRunWithResult = await this.tryAutoApproveByNewBaselines(project, testVariation, testRunWithResult);
+    if (project.autoApproveFeature) {
+      testRunWithResult = await this.tryAutoApproveByPastBaselines({ testVariation, testRun: testRunWithResult });
+      testRunWithResult = await this.tryAutoApproveByNewBaselines({ testVariation, testRun: testRunWithResult });
+    }
     return new TestRunResultDto(testRunWithResult, testVariation);
   }
 
@@ -158,15 +159,17 @@ export class TestRunsService {
       });
   }
 
-  async calculateDiff(project: Project, testRun: TestRun): Promise<TestRun> {
+  async calculateDiff(projectId: string, testRun: TestRun): Promise<TestRun> {
     this.staticService.deleteImage(testRun.diffName);
-    const diffResult = this.compareService.getComparator(project.imageComparison).getDiff({
-      image: testRun.imageName,
-      baseline: testRun.baselineName,
-      ignoreAreas: this.getIgnoteAreas(testRun),
-      diffTollerancePercent: testRun.diffTollerancePercent,
-      allowDiffDimensions: project.diffDimensionsFeature,
-      saveDiffAsFile: true,
+    const diffResult = await this.compareService.getDiff({
+      projectId,
+      data: {
+        image: testRun.imageName,
+        baseline: testRun.baselineName,
+        ignoreAreas: this.getIgnoteAreas(testRun),
+        diffTollerancePercent: testRun.diffTollerancePercent,
+        saveDiffAsFile: true,
+      },
     });
     return this.saveDiffResult(testRun.id, diffResult);
   }
@@ -239,9 +242,8 @@ export class TestRunsService {
       .then(async (testRun) => {
         const testVariation = await this.prismaService.testVariation.findUnique({
           where: { id: testRun.testVariationId },
-          include: { project: true },
         });
-        return this.calculateDiff(testVariation.project, testRun);
+        return this.calculateDiff(testVariation.projectId, testRun);
       });
   }
 
@@ -272,18 +274,9 @@ export class TestRunsService {
    * Tries to find past baseline in main branch and autoApprove in case matched
    * @param testVariation
    * @param testRun
-   * @param ignoreAreas
    */
-  private async tryAutoApproveByPastBaselines(
-    project: Project,
-    testVariation: TestVariation,
-    testRun: TestRun
-  ): Promise<TestRun> {
-    if (
-      !project.autoApproveFeature ||
-      testRun.status === TestStatus.ok ||
-      testRun.branchName === testRun.baselineBranchName
-    ) {
+  private async tryAutoApproveByPastBaselines({ testRun, testVariation }: AutoApproveProps): Promise<TestRun> {
+    if (testRun.status === TestStatus.ok || testRun.branchName === testRun.baselineBranchName) {
       return testRun;
     }
 
@@ -291,7 +284,7 @@ export class TestRunsService {
     const testVariationHistory = await this.testVariationService.getDetails(testVariation.id);
     // skip first baseline as it was used by default in general flow
     for (const baseline of testVariationHistory.baselines.slice(1)) {
-      if (this.shouldAutoApprove({ project, baseline, testRun })) {
+      if (this.shouldAutoApprove({ projectId: testVariation.projectId, baseline, testRun })) {
         return this.approve(testRun.id, false, true);
       }
     }
@@ -306,15 +299,9 @@ export class TestRunsService {
    * and autoApprove in case matched
    * @param testVariation
    * @param testRun
-   * @param image
-   * @param ignoreAreas
    */
-  private async tryAutoApproveByNewBaselines(
-    project: Project,
-    testVariation: TestVariation,
-    testRun: TestRun
-  ): Promise<TestRun> {
-    if (!project.autoApproveFeature || testRun.status === TestStatus.ok) {
+  private async tryAutoApproveByNewBaselines({ testVariation, testRun }: AutoApproveProps): Promise<TestRun> {
+    if (testRun.status === TestStatus.ok) {
       return testRun;
     }
     this.logger.log(`Try AutoApproveByNewBaselines testRun: ${testRun.id}`);
@@ -334,7 +321,7 @@ export class TestRunsService {
       const approvedTestVariation = await this.testVariationService.getDetails(approvedTestRun.testVariationId);
       const baseline = approvedTestVariation.baselines.shift();
 
-      if (this.shouldAutoApprove({ project, baseline, testRun })) {
+      if (this.shouldAutoApprove({ projectId: testVariation.projectId, baseline, testRun })) {
         return this.approve(testRun.id, false, true);
       }
     }
@@ -342,22 +329,24 @@ export class TestRunsService {
     return testRun;
   }
 
-  private shouldAutoApprove({
+  private async shouldAutoApprove({
+    projectId,
     baseline,
     testRun,
-    project,
   }: {
+    projectId: string;
     baseline: Baseline;
     testRun: TestRun;
-    project: Project;
-  }): boolean {
-    const diffResult = this.compareService.getComparator(project.imageComparison).getDiff({
-      image: testRun.imageName,
-      baseline: baseline.baselineName,
-      ignoreAreas: this.getIgnoteAreas(testRun),
-      diffTollerancePercent: testRun.diffTollerancePercent,
-      allowDiffDimensions: project.diffDimensionsFeature,
-      saveDiffAsFile: false,
+  }): Promise<boolean> {
+    const diffResult = await this.compareService.getDiff({
+      projectId,
+      data: {
+        image: testRun.imageName,
+        baseline: baseline.baselineName,
+        ignoreAreas: this.getIgnoteAreas(testRun),
+        diffTollerancePercent: testRun.diffTollerancePercent,
+        saveDiffAsFile: false,
+      },
     });
 
     if (diffResult.status === TestStatus.ok) {
@@ -365,4 +354,9 @@ export class TestRunsService {
       return true;
     }
   }
+}
+
+interface AutoApproveProps {
+  testVariation: TestVariation;
+  testRun: TestRun;
 }

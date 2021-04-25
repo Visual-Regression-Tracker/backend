@@ -6,10 +6,15 @@ export interface ImageCompareInput {
   image: string;
   diffTollerancePercent: number;
   ignoreAreas: IgnoreAreaDto[];
-  allowDiffDimensions: boolean;
   saveDiffAsFile: boolean;
 }
 
+export interface ImageCompareConfig {
+  allowDiffDimensions: boolean;
+  ignoreAntialiasing: boolean;
+  threshold: number;
+}
+
 export interface ImageComparator {
-  getDiff(data: ImageCompareInput): DiffResult;
+  getDiff(data: ImageCompareInput, config: ImageCompareConfig): DiffResult;
 }

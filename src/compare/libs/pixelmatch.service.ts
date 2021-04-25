@@ -5,13 +5,13 @@ import { PNG } from 'pngjs';
 import { StaticService } from '../../shared/static/static.service';
 import { DiffResult } from '../../test-runs/diffResult';
 import { scaleImageToSize, applyIgnoreAreas } from '../utils';
-import { ImageComparator, ImageCompareInput } from './image-comparator.interface';
+import { ImageComparator, ImageCompareConfig, ImageCompareInput } from './image-comparator.interface';
 
 @Injectable()
 export class PixelmatchService implements ImageComparator {
   constructor(private staticService: StaticService) {}
 
-  getDiff(data: ImageCompareInput): DiffResult {
+  getDiff(data: ImageCompareInput, config: ImageCompareConfig): DiffResult {
     const result: DiffResult = {
       status: undefined,
       diffName: null,
@@ -38,7 +38,7 @@ export class PixelmatchService implements ImageComparator {
       return result;
     }
 
-    if (!result.isSameDimension && !data.allowDiffDimensions) {
+    if (!result.isSameDimension && !config.allowDiffDimensions) {
       // diff dimensions
       result.status = TestStatus.unresolved;
       return result;
@@ -60,7 +60,8 @@ export class PixelmatchService implements ImageComparator {
       height: maxHeight,
     });
     result.pixelMisMatchCount = Pixelmatch(baselineData, imageData, diff.data, maxWidth, maxHeight, {
-      includeAA: true,
+      includeAA: config.ignoreAntialiasing,
+      threshold: config.threshold,
     });
     result.diffPercent = (result.pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
 
