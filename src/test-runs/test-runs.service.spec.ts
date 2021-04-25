@@ -315,6 +315,28 @@ describe('TestRunsService', () => {
       });
     });
 
+    it('diff not found', async () => {
+      const baseline = new PNG({
+        width: 20,
+        height: 20,
+      });
+      const image = new PNG({
+        width: 20,
+        height: 20,
+      });
+      service = await initService({});
+
+      const result = service.getDiff(baseline, image, baseTestRun);
+
+      expect(result).toStrictEqual({
+        status: TestStatus.ok,
+        diffName: null,
+        pixelMisMatchCount: 0,
+        diffPercent: 0,
+        isSameDimension: true,
+      });
+    });
+
     it('diff image dimensions mismatch', async () => {
       delete process.env.ALLOW_DIFF_DIMENSIONS;
       const baseline = new PNG({
@@ -341,35 +363,35 @@ describe('TestRunsService', () => {
     it('diff image dimensions mismatch ALLOWED', async () => {
       process.env.ALLOW_DIFF_DIMENSIONS = 'true';
       const baseline = new PNG({
-        width: 20,
-        height: 10,
+        width: 1,
+        height: 5,
       });
       const image = new PNG({
-        width: 10,
-        height: 20,
+        width: 2,
+        height: 4,
       });
       const diffName = 'diff name';
       const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
-      mocked(Pixelmatch).mockReturnValueOnce(200);
+      mocked(Pixelmatch).mockReturnValueOnce(5);
       service = await initService({ saveImageMock });
 
       const result = service.getDiff(baseline, image, baseTestRun);
 
       expect(mocked(Pixelmatch)).toHaveBeenCalledWith(
         new PNG({
-          width: 20,
-          height: 20,
+          width: 2,
+          height: 5,
         }).data,
         new PNG({
-          width: 20,
-          height: 20,
+          width: 2,
+          height: 5,
         }).data,
         new PNG({
-          width: 20,
-          height: 20,
+          width: 2,
+          height: 5,
         }).data,
-        20,
-        20,
+        2,
+        5,
         {
           includeAA: true,
         }
@@ -378,32 +400,9 @@ describe('TestRunsService', () => {
       expect(result).toStrictEqual({
         status: TestStatus.unresolved,
         diffName,
-        pixelMisMatchCount: 200,
+        pixelMisMatchCount: 5,
         diffPercent: 50,
         isSameDimension: false,
-      });
-    });
-
-    it('diff not found', async () => {
-      const baseline = new PNG({
-        width: 10,
-        height: 10,
-      });
-      const image = new PNG({
-        width: 10,
-        height: 10,
-      });
-      service = await initService({});
-      mocked(Pixelmatch).mockReturnValueOnce(0);
-
-      const result = service.getDiff(baseline, image, baseTestRun);
-
-      expect(result).toStrictEqual({
-        status: TestStatus.ok,
-        diffName: null,
-        pixelMisMatchCount: 0,
-        diffPercent: 0,
-        isSameDimension: true,
       });
     });
 
@@ -418,6 +417,7 @@ describe('TestRunsService', () => {
         width: 100,
         height: 100,
       });
+      baseline.data[0] = 1
       const image = new PNG({
         width: 100,
         height: 100,
@@ -450,6 +450,7 @@ describe('TestRunsService', () => {
         width: 100,
         height: 100,
       });
+      baseline.data[0] = 1
       const image = new PNG({
         width: 100,
         height: 100,
