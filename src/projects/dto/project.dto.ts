@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsString, IsNumber } from 'class-validator';
-import { Project } from '@prisma/client';
+import { IsUUID, IsString, IsNumber, IsBoolean } from 'class-validator';
+import { ImageComparison, Project } from '@prisma/client';
 
 export class ProjectDto implements Project {
   @ApiProperty()
@@ -24,4 +24,13 @@ export class ProjectDto implements Project {
 
   @ApiProperty()
   readonly updatedAt: Date;
+
+  @ApiProperty()
+  @IsBoolean()
+  autoApproveFeature: boolean;
+  @ApiProperty()
+  @IsBoolean()
+  diffDimensionsFeature: boolean;
+  @ApiProperty()
+  imageComparison: ImageComparison;
 }

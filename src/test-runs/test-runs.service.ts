@@ -5,7 +5,7 @@ import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { Baseline, TestRun, TestStatus, TestVariation } from '@prisma/client';
+import { Baseline, Project, TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { CommentDto } from '../shared/dto/comment.dto';
@@ -13,6 +13,8 @@ import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData } from '../utils';
+import { scaleImageToSize, applyIgnoreAreas } from '../compare/utils';
+import { CompareService } from '../compare/compare.service';
 
 @Injectable()
 export class TestRunsService {
@@ -23,6 +25,7 @@ export class TestRunsService {
     private testVariationService: TestVariationsService,
     private prismaService: PrismaService,
     private staticService: StaticService,
+    private compareService: CompareService,
     private eventsGateway: EventsGateway
   ) {}
 
@@ -78,11 +81,12 @@ export class TestRunsService {
     const testRun = await this.create({ testVariation, createTestRequestDto, imageBuffer });
 
     // calculate diff
-    let testRunWithResult = await this.calculateDiff(testRun);
+    const project = await this.prismaService.project.findUnique({ where: { id: testVariation.projectId } });
+    let testRunWithResult = await this.calculateDiff(project, testRun);
 
     // try auto approve
-    testRunWithResult = await this.tryAutoApproveByPastBaselines(testVariation, testRunWithResult);
-    testRunWithResult = await this.tryAutoApproveByNewBaselines(testVariation, testRunWithResult);
+    testRunWithResult = await this.tryAutoApproveByPastBaselines(project, testVariation, testRunWithResult);
+    testRunWithResult = await this.tryAutoApproveByNewBaselines(project, testVariation, testRunWithResult);
     return new TestRunResultDto(testRunWithResult, testVariation);
   }
 
@@ -154,12 +158,16 @@ export class TestRunsService {
       });
   }
 
-  async calculateDiff(testRun: TestRun): Promise<TestRun> {
-    const baseline = this.staticService.getImage(testRun.baselineName);
-    const image = this.staticService.getImage(testRun.imageName);
+  async calculateDiff(project: Project, testRun: TestRun): Promise<TestRun> {
     this.staticService.deleteImage(testRun.diffName);
-
-    const diffResult = this.getDiff(baseline, image, testRun);
+    const diffResult = this.compareService.getComparator(project.imageComparison).getDiff({
+      image: testRun.imageName,
+      baseline: testRun.baselineName,
+      ignoreAreas: this.getIgnoteAreas(testRun),
+      diffTollerancePercent: testRun.diffTollerancePercent,
+      allowDiffDimensions: project.diffDimensionsFeature,
+      saveDiffAsFile: true,
+    });
     return this.saveDiffResult(testRun.id, diffResult);
   }
 
@@ -228,7 +236,13 @@ export class TestRunsService {
           ignoreAreas: JSON.stringify(ignoreAreas),
         },
       })
-      .then((testRun) => this.calculateDiff(testRun));
+      .then(async (testRun) => {
+        const testVariation = await this.prismaService.testVariation.findUnique({
+          where: { id: testRun.testVariationId },
+          include: { project: true },
+        });
+        return this.calculateDiff(testVariation.project, testRun);
+      });
   }
 
   async updateComment(id: string, commentDto: CommentDto): Promise<TestRun> {
@@ -243,92 +257,6 @@ export class TestRunsService {
         this.eventsGateway.testRunUpdated(testRun);
         return testRun;
       });
-  }
-
-  private scaleImageToSize(image: PNG, width: number, height: number): PNG {
-    if (width > image.width || height > image.height) {
-      const preparedImage = new PNG({ width, height, fill: true });
-      PNG.bitblt(image, preparedImage, 0, 0, image.width, image.height);
-      return preparedImage;
-    }
-    return image;
-  }
-
-  getDiff(baseline: PNG, image: PNG, testRun: TestRun): DiffResult {
-    const result: DiffResult = {
-      status: undefined,
-      diffName: null,
-      pixelMisMatchCount: undefined,
-      diffPercent: undefined,
-      isSameDimension: undefined,
-    };
-
-    if (!baseline) {
-      // no baseline
-      return result;
-    }
-
-    result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
-
-    if (baseline.data.equals(image.data)) {
-      // equal images
-      result.status = TestStatus.ok;
-      result.pixelMisMatchCount = 0;
-      result.diffPercent = 0;
-      return result;
-    }
-
-    if (!result.isSameDimension && !process.env.ALLOW_DIFF_DIMENSIONS) {
-      // diff dimensions
-      result.status = TestStatus.unresolved;
-      return result;
-    }
-
-    // scale image to max size
-    const maxWidth = Math.max(baseline.width, image.width);
-    const maxHeight = Math.max(baseline.height, image.height);
-    const scaledBaseline = this.scaleImageToSize(baseline, maxWidth, maxHeight);
-    const scaledImage = this.scaleImageToSize(image, maxWidth, maxHeight);
-
-    // apply ignore areas
-    const ignoreAreas = this.getIgnoteAreas(testRun);
-    const baselineData = this.applyIgnoreAreas(scaledBaseline, ignoreAreas);
-    const imageData = this.applyIgnoreAreas(scaledImage, ignoreAreas);
-
-    // compare
-    const diff = new PNG({
-      width: maxWidth,
-      height: maxHeight,
-    });
-    result.pixelMisMatchCount = Pixelmatch(baselineData, imageData, diff.data, maxWidth, maxHeight, {
-      includeAA: true,
-    });
-    result.diffPercent = (result.pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
-
-    // process result
-    if (result.diffPercent > testRun.diffTollerancePercent) {
-      // save diff
-      result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
-      result.status = TestStatus.unresolved;
-    } else {
-      result.status = TestStatus.ok;
-    }
-    return result;
-  }
-
-  private applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buffer {
-    ignoreAreas.forEach((area) => {
-      for (let y = area.y; y < area.y + area.height; y++) {
-        for (let x = area.x; x < area.x + area.width; x++) {
-          const k = 4 * (image.width * y + x);
-          image.data[k + 0] = 0;
-          image.data[k + 1] = 0;
-          image.data[k + 2] = 0;
-          image.data[k + 3] = 0;
-        }
-      }
-    });
-    return image.data;
   }
 
   private getIgnoteAreas(testRun: TestRun): IgnoreAreaDto[] {
@@ -346,9 +274,13 @@ export class TestRunsService {
    * @param testRun
    * @param ignoreAreas
    */
-  private async tryAutoApproveByPastBaselines(testVariation: TestVariation, testRun: TestRun): Promise<TestRun> {
+  private async tryAutoApproveByPastBaselines(
+    project: Project,
+    testVariation: TestVariation,
+    testRun: TestRun
+  ): Promise<TestRun> {
     if (
-      !process.env.AUTO_APPROVE_BASED_ON_HISTORY ||
+      !project.autoApproveFeature ||
       testRun.status === TestStatus.ok ||
       testRun.branchName === testRun.baselineBranchName
     ) {
@@ -359,7 +291,7 @@ export class TestRunsService {
     const testVariationHistory = await this.testVariationService.getDetails(testVariation.id);
     // skip first baseline as it was used by default in general flow
     for (const baseline of testVariationHistory.baselines.slice(1)) {
-      if (this.shouldAutoApprove(baseline, testRun)) {
+      if (this.shouldAutoApprove({ project, baseline, testRun })) {
         return this.approve(testRun.id, false, true);
       }
     }
@@ -377,8 +309,12 @@ export class TestRunsService {
    * @param image
    * @param ignoreAreas
    */
-  private async tryAutoApproveByNewBaselines(testVariation: TestVariation, testRun: TestRun): Promise<TestRun> {
-    if (!process.env.AUTO_APPROVE_BASED_ON_HISTORY || testRun.status === TestStatus.ok) {
+  private async tryAutoApproveByNewBaselines(
+    project: Project,
+    testVariation: TestVariation,
+    testRun: TestRun
+  ): Promise<TestRun> {
+    if (!project.autoApproveFeature || testRun.status === TestStatus.ok) {
       return testRun;
     }
     this.logger.log(`Try AutoApproveByNewBaselines testRun: ${testRun.id}`);
@@ -398,7 +334,7 @@ export class TestRunsService {
       const approvedTestVariation = await this.testVariationService.getDetails(approvedTestRun.testVariationId);
       const baseline = approvedTestVariation.baselines.shift();
 
-      if (this.shouldAutoApprove(baseline, testRun)) {
+      if (this.shouldAutoApprove({ project, baseline, testRun })) {
         return this.approve(testRun.id, false, true);
       }
     }
@@ -406,10 +342,23 @@ export class TestRunsService {
     return testRun;
   }
 
-  private shouldAutoApprove(baseline: Baseline, testRun: TestRun): boolean {
-    const approvedImage = this.staticService.getImage(baseline.baselineName);
-    const image = this.staticService.getImage(testRun.imageName);
-    const diffResult = this.getDiff(approvedImage, image, testRun);
+  private shouldAutoApprove({
+    baseline,
+    testRun,
+    project,
+  }: {
+    baseline: Baseline;
+    testRun: TestRun;
+    project: Project;
+  }): boolean {
+    const diffResult = this.compareService.getComparator(project.imageComparison).getDiff({
+      image: testRun.imageName,
+      baseline: baseline.baselineName,
+      ignoreAreas: this.getIgnoteAreas(testRun),
+      diffTollerancePercent: testRun.diffTollerancePercent,
+      allowDiffDimensions: project.diffDimensionsFeature,
+      saveDiffAsFile: false,
+    });
 
     if (diffResult.status === TestStatus.ok) {
       this.logger.log(`TestRun ${testRun.id} could be auto approved based on Baseline ${baseline.id}`);

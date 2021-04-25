@@ -51,6 +51,9 @@ export class ProjectsService {
       data: {
         name: projectDto.name,
         mainBranchName: projectDto.mainBranchName,
+        imageComparison: projectDto.imageComparison,
+        autoApproveFeature: projectDto.autoApproveFeature,
+        diffDimensionsFeature: projectDto.diffDimensionsFeature,
       },
     });
   }

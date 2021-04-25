@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
-import { StaticService } from 'src/shared/static/static.service';
-import { DiffResult } from 'src/test-runs/diffResult';
+import { StaticService } from '../../shared/static/static.service';
+import { DiffResult } from '../../test-runs/diffResult';
+import { scaleImageToSize, applyIgnoreAreas } from '../utils';
 import { ImageComparator, ImageCompareInput } from './image-comparator.interface';
 
 @Injectable()
@@ -37,7 +38,7 @@ export class PixelmatchService implements ImageComparator {
       return result;
     }
 
-    if (!result.isSameDimension && !process.env.ALLOW_DIFF_DIMENSIONS) {
+    if (!result.isSameDimension && !data.allowDiffDimensions) {
       // diff dimensions
       result.status = TestStatus.unresolved;
       return result;
@@ -46,12 +47,12 @@ export class PixelmatchService implements ImageComparator {
     // scale image to max size
     const maxWidth = Math.max(baseline.width, image.width);
     const maxHeight = Math.max(baseline.height, image.height);
-    const scaledBaseline = this.scaleImageToSize(baseline, maxWidth, maxHeight);
-    const scaledImage = this.scaleImageToSize(image, maxWidth, maxHeight);
+    const scaledBaseline = scaleImageToSize(baseline, maxWidth, maxHeight);
+    const scaledImage = scaleImageToSize(image, maxWidth, maxHeight);
 
     // apply ignore areas
-    const baselineData = this.applyIgnoreAreas(scaledBaseline, data.ignoreAreas);
-    const imageData = this.applyIgnoreAreas(scaledImage, data.ignoreAreas);
+    const baselineData = applyIgnoreAreas(scaledBaseline, data.ignoreAreas);
+    const imageData = applyIgnoreAreas(scaledImage, data.ignoreAreas);
 
     // compare
     const diff = new PNG({
@@ -64,9 +65,11 @@ export class PixelmatchService implements ImageComparator {
     result.diffPercent = (result.pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
 
     // process result
-    if (result.diffPercent > testRun.diffTollerancePercent) {
+    if (result.diffPercent > data.diffTollerancePercent) {
       // save diff
-      result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
+      if (data.saveDiffAsFile) {
+        result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
+      }
       result.status = TestStatus.unresolved;
     } else {
       result.status = TestStatus.ok;

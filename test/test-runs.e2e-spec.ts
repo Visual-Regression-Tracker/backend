@@ -97,6 +97,7 @@ describe('TestRuns (e2e)', () => {
     });
 
     it('Auto approve not rebased feature branch then Ok after rebase', async () => {
+      await projecstService.update({ ...project, autoApproveFeature: true });
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
@@ -135,6 +136,7 @@ describe('TestRuns (e2e)', () => {
     });
 
     it('Auto approve merged feature into feature branch', async () => {
+      await projecstService.update({ ...project, autoApproveFeature: true });
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
@@ -150,6 +152,7 @@ describe('TestRuns (e2e)', () => {
     });
 
     it('Auto approve merged feature into main branch', async () => {
+      await projecstService.update({ ...project, autoApproveFeature: true });
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
