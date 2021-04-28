@@ -5,6 +5,7 @@ import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { Project } from '@prisma/client';
 import { ProjectDto } from './dto/project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
 
 @Controller('projects')
 @ApiTags('projects')
@@ -31,7 +32,7 @@ export class ProjectsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOkResponse({ type: ProjectDto })
-  update(@Body() projectDto: ProjectDto): Promise<Project> {
+  update(@Body() projectDto: UpdateProjectDto): Promise<Project> {
     return this.projectsService.update(projectDto);
   }
 

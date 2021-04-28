@@ -1,4 +1,4 @@
-import { PickType } from '@nestjs/swagger';
-import { ProjectDto } from './project.dto';
+import { OmitType } from '@nestjs/swagger';
+import { UpdateProjectDto } from './update-project.dto';
 
-export class CreateProjectDto extends PickType(ProjectDto, ['name', 'mainBranchName']) {}
+export class CreateProjectDto extends OmitType(UpdateProjectDto, ['id']) {}
