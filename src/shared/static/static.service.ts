@@ -17,13 +17,11 @@ export class StaticService {
 
   getImage(imageName: string): PNGWithMetadata {
     if (!imageName) return;
-    let image: PNGWithMetadata;
     try {
-      image = PNG.sync.read(readFileSync(this.getImagePath(imageName)));
+      return PNG.sync.read(readFileSync(this.getImagePath(imageName)));
     } catch (ex) {
       this.logger.error(`Cannot get image: ${imageName}. ${ex}`);
     }
-    return image;
   }
 
   async deleteImage(imageName: string): Promise<boolean> {

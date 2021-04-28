@@ -1,4 +1,4 @@
-import { Build, Project } from '@prisma/client';
+import { Build, ImageComparison, Project } from '@prisma/client';
 
 export const TEST_PROJECT: Project = {
   id: '1',
@@ -7,6 +7,11 @@ export const TEST_PROJECT: Project = {
   mainBranchName: 'master',
   createdAt: new Date(),
   updatedAt: new Date(),
+  autoApproveFeature: true,
+  diffDimensionsFeature: true,
+  ignoreAntialiasing: true,
+  threshold: 0.1,
+  imageComparison: ImageComparison.pixelmatch,
 };
 
 export const TEST_BUILD: Build = {

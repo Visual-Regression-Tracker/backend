@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsString, IsNumber, IsBoolean } from 'class-validator';
+import { IsUUID, IsString, IsNumber, IsBoolean, IsEnum } from 'class-validator';
 import { ImageComparison, Project } from '@prisma/client';
 
 export class ProjectDto implements Project {
@@ -28,9 +28,20 @@ export class ProjectDto implements Project {
   @ApiProperty()
   @IsBoolean()
   autoApproveFeature: boolean;
+
   @ApiProperty()
   @IsBoolean()
   diffDimensionsFeature: boolean;
+
   @ApiProperty()
+  @IsEnum(ImageComparison)
   imageComparison: ImageComparison;
+
+  @ApiProperty()
+  @IsBoolean()
+  ignoreAntialiasing: boolean;
+
+  @ApiProperty()
+  @IsNumber()
+  threshold: number;
 }
