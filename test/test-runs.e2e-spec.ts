@@ -6,13 +6,10 @@ import { haveTestRunCreated, haveUserLogged, requestWithApiKey } from './precond
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { ProjectsService } from '../src/projects/projects.service';
-import { Build, Project, TestStatus } from '@prisma/client';
+import { Project, TestStatus } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
-import { readFileSync } from 'fs';
-import { CreateTestRequestMultipartDto } from 'src/test-runs/dto/create-test-request-multipart.dto';
-import { CreateTestRequestDto } from 'src/test-runs/dto/create-test-request.dto';
-import { BuildDto } from 'src/builds/dto/build.dto';
+import { TEST_PROJECT } from '../src/_data_';
 
 jest.useFakeTimers();
 
@@ -46,7 +43,10 @@ describe('TestRuns (e2e)', () => {
 
   beforeEach(async () => {
     user = await haveUserLogged(usersService);
-    project = await projecstService.create({ name: 'TestRun E2E test', mainBranchName: 'master' });
+    project = await projecstService.create({
+      ...TEST_PROJECT,
+      name: 'TestRun E2E test',
+    });
   });
 
   afterEach(async () => {
