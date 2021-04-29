@@ -4,8 +4,8 @@ import { BuildsService } from '../builds/builds.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Project } from '@prisma/client';
-import { ProjectDto } from './dto/project.dto';
 import uuidAPIKey from 'uuid-apikey';
+import { UpdateProjectDto } from './dto/update-project.dto';
 
 @Injectable()
 export class ProjectsService {
@@ -36,21 +36,31 @@ export class ProjectsService {
     return this.prismaService.project.findMany();
   }
 
-  async create(createProjectDto: CreateProjectDto): Promise<Project> {
+  async create(projectDto: CreateProjectDto): Promise<Project> {
     return this.prismaService.project.create({
       data: {
-        name: createProjectDto.name,
-        mainBranchName: createProjectDto.mainBranchName,
+        name: projectDto.name,
+        mainBranchName: projectDto.mainBranchName,
+        autoApproveFeature: projectDto.autoApproveFeature,
+        diffDimensionsFeature: projectDto.diffDimensionsFeature,
+        ignoreAntialiasing: projectDto.ignoreAntialiasing,
+        imageComparison: projectDto.imageComparison,
+        threshold: projectDto.threshold,
       },
     });
   }
 
-  async update(projectDto: ProjectDto): Promise<Project> {
+  async update(projectDto: UpdateProjectDto): Promise<Project> {
     return this.prismaService.project.update({
       where: { id: projectDto.id },
       data: {
         name: projectDto.name,
         mainBranchName: projectDto.mainBranchName,
+        autoApproveFeature: projectDto.autoApproveFeature,
+        diffDimensionsFeature: projectDto.diffDimensionsFeature,
+        ignoreAntialiasing: projectDto.ignoreAntialiasing,
+        imageComparison: projectDto.imageComparison,
+        threshold: projectDto.threshold,
       },
     });
   }

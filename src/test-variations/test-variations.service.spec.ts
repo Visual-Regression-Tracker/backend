@@ -10,6 +10,7 @@ import { PNG } from 'pngjs';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { getTestVariationUniqueData } from '../utils';
+import { TEST_PROJECT } from '../_data_';
 
 const initModule = async ({
   imageDeleteMock = jest.fn(),
@@ -108,14 +109,7 @@ describe('TestVariationsService', () => {
   });
 
   describe('findOrCreate', () => {
-    const projectMock: Project = {
-      id: '12',
-      name: 'Project',
-      buildsCounter: 0,
-      mainBranchName: 'master',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    const projectMock = TEST_PROJECT;
 
     it('can find by main branch', async () => {
       const createRequest: CreateTestRequestDto = {
@@ -398,14 +392,7 @@ describe('TestVariationsService', () => {
 
   it('merge', async () => {
     const mergedBranch = 'develop';
-    const project: Project = {
-      id: 'some id',
-      buildsCounter: 0,
-      name: 'some name',
-      mainBranchName: 'master',
-      updatedAt: new Date(),
-      createdAt: new Date(),
-    };
+    const project: Project = TEST_PROJECT;
     const build: Build = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
       ciBuildId: 'ciBuildId',

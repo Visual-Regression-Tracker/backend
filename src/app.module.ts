@@ -9,6 +9,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { HttpExceptionFilter } from './http-exception.filter';
+import { CompareModule } from './compare/compare.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { HttpExceptionFilter } from './http-exception.filter';
     ProjectsModule,
     TestRunsModule,
     TestVariationsModule,
+    CompareModule,
   ],
   providers: [
     PrismaService,
@@ -30,7 +32,7 @@ import { HttpExceptionFilter } from './http-exception.filter';
     {
       provide: APP_INTERCEPTOR,
       useClass: CacheInterceptor,
-    },
+    }
   ],
 })
 export class AppModule {}

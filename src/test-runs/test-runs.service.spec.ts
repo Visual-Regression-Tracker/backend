@@ -3,9 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../shared/static/static.service';
-import { PNG } from 'pngjs';
 import { TestStatus, TestRun, TestVariation } from '@prisma/client';
-import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { DiffResult } from './diffResult';
@@ -17,7 +15,7 @@ import { BuildsService } from '../builds/builds.service';
 import { TEST_PROJECT } from '../_data_';
 import { getTestVariationUniqueData } from '../utils';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
-import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto';
+import { CompareService } from '../compare/compare.service';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -41,7 +39,9 @@ const initService = async ({
   testVariationFindManyMock = jest.fn(),
   baselineCreateMock = jest.fn(),
   testVariationFindOrCreateMock = jest.fn(),
+  testVariationFindUniqueMock = jest.fn(),
   projectFindUniqueMock = jest.fn(),
+  compareGetDiffMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -60,6 +60,7 @@ const initService = async ({
           testVariation: {
             create: testVariationCreateMock,
             findMany: testVariationFindManyMock,
+            findUnique: testVariationFindUniqueMock,
           },
           baseline: {
             create: baselineCreateMock,
@@ -96,6 +97,12 @@ const initService = async ({
       {
         provide: BuildsService,
         useValue: {},
+      },
+      {
+        provide: CompareService,
+        useValue: {
+          getDiff: compareGetDiffMock,
+        },
       },
     ],
   }).compile();
@@ -235,6 +242,13 @@ describe('TestRunsService', () => {
       updatedAt: new Date(),
       branchName: 'master',
     };
+    const diffResult: DiffResult = {
+      status: TestStatus.unresolved,
+      diffName: 'diff image name',
+      pixelMisMatchCount: 11,
+      diffPercent: 22,
+      isSameDimension: true,
+    };
     const createTestRequestDto = initCreateTestRequestDto;
     const testRunCreateMock = jest.fn().mockResolvedValueOnce(testRun);
     const imageName = 'image name';
@@ -243,16 +257,15 @@ describe('TestRunsService', () => {
     const baseline = 'baseline';
     const getImageMock = jest.fn().mockReturnValueOnce(baseline).mockReturnValueOnce(image);
     const eventTestRunCreatedMock = jest.fn();
-    service = await initService({ testRunCreateMock, saveImageMock, getImageMock, eventTestRunCreatedMock });
-    const diffResult: DiffResult = {
-      status: TestStatus.unresolved,
-      diffName: 'diff image name',
-      pixelMisMatchCount: 11,
-      diffPercent: 22,
-      isSameDimension: true,
-    };
-    const getDiffMock = jest.fn().mockReturnValueOnce(diffResult);
-    service.getDiff = getDiffMock;
+    const compareGetDiffMock = jest.fn().mockReturnValueOnce(diffResult);
+    service = await initService({
+      testRunCreateMock,
+      saveImageMock,
+      getImageMock,
+      eventTestRunCreatedMock,
+      compareGetDiffMock,
+    });
+
     const saveDiffResultMock = jest.fn();
     service.saveDiffResult = saveDiffResultMock.mockResolvedValueOnce(testRunWithResult);
     const tryAutoApproveByPastBaselines = jest.fn();
@@ -295,187 +308,6 @@ describe('TestRunsService', () => {
     expect(result).toBe(testRun);
   });
 
-  describe('getDiff', () => {
-    it('no baseline', async () => {
-      const baseline = null;
-      const image = new PNG({
-        width: 20,
-        height: 20,
-      });
-      service = await initService({});
-
-      const result = service.getDiff(baseline, image, baseTestRun);
-
-      expect(result).toStrictEqual({
-        status: undefined,
-        diffName: null,
-        pixelMisMatchCount: undefined,
-        diffPercent: undefined,
-        isSameDimension: undefined,
-      });
-    });
-
-    it('diff not found', async () => {
-      const baseline = new PNG({
-        width: 20,
-        height: 20,
-      });
-      const image = new PNG({
-        width: 20,
-        height: 20,
-      });
-      service = await initService({});
-
-      const result = service.getDiff(baseline, image, baseTestRun);
-
-      expect(result).toStrictEqual({
-        status: TestStatus.ok,
-        diffName: null,
-        pixelMisMatchCount: 0,
-        diffPercent: 0,
-        isSameDimension: true,
-      });
-    });
-
-    it('diff image dimensions mismatch', async () => {
-      delete process.env.ALLOW_DIFF_DIMENSIONS;
-      const baseline = new PNG({
-        width: 10,
-        height: 10,
-      });
-      const image = new PNG({
-        width: 20,
-        height: 20,
-      });
-      service = await initService({});
-
-      const result = service.getDiff(baseline, image, baseTestRun);
-
-      expect(result).toStrictEqual({
-        status: TestStatus.unresolved,
-        diffName: null,
-        pixelMisMatchCount: undefined,
-        diffPercent: undefined,
-        isSameDimension: false,
-      });
-    });
-
-    it('diff image dimensions mismatch ALLOWED', async () => {
-      process.env.ALLOW_DIFF_DIMENSIONS = 'true';
-      const baseline = new PNG({
-        width: 1,
-        height: 5,
-      });
-      const image = new PNG({
-        width: 2,
-        height: 4,
-      });
-      const diffName = 'diff name';
-      const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
-      mocked(Pixelmatch).mockReturnValueOnce(5);
-      service = await initService({ saveImageMock });
-
-      const result = service.getDiff(baseline, image, baseTestRun);
-
-      expect(mocked(Pixelmatch)).toHaveBeenCalledWith(
-        new PNG({
-          width: 2,
-          height: 5,
-        }).data,
-        new PNG({
-          width: 2,
-          height: 5,
-        }).data,
-        new PNG({
-          width: 2,
-          height: 5,
-        }).data,
-        2,
-        5,
-        {
-          includeAA: true,
-        }
-      );
-      expect(saveImageMock).toHaveBeenCalledTimes(1);
-      expect(result).toStrictEqual({
-        status: TestStatus.unresolved,
-        diffName,
-        pixelMisMatchCount: 5,
-        diffPercent: 50,
-        isSameDimension: false,
-      });
-    });
-
-    it('diff found < tollerance', async () => {
-      const testRun: TestRun = {
-        ...baseTestRun,
-        diffTollerancePercent: 1.5,
-        ignoreAreas: '[]',
-        tempIgnoreAreas: '[]',
-      };
-      const baseline = new PNG({
-        width: 100,
-        height: 100,
-      });
-      baseline.data[0] = 1
-      const image = new PNG({
-        width: 100,
-        height: 100,
-      });
-      const saveImageMock = jest.fn();
-      service = await initService({ saveImageMock });
-      const pixelMisMatchCount = 150;
-      mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
-
-      const result = service.getDiff(baseline, image, testRun);
-
-      expect(saveImageMock).toHaveBeenCalledTimes(0);
-      expect(result).toStrictEqual({
-        status: TestStatus.ok,
-        diffName: null,
-        pixelMisMatchCount,
-        diffPercent: 1.5,
-        isSameDimension: true,
-      });
-    });
-
-    it('diff found > tollerance', async () => {
-      const testRun: TestRun = {
-        ...baseTestRun,
-        diffTollerancePercent: 1,
-        ignoreAreas: '[]',
-        tempIgnoreAreas: '[]',
-      };
-      const baseline = new PNG({
-        width: 100,
-        height: 100,
-      });
-      baseline.data[0] = 1
-      const image = new PNG({
-        width: 100,
-        height: 100,
-      });
-      const pixelMisMatchCount = 200;
-      mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
-      const diffName = 'diff name';
-      const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
-      service = await initService({
-        saveImageMock,
-      });
-
-      const result = service.getDiff(baseline, image, testRun);
-
-      expect(saveImageMock).toHaveBeenCalledTimes(1);
-      expect(result).toStrictEqual({
-        status: TestStatus.unresolved,
-        diffName,
-        pixelMisMatchCount,
-        diffPercent: 2,
-        isSameDimension: true,
-      });
-    });
-  });
-
   it('calculateDiff', async () => {
     const testRun: TestRun = {
       id: 'id',
@@ -505,26 +337,31 @@ describe('TestRunsService', () => {
     const testRunUpdateMock = jest.fn();
     const baselineMock = 'baseline image';
     const imageeMock = 'image';
-    const getImageMock = jest.fn().mockReturnValueOnce(baselineMock).mockReturnValueOnce(imageeMock);
     const deleteImageMock = jest.fn();
     const diffResult = {
       id: 'test',
     };
-    const getDiffMock = jest.fn().mockReturnValue(diffResult);
+    const compareGetDiffMock = jest.fn().mockReturnValueOnce(diffResult);
     service = await initService({
       testRunUpdateMock,
-      getImageMock,
       deleteImageMock,
+      compareGetDiffMock,
     });
-    service.getDiff = getDiffMock;
     service.saveDiffResult = jest.fn();
 
-    await service.calculateDiff(testRun);
+    await service.calculateDiff('projectId', testRun);
 
-    expect(getImageMock).toHaveBeenNthCalledWith(1, testRun.baselineName);
-    expect(getImageMock).toHaveBeenNthCalledWith(2, testRun.imageName);
     expect(deleteImageMock).toHaveBeenCalledWith(testRun.diffName);
-    expect(getDiffMock).toHaveBeenCalledWith(baselineMock, imageeMock, testRun);
+    expect(compareGetDiffMock).toHaveBeenCalledWith({
+      projectId: 'projectId',
+      data: {
+        image: testRun.imageName,
+        baseline: testRun.baselineName,
+        ignoreAreas: service['getIgnoteAreas'](testRun),
+        diffTollerancePercent: testRun.diffTollerancePercent,
+        saveDiffAsFile: true,
+      },
+    });
     expect(service.saveDiffResult).toHaveBeenCalledWith(testRun.id, diffResult);
   });
 
@@ -677,22 +514,36 @@ describe('TestRunsService', () => {
   });
 
   it('updateIgnoreAreas', async () => {
-    const id = 'some id';
-    const testRunUpdateMock = jest.fn().mockResolvedValueOnce(id);
+    const testRun = {
+      id: 'testRunId',
+      testVariationId: 'testVariationId',
+      diffName: 'diffName',
+      imageName: 'imageName',
+    };
+    const testVariation = {
+      id: 'testVariationId',
+      projectId: 'someProjectId',
+    };
+    const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
+    const testVariationFindUniqueMock = jest.fn().mockResolvedValueOnce(testVariation);
     service = await initService({
       testRunUpdateMock,
+      testVariationFindUniqueMock,
     });
     service.calculateDiff = jest.fn();
 
-    await service.updateIgnoreAreas(id, ignoreAreas);
+    await service.updateIgnoreAreas(testRun.id, ignoreAreas);
 
     expect(testRunUpdateMock).toHaveBeenCalledWith({
-      where: { id },
+      where: { id: testRun.id },
       data: {
         ignoreAreas: JSON.stringify(ignoreAreas),
       },
     });
-    expect(service.calculateDiff).toHaveBeenCalled();
+    expect(testVariationFindUniqueMock).toHaveBeenCalledWith({
+      where: { id: testVariation.id },
+    });
+    expect(service.calculateDiff).toHaveBeenCalledWith(testVariation.projectId, testRun);
   });
 
   it('updateComment', async () => {
@@ -719,7 +570,6 @@ describe('TestRunsService', () => {
   });
 
   it('postTestRun', async () => {
-    delete process.env.AUTO_APPROVE_BASED_ON_HISTORY;
     const createTestRequestDto: CreateTestRequestDto = {
       buildId: 'buildId',
       projectId: 'projectId',
@@ -802,9 +652,9 @@ describe('TestRunsService', () => {
     });
     expect(deleteMock).toHaveBeenCalledWith(testRun.id);
     expect(createMock).toHaveBeenCalledWith({ testVariation, createTestRequestDto, imageBuffer });
-    expect(service.calculateDiff).toHaveBeenCalledWith(testRun);
-    expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith(testVariation, testRun);
-    expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith(testVariation, testRun);
+    expect(service.calculateDiff).toHaveBeenCalledWith(createTestRequestDto.projectId, testRun);
+    expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
+    expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
     expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
   });
 });
