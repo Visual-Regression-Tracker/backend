@@ -1,0 +1,23 @@
+version: 2
+updates:
+- package-ecosystem: npm
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 2
+  ignore:
+  - dependency-name: "@prisma/cli"
+    versions:
+    - 2.15.0
+    - 2.16.0
+    - 2.16.1
+    - 2.17.0
+    - 2.18.0
+    - 2.19.0
+    - 2.20.0
+  - dependency-name: "@nestjs/schematics"
+    versions:
+    - 7.2.7
+    - 7.2.8
+    - 7.2.9
+    - 7.3.0
