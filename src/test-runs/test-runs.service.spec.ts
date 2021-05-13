@@ -12,7 +12,7 @@ import { CommentDto } from '../shared/dto/comment.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { TestRunDto } from '../test-runs/dto/testRun.dto';
 import { BuildsService } from '../builds/builds.service';
-import { TEST_PROJECT } from '../_data_';
+import { generateBaseline, generateTestRun, generateTestVariation, TEST_PROJECT } from '../_data_';
 import { getTestVariationUniqueData } from '../utils';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import { CompareService } from '../compare/compare.service';
@@ -39,6 +39,7 @@ const initService = async ({
   testVariationFindManyMock = jest.fn(),
   baselineCreateMock = jest.fn(),
   testVariationFindOrCreateMock = jest.fn(),
+  testVariationGetDetailsMock = jest.fn(),
   testVariationFindUniqueMock = jest.fn(),
   projectFindUniqueMock = jest.fn(),
   compareGetDiffMock = jest.fn(),
@@ -92,6 +93,7 @@ const initService = async ({
         provide: TestVariationsService,
         useValue: {
           findOrCreate: testVariationFindOrCreateMock,
+          getDetails: testVariationGetDetailsMock,
         },
       },
       {
@@ -114,31 +116,6 @@ describe('TestRunsService', () => {
   const imageBuffer = Buffer.from('Image');
   const ignoreAreas = [{ x: 1, y: 2, width: 10, height: 20 }];
   const tempIgnoreAreas = [{ x: 3, y: 4, width: 30, height: 40 }];
-  const baseTestRun: TestRun = {
-    id: 'id',
-    imageName: 'imageName',
-    diffName: 'diffName',
-    baselineName: 'baselineName',
-    diffPercent: 1,
-    pixelMisMatchCount: 10,
-    diffTollerancePercent: 12,
-    status: TestStatus.new,
-    buildId: 'buildId',
-    testVariationId: 'testVariationId',
-    updatedAt: new Date(),
-    createdAt: new Date(),
-    name: 'test run name',
-    ignoreAreas: '[]',
-    tempIgnoreAreas: '[]',
-    browser: 'browser',
-    device: 'device',
-    os: 'os',
-    viewport: 'viewport',
-    branchName: 'develop',
-    baselineBranchName: 'master',
-    comment: 'some comment',
-    merge: false,
-  };
 
   it('findOne', async () => {
     const id = 'some id';
@@ -656,5 +633,127 @@ describe('TestRunsService', () => {
     expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
     expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
     expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
+  });
+
+  describe('tryAutoApproveByNewBaselines', () => {
+    it('skip if ok', async () => {
+      const testRun = generateTestRun({ status: TestStatus.ok });
+      service = await initService({});
+
+      const result = await service['tryAutoApproveByNewBaselines']({
+        testVariation: generateTestVariation(),
+        testRun,
+      });
+
+      expect(result).toBe(testRun);
+    });
+
+    it('should not auto approve', async () => {
+      const testRun = generateTestRun({ status: TestStatus.unresolved });
+      const baseline = generateBaseline();
+      const testRunFindManyMock = jest.fn().mockResolvedValueOnce([generateTestRun({ status: TestStatus.approved })]);
+      const testVariationGetDetailsMock = jest.fn().mockResolvedValueOnce(generateTestVariation({}, [baseline]));
+      service = await initService({ testRunFindManyMock, testVariationGetDetailsMock });
+      service['shouldAutoApprove'] = jest.fn().mockResolvedValueOnce(false);
+
+      const result = await service['tryAutoApproveByNewBaselines']({
+        testVariation: generateTestVariation(),
+        testRun,
+      });
+
+      expect(service['shouldAutoApprove']).toHaveBeenCalled();
+      expect(result).toBe(testRun);
+    });
+
+    it('should auto approve', async () => {
+      const testRun = generateTestRun({ status: TestStatus.unresolved });
+      const baseline = generateBaseline();
+      const testRunFindManyMock = jest.fn().mockResolvedValueOnce([generateTestRun({ status: TestStatus.approved })]);
+      const testVariationGetDetailsMock = jest.fn().mockResolvedValueOnce(generateTestVariation({}, [baseline]));
+      service = await initService({ testRunFindManyMock, testVariationGetDetailsMock });
+      service['shouldAutoApprove'] = jest.fn().mockResolvedValueOnce(true);
+      service.approve = jest.fn().mockResolvedValueOnce({
+        ...testRun,
+        status: TestStatus.autoApproved,
+      });
+
+      const result = await service['tryAutoApproveByNewBaselines']({
+        testVariation: generateTestVariation(),
+        testRun,
+      });
+
+      expect(result).toStrictEqual({
+        ...testRun,
+        status: TestStatus.autoApproved,
+      });
+    });
+  });
+
+  describe('tryAutoApproveByPastBaselines', () => {
+    it('skip if ok', async () => {
+      const testRun = generateTestRun({ status: TestStatus.ok });
+      service = await initService({});
+
+      const result = await service['tryAutoApproveByPastBaselines']({
+        testVariation: generateTestVariation(),
+        testRun,
+      });
+
+      expect(result).toBe(testRun);
+    });
+
+    it('skip if the branch the same as baseline', async () => {
+      const testRun = generateTestRun({ status: TestStatus.unresolved, branchName: 'a', baselineBranchName: 'a' });
+      service = await initService({});
+
+      const result = await service['tryAutoApproveByPastBaselines']({
+        testVariation: generateTestVariation(),
+        testRun,
+      });
+
+      expect(result).toBe(testRun);
+    });
+
+    it('should not auto approve', async () => {
+      const testRun = generateTestRun({ status: TestStatus.unresolved });
+      const baseline = generateBaseline();
+      const testVariationGetDetailsMock = jest
+        .fn()
+        .mockResolvedValueOnce(generateTestVariation({}, [baseline, baseline]));
+      service = await initService({ testVariationGetDetailsMock });
+      service['shouldAutoApprove'] = jest.fn().mockResolvedValueOnce(false);
+
+      const result = await service['tryAutoApproveByPastBaselines']({
+        testVariation: generateTestVariation(),
+        testRun,
+      });
+
+      expect(service['shouldAutoApprove']).toHaveBeenCalled();
+      expect(result).toBe(testRun);
+    });
+
+    it('should auto approve', async () => {
+      const testRun = generateTestRun({ status: TestStatus.unresolved });
+      const baseline = generateBaseline();
+      const testVariationGetDetailsMock = jest
+        .fn()
+        .mockResolvedValueOnce(generateTestVariation({}, [baseline, baseline]));
+      service = await initService({ testVariationGetDetailsMock });
+      service['shouldAutoApprove'] = jest.fn().mockResolvedValueOnce(true);
+      service.approve = jest.fn().mockResolvedValueOnce({
+        ...testRun,
+        status: TestStatus.autoApproved,
+      });
+
+      const result = await service['tryAutoApproveByPastBaselines']({
+        testVariation: generateTestVariation(),
+        testRun,
+      });
+
+      expect(result).toStrictEqual({
+        ...testRun,
+        status: TestStatus.autoApproved,
+      });
+    });
   });
 });

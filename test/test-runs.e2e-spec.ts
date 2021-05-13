@@ -25,6 +25,7 @@ describe('TestRuns (e2e)', () => {
 
   const image_v1 = './test/image.png';
   const image_v2 = './test/image_edited.png';
+  const image_v3 = './test/image_edited_2.png';
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -75,8 +76,24 @@ describe('TestRuns (e2e)', () => {
         image_v1
       );
       await testRunsService.approve(testRun1.id);
+      const { testRun: testRun2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v2
+      );
+      await testRunsService.approve(testRun2.id);
+      const { testRun: testRun3 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        "feature",
+        image_v2
+      );
+      await testRunsService.approve(testRun3.id);
 
-      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v2);
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v3);
 
       expect(testRun.status).toBe(TestStatus.unresolved);
     });
