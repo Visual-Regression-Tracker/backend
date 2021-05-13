@@ -284,7 +284,7 @@ export class TestRunsService {
     const testVariationHistory = await this.testVariationService.getDetails(testVariation.id);
     // skip first baseline as it was used by default in general flow
     for (const baseline of testVariationHistory.baselines.slice(1)) {
-      if (this.shouldAutoApprove({ projectId: testVariation.projectId, baseline, testRun })) {
+      if (await this.shouldAutoApprove({ projectId: testVariation.projectId, baseline, testRun })) {
         return this.approve(testRun.id, false, true);
       }
     }
@@ -321,7 +321,7 @@ export class TestRunsService {
       const approvedTestVariation = await this.testVariationService.getDetails(approvedTestRun.testVariationId);
       const baseline = approvedTestVariation.baselines.shift();
 
-      if (this.shouldAutoApprove({ projectId: testVariation.projectId, baseline, testRun })) {
+      if (await this.shouldAutoApprove({ projectId: testVariation.projectId, baseline, testRun })) {
         return this.approve(testRun.id, false, true);
       }
     }
