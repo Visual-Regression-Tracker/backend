@@ -5,7 +5,7 @@ import {
   TestVariation,
   Baseline,
   Project,
-  ProjectIdNameBrowserDeviceOsViewportBranchNameCompoundUniqueInput,
+  ProjectIdNameBrowserDeviceOsViewportCustomTagsBranchNameCompoundUniqueInput,
   Prisma,
   TestRun,
   Build,
@@ -19,6 +19,7 @@ import { PNG } from 'pngjs';
 import { CreateTestRequestDto } from 'src/test-runs/dto/create-test-request.dto';
 import { BuildDto } from 'src/builds/dto/build.dto';
 import { getTestVariationUniqueData } from '../utils';
+import { CustomTagsDto } from 'src/shared/dto/custom-tags.dto';
 
 @Injectable()
 export class TestVariationsService {
@@ -29,7 +30,7 @@ export class TestVariationsService {
     private testRunsService: TestRunsService,
     @Inject(forwardRef(() => BuildsService))
     private buildsService: BuildsService
-  ) {}
+  ) { }
 
   async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
     return this.prismaService.testVariation.findUnique({
@@ -48,11 +49,11 @@ export class TestVariationsService {
   }
 
   async findUnique(
-    uniqueInput: Prisma.ProjectIdNameBrowserDeviceOsViewportBranchNameCompoundUniqueInput
+    uniqueInput: Prisma.ProjectIdNameBrowserDeviceOsViewportCustomTagsBranchNameCompoundUniqueInput
   ): Promise<TestVariation | null> {
     return this.prismaService.testVariation.findUnique({
       where: {
-        projectId_name_browser_device_os_viewport_branchName: uniqueInput,
+        projectId_name_browser_device_os_viewport_customTags_branchName: uniqueInput,
       },
     });
   }
@@ -68,7 +69,7 @@ export class TestVariationsService {
   }) {
     return this.prismaService.testVariation.upsert({
       where: {
-        projectId_name_browser_device_os_viewport_branchName: {
+        projectId_name_browser_device_os_viewport_customTags_branchName: {
           projectId,
           branchName: testRun.branchName,
           ...getTestVariationUniqueData(testRun),
@@ -121,11 +122,11 @@ export class TestVariationsService {
       }),
       // search current branch variation
       baselineData.branchName !== project.mainBranchName &&
-        this.findUnique({
-          projectId,
-          branchName: baselineData.branchName,
-          ...getTestVariationUniqueData(baselineData),
-        }),
+      this.findUnique({
+        projectId,
+        branchName: baselineData.branchName,
+        ...getTestVariationUniqueData(baselineData),
+      }),
     ]);
 
     if (!!currentBranchTestVariation) {
@@ -162,6 +163,15 @@ export class TestVariationsService {
       where: { id },
       data: {
         comment: commentDto.comment,
+      },
+    });
+  }
+
+  async updateCustomTags(id: string, customTagsDto: CustomTagsDto): Promise<TestVariation> {
+    return this.prismaService.testVariation.update({
+      where: { id },
+      data: {
+        customTags: customTagsDto.customTags,
       },
     });
   }

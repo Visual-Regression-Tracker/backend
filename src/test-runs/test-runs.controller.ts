@@ -37,11 +37,12 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto';
 import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipart.dto';
 import { FileToBodyInterceptor } from '../shared/fite-to-body.interceptor';
+import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
 export class TestRunsController {
-  constructor(private testRunsService: TestRunsService) {}
+  constructor(private testRunsService: TestRunsService) { }
 
   @Get()
   @ApiOkResponse({ type: [TestRunDto] })
@@ -96,6 +97,14 @@ export class TestRunsController {
   @UseGuards(JwtAuthGuard)
   updateComment(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: CommentDto): Promise<TestRun> {
     return this.testRunsService.updateComment(id, body);
+  }
+
+  @Put('customTags/:testRunId')
+  @ApiParam({ name: 'testRunId', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  updateCustomTags(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: CustomTagsDto): Promise<TestRun> {
+    return this.testRunsService.updateCustomTags(id, body);
   }
 
   @Post()

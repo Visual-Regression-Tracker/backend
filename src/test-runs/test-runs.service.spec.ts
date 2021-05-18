@@ -16,6 +16,7 @@ import { generateBaseline, generateTestRun, generateTestVariation, TEST_PROJECT 
 import { getTestVariationUniqueData } from '../utils';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import { CompareService } from '../compare/compare.service';
+import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -174,6 +175,7 @@ describe('TestRunsService', () => {
       browser: 'browser',
       viewport: 'viewport',
       device: 'device',
+      customTags: '',
       diffTollerancePercent: undefined,
       branchName: 'develop',
       merge: true,
@@ -213,6 +215,7 @@ describe('TestRunsService', () => {
       browser: 'browser',
       viewport: 'viewport',
       device: 'device',
+      customTags: '',
       ignoreAreas: '[{"x":3,"y":4,"width":500,"height":600}]',
       comment: 'some comment',
       createdAt: new Date(),
@@ -271,6 +274,7 @@ describe('TestRunsService', () => {
         device: testVariation.device,
         os: testVariation.os,
         viewport: testVariation.viewport,
+        customTags:testVariation.customTags,
         baselineName: testVariation.baselineName,
         ignoreAreas: testVariation.ignoreAreas,
         tempIgnoreAreas: JSON.stringify(createTestRequestDto.ignoreAreas),
@@ -304,6 +308,7 @@ describe('TestRunsService', () => {
       device: null,
       os: null,
       viewport: '1800x1600',
+      customTags: '',
       ignoreAreas: JSON.stringify(ignoreAreas),
       tempIgnoreAreas: JSON.stringify(tempIgnoreAreas),
       comment: 'some comment',
@@ -361,6 +366,7 @@ describe('TestRunsService', () => {
       device: null,
       os: null,
       viewport: '1800x1600',
+      customTags: '',
       ignoreAreas: JSON.stringify(ignoreAreas),
       tempIgnoreAreas: JSON.stringify(tempIgnoreAreas),
       comment: 'some comment',
@@ -441,6 +447,7 @@ describe('TestRunsService', () => {
       device: null,
       os: null,
       viewport: '1800x1600',
+      customTags: '',
       baselineName: null,
       ignoreAreas: '[]',
       tempIgnoreAreas: '[]',
@@ -546,6 +553,29 @@ describe('TestRunsService', () => {
     expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(id);
   });
 
+  it('update custom tags', async () => {
+    const id = 'some id';
+    const customTagDto: CustomTagsDto = {
+      customTags: 'random tag',
+    };
+    const testRunUpdateMock = jest.fn().mockResolvedValueOnce(id);
+    const eventTestRunUpdatedMock = jest.fn();
+    service = await initService({
+      testRunUpdateMock,
+      eventTestRunUpdatedMock,
+    });
+
+    await service.updateCustomTags(id, customTagDto);
+
+    expect(testRunUpdateMock).toHaveBeenCalledWith({
+      where: { id },
+      data: {
+        customTags: customTagDto.customTags,
+      },
+    });
+    expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(id);
+  });
+
   it('postTestRun', async () => {
     const createTestRequestDto: CreateTestRequestDto = {
       buildId: 'buildId',
@@ -566,6 +596,7 @@ describe('TestRunsService', () => {
       browser: 'browser',
       viewport: 'viewport',
       device: 'device',
+      customTags: '',
       ignoreAreas: '[]',
       comment: 'some comment',
       createdAt: new Date(),
@@ -587,6 +618,7 @@ describe('TestRunsService', () => {
       name: 'ss2f77',
       browser: 'chromium',
       device: null,
+      customTags: '',
       os: null,
       viewport: '1800x1600',
       baselineName: null,
