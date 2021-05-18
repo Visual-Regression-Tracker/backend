@@ -52,7 +52,7 @@
   "devDependencies": {
     "@nestjs/cli": "^7.4.1",
     "@nestjs/schematics": "^7.0.1",
-    "@nestjs/testing": "^7.4.2",
+    "@nestjs/testing": "^7.6.16",
     "@prisma/cli": "2.12.1",
     "@types/bcryptjs": "^2.4.2",
     "@types/cache-manager": "^2.10.3",
