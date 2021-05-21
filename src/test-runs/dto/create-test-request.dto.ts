@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsOptional, IsUUID, IsNumber, IsBoolean } from 'class-validator';
+import { isArray } from 'lodash';
 import { BaselineDataDto } from '../../shared/dto/baseline-data.dto';
 import { IgnoreAreaDto } from './ignore-area.dto';
 
@@ -36,5 +37,11 @@ export class CreateTestRequestDto extends BaselineDataDto {
 
   @ApiPropertyOptional({ type: [IgnoreAreaDto] })
   @IsOptional()
+  @Transform((it) => {
+    if (isArray(it)) {
+      return it;
+    }
+    return JSON.parse(it);
+  })
   ignoreAreas?: IgnoreAreaDto[];
 }
