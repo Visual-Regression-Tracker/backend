@@ -7,11 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { BuildDto } from '../builds/dto/build.dto';
+import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
 
 @ApiTags('test-variations')
 @Controller('test-variations')
 export class TestVariationsController {
-  constructor(private testVariations: TestVariationsService, private prismaService: PrismaService) {}
+  constructor(private testVariations: TestVariationsService, private prismaService: PrismaService) { }
 
   @Get()
   @ApiQuery({ name: 'projectId', required: true })
@@ -48,6 +49,14 @@ export class TestVariationsController {
   @UseGuards(JwtAuthGuard)
   updateComment(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: CommentDto): Promise<TestVariation> {
     return this.testVariations.updateComment(id, body);
+  }
+
+  @Put('customTags/:id')
+  @ApiParam({ name: 'id', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  updateCustomTags(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: CustomTagsDto): Promise<TestVariation> {
+    return this.testVariations.updateCustomTags(id, body);
   }
 
   @Get('merge/')

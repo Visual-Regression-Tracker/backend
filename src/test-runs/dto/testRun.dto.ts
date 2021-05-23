@@ -31,6 +31,8 @@ export class TestRunDto {
   @ApiProperty()
   device: string;
   @ApiProperty()
+  customTags: string;
+  @ApiProperty()
   ignoreAreas: string;
   @ApiProperty()
   tempIgnoreAreas: string;
@@ -58,6 +60,7 @@ export class TestRunDto {
     this.browser = testRun.browser;
     this.viewport = testRun.viewport;
     this.device = testRun.device;
+    this.customTags = testRun.customTags;
     this.ignoreAreas = testRun.ignoreAreas;
     this.tempIgnoreAreas = testRun.tempIgnoreAreas;
     this.comment = testRun.comment;

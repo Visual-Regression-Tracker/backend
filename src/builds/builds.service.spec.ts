@@ -108,6 +108,7 @@ describe('BuildsService', () => {
         device: null,
         os: null,
         viewport: '1800x1600',
+        customTags:'',
         baselineName: null,
         ignoreAreas: '[]',
         tempIgnoreAreas: '[]',

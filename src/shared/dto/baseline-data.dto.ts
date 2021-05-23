@@ -27,6 +27,11 @@ export class BaselineDataDto {
   device?: string;
 
   @ApiProperty()
+  @IsOptional()
+  @IsString()
+  customTags?: string;
+
+  @ApiProperty()
   @IsString()
   branchName: string;
 }

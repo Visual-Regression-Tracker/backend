@@ -13,6 +13,7 @@ import { TestVariationsService } from '../test-variations/test-variations.servic
 import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData } from '../utils';
 import { CompareService } from '../compare/compare.service';
+import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
 
 @Injectable()
 export class TestRunsService {
@@ -25,7 +26,7 @@ export class TestRunsService {
     private staticService: StaticService,
     private compareService: CompareService,
     private eventsGateway: EventsGateway
-  ) {}
+  ) { }
 
   async findMany(buildId: string): Promise<TestRunDto[]> {
     const list = await this.prismaService.testRun.findMany({
@@ -253,6 +254,20 @@ export class TestRunsService {
         where: { id },
         data: {
           comment: commentDto.comment,
+        },
+      })
+      .then((testRun) => {
+        this.eventsGateway.testRunUpdated(testRun);
+        return testRun;
+      });
+  }
+
+  async updateCustomTags(id: string, customTagsDto: CustomTagsDto): Promise<TestRun> {
+    return this.prismaService.testRun
+      .update({
+        where: { id },
+        data: {
+          customTags: customTagsDto.customTags,
         },
       })
       .then((testRun) => {

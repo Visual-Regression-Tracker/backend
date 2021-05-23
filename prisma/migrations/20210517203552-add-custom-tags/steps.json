@@ -1,0 +1,101 @@
+{
+  "version": "0.3.14-fixed",
+  "steps": [
+    {
+      "tag": "CreateField",
+      "model": "TestRun",
+      "field": "customTags",
+      "type": "String",
+      "arity": "Optional"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "customTags"
+        },
+        "directive": "default"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "TestRun",
+          "field": "customTags"
+        },
+        "directive": "default"
+      },
+      "argument": "",
+      "value": "\"\""
+    },
+    {
+      "tag": "CreateField",
+      "model": "TestVariation",
+      "field": "customTags",
+      "type": "String",
+      "arity": "Required"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "TestVariation",
+          "field": "customTags"
+        },
+        "directive": "default"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "TestVariation",
+          "field": "customTags"
+        },
+        "directive": "default"
+      },
+      "argument": "",
+      "value": "\"\""
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Model",
+          "model": "TestVariation",
+          "arguments": [
+            {
+              "name": "",
+              "value": "[projectId, name, browser, device, os, viewport, customTags, branchName]"
+            }
+          ]
+        },
+        "directive": "unique"
+      }
+    },
+    {
+      "tag": "DeleteDirective",
+      "location": {
+        "path": {
+          "tag": "Model",
+          "model": "TestVariation",
+          "arguments": [
+            {
+              "name": "",
+              "value": "[projectId, name, browser, device, os, viewport, branchName]"
+            }
+          ]
+        },
+        "directive": "unique"
+      }
+    }
+  ]
+}
