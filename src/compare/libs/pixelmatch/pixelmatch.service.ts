@@ -6,8 +6,8 @@ import { StaticService } from '../../../shared/static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
 import { scaleImageToSize, applyIgnoreAreas } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
-import { ImageCompareInput } from "../ImageCompareInput";
-import { PixelmatchConfig } from "./pixelmatch.types";
+import { ImageCompareInput } from '../ImageCompareInput';
+import { PixelmatchConfig } from './pixelmatch.types';
 
 const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialiasing: true };
 
@@ -18,13 +18,12 @@ export class PixelmatchService implements ImageComparator {
   constructor(private staticService: StaticService) {}
 
   parseConfig(configJson: string): PixelmatchConfig {
-    let config: PixelmatchConfig = DEFAULT_CONFIG;
     try {
-      config = JSON.parse(configJson);
+      return JSON.parse(configJson) ?? DEFAULT_CONFIG;
     } catch (ex) {
       this.logger.error('Cannot parse config, fallback to default one ' + ex);
     }
-    return config;
+    return DEFAULT_CONFIG;
   }
 
   async getDiff(data: ImageCompareInput, config: PixelmatchConfig): Promise<DiffResult> {
