@@ -48,6 +48,12 @@ export class LookSameService implements ImageComparator {
       return result;
     }
 
+    if (!result.isSameDimension && !config.allowDiffDimensions) {
+      // diff dimensions
+      result.status = TestStatus.unresolved;
+      return result;
+    }
+
     // apply ignore areas
     const baselineIgnored = applyIgnoreAreas(baseline, data.ignoreAreas);
     const imageIgnored = applyIgnoreAreas(image, data.ignoreAreas);
