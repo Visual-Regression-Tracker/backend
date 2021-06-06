@@ -1,9 +1,9 @@
 import { TestingModule, Test } from '@nestjs/testing';
-import { TestRun, TestStatus } from '@prisma/client';
+import { TestStatus } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { mocked } from 'ts-jest/utils';
-import { StaticService } from '../../shared/static/static.service';
+import { StaticService } from '../../../shared/static/static.service';
 import { PixelmatchService } from './pixelmatch.service';
 
 jest.mock('pixelmatch');
@@ -37,7 +37,7 @@ describe('getDiff', () => {
     const getImageMock = jest.fn().mockReturnValueOnce(undefined).mockReturnValueOnce(image);
     service = await initService({ getImageMock });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: null,
         image: 'image',
@@ -65,7 +65,7 @@ describe('getDiff', () => {
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image);
     service = await initService({ getImageMock });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',
@@ -97,7 +97,7 @@ describe('getDiff', () => {
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
     service = await initService({ getImageMock });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',
@@ -136,7 +136,7 @@ describe('getDiff', () => {
     mocked(Pixelmatch).mockReturnValueOnce(5);
     service = await initService({ saveImageMock, getImageMock });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',
@@ -197,7 +197,7 @@ describe('getDiff', () => {
     const pixelMisMatchCount = 150;
     mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',
@@ -242,7 +242,7 @@ describe('getDiff', () => {
       getImageMock,
     });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',

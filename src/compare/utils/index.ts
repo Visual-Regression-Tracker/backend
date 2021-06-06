@@ -10,7 +10,7 @@ export function scaleImageToSize(image: PNG, width: number, height: number): PNG
   return image;
 }
 
-export function applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buffer {
+export function applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): PNG {
   ignoreAreas.forEach((area) => {
     for (let y = area.y; y < area.y + area.height; y++) {
       for (let x = area.x; x < area.x + area.width; x++) {
@@ -22,5 +22,5 @@ export function applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): Buff
       }
     }
   });
-  return image.data;
+  return image;
 }
