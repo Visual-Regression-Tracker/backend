@@ -37,7 +37,7 @@ model Project {
   // config
   autoApproveFeature    Boolean         @default(false)
   imageComparison       ImageComparison @default(pixelmatch)
-  imageComparisonConfig String          @default("{ threshold: 0.1, ignoreAntialiasing: true, allowDiffDimensions: false }")
+  imageComparisonConfig String          @default("{ \"threshold\": 0.1, \"ignoreAntialiasing\": true, \"allowDiffDimensions\": false }")
 
   @@unique([name])
 }
