@@ -270,7 +270,20 @@ export class TestVariationsService {
   }
 
   async deleteBaseline(baseline: Baseline): Promise<Baseline> {
-    this.staticService.deleteImage(baseline.baselineName);
+    const testRuns: TestRun[] = await this.prismaService.testRun.findMany({
+      where: {
+        OR: [{
+          baselineName: baseline.baselineName
+        }, {
+          imageName: baseline.baselineName
+        }]
+      },
+    });
+
+    //Delete image physically only if there is no test run pointing to this image
+    if (testRuns.length === 0) {
+      this.staticService.deleteImage(baseline.baselineName);
+    }
     return this.prismaService.baseline.delete({
       where: { id: baseline.id },
     });

@@ -27,12 +27,14 @@ export class StaticService {
   async deleteImage(imageName: string): Promise<boolean> {
     if (!imageName) return;
     return new Promise((resolvePromise, reject) => {
-      unlink(this.getImagePath(imageName), (err) => {
-        if (err) {
-          this.logger.error(err);
-        }
-        resolvePromise(true);
-      });
+      if (existsSync(this.getImagePath(imageName))) {
+        unlink(this.getImagePath(imageName), (err) => {
+          if (err) {
+            this.logger.error(err);
+          }
+          resolvePromise(true);
+        });
+      }
     });
   }
 

@@ -37,6 +37,7 @@ const initService = async ({
   eventBuildUpdatedMock = jest.fn(),
   eventBuildCreatedMock = jest.fn(),
   testVariationCreateMock = jest.fn(),
+  testVariationFindFirstMock = jest.fn(),
   testVariationFindManyMock = jest.fn(),
   baselineCreateMock = jest.fn(),
   testVariationFindOrCreateMock = jest.fn(),
@@ -61,6 +62,7 @@ const initService = async ({
           },
           testVariation: {
             create: testVariationCreateMock,
+            findFirst: testVariationFindFirstMock,
             findMany: testVariationFindManyMock,
             findUnique: testVariationFindUniqueMock,
           },
@@ -274,7 +276,7 @@ describe('TestRunsService', () => {
         device: testVariation.device,
         os: testVariation.os,
         viewport: testVariation.viewport,
-        customTags:testVariation.customTags,
+        customTags: testVariation.customTags,
         baselineName: testVariation.baselineName,
         ignoreAreas: testVariation.ignoreAreas,
         tempIgnoreAreas: JSON.stringify(createTestRequestDto.ignoreAreas),
@@ -489,8 +491,7 @@ describe('TestRunsService', () => {
     await service.delete(id);
 
     expect(findOneMock).toHaveBeenCalledWith(id);
-    expect(deleteImageMock).toHaveBeenNthCalledWith(1, testRun.diffName);
-    expect(deleteImageMock).toHaveBeenNthCalledWith(2, testRun.imageName);
+    expect(deleteImageMock).toHaveBeenNthCalledWith(1, testRun.imageName);
     expect(testRunDeleteMock).toHaveBeenCalledWith({
       where: { id },
     });
