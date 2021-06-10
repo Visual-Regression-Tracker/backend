@@ -14,7 +14,7 @@ export class BuildsService {
     private eventsGateway: EventsGateway,
     @Inject(forwardRef(() => TestRunsService))
     private testRunsService: TestRunsService
-  ) {}
+  ) { }
 
   async findOne(id: string): Promise<BuildDto> {
     const [build, testRuns] = await Promise.all([
@@ -27,6 +27,19 @@ export class BuildsService {
       ...build,
       testRuns,
     });
+  }
+
+  async deleteOldBuilds(projectId: string, keepBuilds: number) {
+    const [total, buildList] = await Promise.all([
+      this.prismaService.build.count({ where: { projectId } }),
+      this.prismaService.build.findMany({
+        where: { projectId },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+    for (let index = (keepBuilds - 1); index < total; index++) {
+      await this.remove(buildList[index].id);
+    }
   }
 
   async findMany(projectId: string, take: number, skip: number): Promise<PaginatedBuildDto> {
@@ -102,11 +115,11 @@ export class BuildsService {
   }) {
     const where: Prisma.BuildWhereUniqueInput = ciBuildId
       ? {
-          projectId_ciBuildId: {
-            projectId,
-            ciBuildId,
-          },
-        }
+        projectId_ciBuildId: {
+          projectId,
+          ciBuildId,
+        },
+      }
       : { id: projectId };
     return this.prismaService.build.upsert({
       where,

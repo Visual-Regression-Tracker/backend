@@ -1,4 +1,5 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { PNG } from 'pngjs';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../shared/static/static.service';
@@ -104,7 +105,9 @@ export class TestRunsService {
     const testRun = await this.findOne(id);
     let testVariation = testRun.testVariation;
 
-    const baselineName = testRun.imageName;
+    // save new baseline
+    const baseline = this.staticService.getImage(testRun.imageName);
+    const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
     if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
       testVariation = await this.testVariationService.updateOrCreate({
@@ -216,14 +219,10 @@ export class TestRunsService {
 
   async delete(id: string): Promise<TestRun> {
     const testRun = await this.findOne(id);
-    //Delete only if there is no variation pointing to this file.
-    const isImageInUseInVariation = await this.isImageInUseInVariations(testRun);
-    if (!isImageInUseInVariation) {
-      await this.staticService.deleteImage(testRun.imageName);
-    }
 
     await Promise.all([
       this.staticService.deleteImage(testRun.diffName),
+      this.staticService.deleteImage(testRun.imageName),
       this.prismaService.testRun.delete({
         where: { id },
       }),
@@ -231,26 +230,6 @@ export class TestRunsService {
 
     this.eventsGateway.testRunDeleted(testRun);
     return testRun;
-  }
-
-  async isImageInUseInVariations(testRun: TestRun): Promise<Boolean> {
-    const testVariation = await this.prismaService.testVariation.findFirst({
-      where: {
-        name: testRun.name
-      },
-    });
-    if (!testVariation) {
-      return false;
-    }
-    let baselines = [];
-    if (testVariation.baselineName) {
-      baselines = await this.prismaService.baseline.findMany({
-        where: {
-          baselineName: testVariation.baselineName
-        },
-      });
-    }
-    return baselines.length > 0;
   }
 
   async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {

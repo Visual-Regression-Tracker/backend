@@ -44,4 +44,9 @@ export class ProjectDto implements Project {
   @ApiProperty()
   @IsNumber()
   threshold: number;
+
+  @ApiProperty()
+  @IsNumber()
+  maxBuildAllowed: number;
+  
 }

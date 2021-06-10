@@ -644,11 +644,9 @@ describe('TestVariationsService', () => {
 
     const baselineDeleteMock = jest.fn();
     const imageDeleteMock = jest.fn();
-    const testRunFindMany = jest.fn().mockResolvedValueOnce([]);
     const service = await initModule({
       baselineDeleteMock,
       imageDeleteMock,
-      testRunFindMany,
     });
 
     await service.deleteBaseline(baseline);

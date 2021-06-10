@@ -15,7 +15,7 @@ export class ProjectsService {
     private buildsService: BuildsService,
     @Inject(forwardRef(() => TestVariationsService))
     private testVariationsService: TestVariationsService
-  ) {}
+  ) { }
 
   async findOne(idOrName: string): Promise<Project> {
     const isUUID = uuidAPIKey.isUUID(idOrName);
@@ -61,6 +61,7 @@ export class ProjectsService {
         ignoreAntialiasing: projectDto.ignoreAntialiasing,
         imageComparison: projectDto.imageComparison,
         threshold: projectDto.threshold,
+        maxBuildAllowed: projectDto.maxBuildAllowed,
       },
     });
   }
