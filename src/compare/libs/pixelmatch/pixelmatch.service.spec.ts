@@ -4,7 +4,8 @@ import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { mocked } from 'ts-jest/utils';
 import { StaticService } from '../../../shared/static/static.service';
-import { PixelmatchService } from './pixelmatch.service';
+import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
+import { PixelmatchConfig } from './pixelmatch.types';
 
 jest.mock('pixelmatch');
 
@@ -26,8 +27,32 @@ const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn()
   return module.get<PixelmatchService>(PixelmatchService);
 };
 
+let service: PixelmatchService;
+
+describe('parseConfig', () => {
+  it.each<[string, PixelmatchConfig]>([
+    [
+      "{\"threshold\":21.2,\"ignoreAntialiasing\":false,\"allowDiffDimensions\":true}",
+      { threshold: 21.2, ignoreAntialiasing: false, allowDiffDimensions: true },
+    ],
+    [
+      "",
+      DEFAULT_CONFIG,
+    ],
+    [
+      "invalid",
+      DEFAULT_CONFIG,
+    ],
+  ])('should parse config', async (json, expected) => {
+    service = await initService({});
+
+    const config = service.parseConfig(json);
+
+    expect(config).toStrictEqual(expected);
+  });
+});
+
 describe('getDiff', () => {
-  let service: PixelmatchService;
   const image = new PNG({
     width: 20,
     height: 20,

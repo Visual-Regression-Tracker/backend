@@ -9,6 +9,13 @@ import { ImageCompareInput } from '../ImageCompareInput';
 import { LookSameResult, LooksSameConfig } from './looks-same.types';
 import looksSame from 'looks-same';
 
+export const DEFAULT_CONFIG: LooksSameConfig = {
+  strict: false,
+  ignoreAntialiasing: true,
+  ignoreCaret: true,
+  allowDiffDimensions: false,
+};
+
 @Injectable()
 export class LookSameService implements ImageComparator {
   private readonly logger: Logger = new Logger(LookSameService.name);
@@ -17,10 +24,11 @@ export class LookSameService implements ImageComparator {
 
   parseConfig(configJson: string): LooksSameConfig {
     try {
-      return JSON.parse(configJson);
+      return JSON.parse(configJson) ?? DEFAULT_CONFIG;
     } catch (ex) {
       this.logger.error('Cannot parse config, fallback to default one ' + ex);
     }
+    return DEFAULT_CONFIG;
   }
 
   async getDiff(data: ImageCompareInput, config: LooksSameConfig): Promise<DiffResult> {

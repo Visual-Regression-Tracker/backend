@@ -9,7 +9,7 @@ import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { PixelmatchConfig } from './pixelmatch.types';
 
-const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialiasing: true };
+export const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialiasing: true };
 
 @Injectable()
 export class PixelmatchService implements ImageComparator {
