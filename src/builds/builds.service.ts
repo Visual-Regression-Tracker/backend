@@ -38,7 +38,7 @@ export class BuildsService {
       }),
     ]);
     for (let index = (keepBuilds - 1); index < total; index++) {
-      await this.remove(buildList[index].id);
+      this.eventsGateway.buildDeleted(buildList[index]);
     }
   }
 

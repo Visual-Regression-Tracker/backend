@@ -70,7 +70,7 @@ export class BuildsController {
   @UseGuards(ApiGuard)
   async create(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
     const project = await this.projectService.findOne(createBuildDto.project);
-    this.buildsService.deleteOldBuilds(project.id, project.maxBuildAllowed);
+    await this.buildsService.deleteOldBuilds(project.id, project.maxBuildAllowed);
     let build = await this.buildsService.findOrCreate({
       projectId: project.id,
       branchName: createBuildDto.branchName,
