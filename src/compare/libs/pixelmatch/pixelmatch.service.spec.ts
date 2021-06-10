@@ -4,6 +4,7 @@ import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { mocked } from 'ts-jest/utils';
 import { StaticService } from '../../../shared/static/static.service';
+import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
 import { PixelmatchConfig } from './pixelmatch.types';
 
@@ -32,17 +33,11 @@ let service: PixelmatchService;
 describe('parseConfig', () => {
   it.each<[string, PixelmatchConfig]>([
     [
-      "{\"threshold\":21.2,\"ignoreAntialiasing\":false,\"allowDiffDimensions\":true}",
+      '{"threshold":21.2,"ignoreAntialiasing":false,"allowDiffDimensions":true}',
       { threshold: 21.2, ignoreAntialiasing: false, allowDiffDimensions: true },
     ],
-    [
-      "",
-      DEFAULT_CONFIG,
-    ],
-    [
-      "invalid",
-      DEFAULT_CONFIG,
-    ],
+    ['', DEFAULT_CONFIG],
+    ['invalid', DEFAULT_CONFIG],
   ])('should parse config', async (json, expected) => {
     service = await initService({});
 
@@ -70,20 +65,10 @@ describe('getDiff', () => {
         ignoreAreas: [],
         saveDiffAsFile: true,
       },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0,
-      }
+      DEFAULT_CONFIG
     );
 
-    expect(result).toStrictEqual({
-      status: undefined,
-      diffName: null,
-      pixelMisMatchCount: undefined,
-      diffPercent: undefined,
-      isSameDimension: undefined,
-    });
+    expect(result).toStrictEqual(NO_BASELINE_RESULT);
   });
 
   it('diff not found', async () => {
@@ -98,20 +83,10 @@ describe('getDiff', () => {
         ignoreAreas: [],
         saveDiffAsFile: true,
       },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0,
-      }
+      DEFAULT_CONFIG
     );
 
-    expect(result).toStrictEqual({
-      status: TestStatus.ok,
-      diffName: null,
-      pixelMisMatchCount: 0,
-      diffPercent: 0,
-      isSameDimension: true,
-    });
+    expect(result).toStrictEqual(EQUAL_RESULT);
   });
 
   it('diff image dimensions mismatch', async () => {
@@ -130,20 +105,10 @@ describe('getDiff', () => {
         ignoreAreas: [],
         saveDiffAsFile: true,
       },
-      {
-        allowDiffDimensions: false,
-        ignoreAntialiasing: true,
-        threshold: 0,
-      }
+      DEFAULT_CONFIG
     );
 
-    expect(result).toStrictEqual({
-      status: TestStatus.unresolved,
-      diffName: null,
-      pixelMisMatchCount: undefined,
-      diffPercent: undefined,
-      isSameDimension: false,
-    });
+    expect(result).toStrictEqual(DIFF_DIMENSION_RESULT);
   });
 
   it('diff image dimensions mismatch ALLOWED', async () => {
@@ -228,13 +193,9 @@ describe('getDiff', () => {
         image: 'image',
         diffTollerancePercent: 2,
         ignoreAreas: [],
-        saveDiffAsFile: true,
+        saveDiffAsFile: false,
       },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0.1,
-      }
+      DEFAULT_CONFIG
     );
 
     expect(saveImageMock).toHaveBeenCalledTimes(0);
@@ -275,11 +236,7 @@ describe('getDiff', () => {
         ignoreAreas: [],
         saveDiffAsFile: true,
       },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0.1,
-      }
+      DEFAULT_CONFIG
     );
 
     expect(saveImageMock).toHaveBeenCalledTimes(1);

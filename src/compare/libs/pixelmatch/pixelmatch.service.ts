@@ -5,6 +5,7 @@ import { PNG } from 'pngjs';
 import { StaticService } from '../../../shared/static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
 import { scaleImageToSize, applyIgnoreAreas } from '../../utils';
+import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { PixelmatchConfig } from './pixelmatch.types';
@@ -28,35 +29,23 @@ export class PixelmatchService implements ImageComparator {
 
   async getDiff(data: ImageCompareInput, config: PixelmatchConfig): Promise<DiffResult> {
     const result: DiffResult = {
-      status: undefined,
-      diffName: null,
-      pixelMisMatchCount: undefined,
-      diffPercent: undefined,
-      isSameDimension: undefined,
+      ...NO_BASELINE_RESULT,
     };
 
     const baseline = this.staticService.getImage(data.baseline);
     const image = this.staticService.getImage(data.image);
 
     if (!baseline) {
-      // no baseline
-      return result;
+      return NO_BASELINE_RESULT;
+    }
+
+    if (baseline.data.equals(image.data)) {
+      return EQUAL_RESULT;
     }
 
     result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
-
-    if (baseline.data.equals(image.data)) {
-      // equal images
-      result.status = TestStatus.ok;
-      result.pixelMisMatchCount = 0;
-      result.diffPercent = 0;
-      return result;
-    }
-
     if (!result.isSameDimension && !config.allowDiffDimensions) {
-      // diff dimensions
-      result.status = TestStatus.unresolved;
-      return result;
+      return DIFF_DIMENSION_RESULT;
     }
 
     // scale image to max size

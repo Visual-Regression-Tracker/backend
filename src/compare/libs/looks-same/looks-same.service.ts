@@ -8,6 +8,7 @@ import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { LookSameResult, LooksSameConfig } from './looks-same.types';
 import looksSame from 'looks-same';
+import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 
 export const DEFAULT_CONFIG: LooksSameConfig = {
   strict: false,
@@ -33,33 +34,23 @@ export class LookSameService implements ImageComparator {
 
   async getDiff(data: ImageCompareInput, config: LooksSameConfig): Promise<DiffResult> {
     let result: DiffResult = {
-      status: undefined,
-      diffName: null,
-      pixelMisMatchCount: undefined,
-      diffPercent: undefined,
-      isSameDimension: undefined,
+      ...NO_BASELINE_RESULT,
     };
 
     const baseline = this.staticService.getImage(data.baseline);
     const image = this.staticService.getImage(data.image);
 
     if (!baseline) {
-      this.logger.log('No baseline');
-      return result;
+      return NO_BASELINE_RESULT;
+    }
+
+    if (baseline.data.equals(image.data)) {
+      return EQUAL_RESULT;
     }
 
     result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
-
-    if (baseline.data.equals(image.data)) {
-      // equal images
-      result.status = TestStatus.ok;
-      return result;
-    }
-
     if (!result.isSameDimension && !config.allowDiffDimensions) {
-      // diff dimensions
-      result.status = TestStatus.unresolved;
-      return result;
+      return DIFF_DIMENSION_RESULT;
     }
 
     // apply ignore areas
