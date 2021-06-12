@@ -42,10 +42,8 @@ export class ProjectsService {
         name: projectDto.name,
         mainBranchName: projectDto.mainBranchName,
         autoApproveFeature: projectDto.autoApproveFeature,
-        diffDimensionsFeature: projectDto.diffDimensionsFeature,
-        ignoreAntialiasing: projectDto.ignoreAntialiasing,
         imageComparison: projectDto.imageComparison,
-        threshold: projectDto.threshold,
+        imageComparisonConfig: projectDto.imageComparisonConfig,
       },
     });
   }
@@ -57,11 +55,9 @@ export class ProjectsService {
         name: projectDto.name,
         mainBranchName: projectDto.mainBranchName,
         autoApproveFeature: projectDto.autoApproveFeature,
-        diffDimensionsFeature: projectDto.diffDimensionsFeature,
-        ignoreAntialiasing: projectDto.ignoreAntialiasing,
         imageComparison: projectDto.imageComparison,
-        threshold: projectDto.threshold,
         maxBuildAllowed: projectDto.maxBuildAllowed,
+        imageComparisonConfig: projectDto.imageComparisonConfig,
       },
     });
   }

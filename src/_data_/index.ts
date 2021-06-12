@@ -9,9 +9,7 @@ export const TEST_PROJECT: Project = {
   createdAt: new Date(),
   updatedAt: new Date(),
   autoApproveFeature: true,
-  diffDimensionsFeature: true,
-  ignoreAntialiasing: true,
-  threshold: 0.1,
+  imageComparisonConfig: '{ "threshold": 0.1, "ignoreAntialiasing": true, "allowDiffDimensions": false }',
   imageComparison: ImageComparison.pixelmatch,
 };
 

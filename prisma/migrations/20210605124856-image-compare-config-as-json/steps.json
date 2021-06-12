@@ -1,0 +1,52 @@
+{
+  "version": "0.3.14-fixed",
+  "steps": [
+    {
+      "tag": "CreateField",
+      "model": "Project",
+      "field": "imageComparisonConfig",
+      "type": "String",
+      "arity": "Required"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "Project",
+          "field": "imageComparisonConfig"
+        },
+        "directive": "default"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "Project",
+          "field": "imageComparisonConfig"
+        },
+        "directive": "default"
+      },
+      "argument": "",
+      "value": "\"{ \\\"threshold\\\": 0.1, \\\"ignoreAntialiasing\\\": true, \\\"allowDiffDimensions\\\": false }\""
+    },
+    {
+      "tag": "DeleteField",
+      "model": "Project",
+      "field": "diffDimensionsFeature"
+    },
+    {
+      "tag": "DeleteField",
+      "model": "Project",
+      "field": "ignoreAntialiasing"
+    },
+    {
+      "tag": "DeleteField",
+      "model": "Project",
+      "field": "threshold"
+    }
+  ]
+}

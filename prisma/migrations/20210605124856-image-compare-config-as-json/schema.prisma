@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url = "***"
 }
 
 model Build {
@@ -31,7 +31,6 @@ model Project {
   mainBranchName        String          @default("master")
   builds                Build[]
   buildsCounter         Int             @default(0)
-  maxBuildAllowed       Int             @default(100)
   testVariations        TestVariation[]
   updatedAt             DateTime        @updatedAt
   createdAt             DateTime        @default(now())
