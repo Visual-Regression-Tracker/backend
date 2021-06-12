@@ -10,8 +10,8 @@ export class StaticService {
   private readonly logger: Logger = new Logger(StaticService.name);
 
   saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): string {
-    const imageName = `${Date.now()}.${type}.png`;
-    writeFileSync(this.getImagePath(imageName), imageBuffer);
+    const { imageName, imagePath } = this.generateNewImage(type);
+    writeFileSync(imagePath, imageBuffer);
     return imageName;
   }
 
@@ -34,6 +34,14 @@ export class StaticService {
         resolvePromise(true);
       });
     });
+  }
+
+  private generateNewImage(type: 'screenshot' | 'diff' | 'baseline'): { imageName: string; imagePath: string } {
+    const imageName = `${Date.now()}.${type}.png`;
+    return {
+      imageName,
+      imagePath: this.getImagePath(imageName),
+    };
   }
 
   private getImagePath(imageName: string): string {

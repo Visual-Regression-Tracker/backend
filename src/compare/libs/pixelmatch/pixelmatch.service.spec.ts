@@ -1,10 +1,12 @@
 import { TestingModule, Test } from '@nestjs/testing';
-import { TestRun, TestStatus } from '@prisma/client';
+import { TestStatus } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { mocked } from 'ts-jest/utils';
-import { StaticService } from '../../shared/static/static.service';
-import { PixelmatchService } from './pixelmatch.service';
+import { StaticService } from '../../../shared/static/static.service';
+import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
+import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
+import { PixelmatchConfig } from './pixelmatch.types';
 
 jest.mock('pixelmatch');
 
@@ -26,8 +28,26 @@ const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn()
   return module.get<PixelmatchService>(PixelmatchService);
 };
 
+let service: PixelmatchService;
+
+describe('parseConfig', () => {
+  it.each<[string, PixelmatchConfig]>([
+    [
+      '{"threshold":21.2,"ignoreAntialiasing":false,"allowDiffDimensions":true}',
+      { threshold: 21.2, ignoreAntialiasing: false, allowDiffDimensions: true },
+    ],
+    ['', DEFAULT_CONFIG],
+    ['invalid', DEFAULT_CONFIG],
+  ])('should parse config', async (json, expected) => {
+    service = await initService({});
+
+    const config = service.parseConfig(json);
+
+    expect(config).toStrictEqual(expected);
+  });
+});
+
 describe('getDiff', () => {
-  let service: PixelmatchService;
   const image = new PNG({
     width: 20,
     height: 20,
@@ -37,7 +57,7 @@ describe('getDiff', () => {
     const getImageMock = jest.fn().mockReturnValueOnce(undefined).mockReturnValueOnce(image);
     service = await initService({ getImageMock });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: null,
         image: 'image',
@@ -45,27 +65,17 @@ describe('getDiff', () => {
         ignoreAreas: [],
         saveDiffAsFile: true,
       },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0,
-      }
+      DEFAULT_CONFIG
     );
 
-    expect(result).toStrictEqual({
-      status: undefined,
-      diffName: null,
-      pixelMisMatchCount: undefined,
-      diffPercent: undefined,
-      isSameDimension: undefined,
-    });
+    expect(result).toStrictEqual(NO_BASELINE_RESULT);
   });
 
   it('diff not found', async () => {
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image);
     service = await initService({ getImageMock });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',
@@ -73,20 +83,10 @@ describe('getDiff', () => {
         ignoreAreas: [],
         saveDiffAsFile: true,
       },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0,
-      }
+      DEFAULT_CONFIG
     );
 
-    expect(result).toStrictEqual({
-      status: TestStatus.ok,
-      diffName: null,
-      pixelMisMatchCount: 0,
-      diffPercent: 0,
-      isSameDimension: true,
-    });
+    expect(result).toStrictEqual(EQUAL_RESULT);
   });
 
   it('diff image dimensions mismatch', async () => {
@@ -97,7 +97,7 @@ describe('getDiff', () => {
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
     service = await initService({ getImageMock });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',
@@ -105,20 +105,10 @@ describe('getDiff', () => {
         ignoreAreas: [],
         saveDiffAsFile: true,
       },
-      {
-        allowDiffDimensions: false,
-        ignoreAntialiasing: true,
-        threshold: 0,
-      }
+      DEFAULT_CONFIG
     );
 
-    expect(result).toStrictEqual({
-      status: TestStatus.unresolved,
-      diffName: null,
-      pixelMisMatchCount: undefined,
-      diffPercent: undefined,
-      isSameDimension: false,
-    });
+    expect(result).toStrictEqual(DIFF_DIMENSION_RESULT);
   });
 
   it('diff image dimensions mismatch ALLOWED', async () => {
@@ -136,7 +126,7 @@ describe('getDiff', () => {
     mocked(Pixelmatch).mockReturnValueOnce(5);
     service = await initService({ saveImageMock, getImageMock });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',
@@ -197,19 +187,15 @@ describe('getDiff', () => {
     const pixelMisMatchCount = 150;
     mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',
         diffTollerancePercent: 2,
         ignoreAreas: [],
-        saveDiffAsFile: true,
+        saveDiffAsFile: false,
       },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0.1,
-      }
+      DEFAULT_CONFIG
     );
 
     expect(saveImageMock).toHaveBeenCalledTimes(0);
@@ -242,7 +228,7 @@ describe('getDiff', () => {
       getImageMock,
     });
 
-    const result = service.getDiff(
+    const result = await service.getDiff(
       {
         baseline: 'image',
         image: 'image',
@@ -250,11 +236,7 @@ describe('getDiff', () => {
         ignoreAreas: [],
         saveDiffAsFile: true,
       },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0.1,
-      }
+      DEFAULT_CONFIG
     );
 
     expect(saveImageMock).toHaveBeenCalledTimes(1);
