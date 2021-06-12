@@ -37,10 +37,8 @@ model Project {
   createdAt             DateTime        @default(now())
   // config
   autoApproveFeature    Boolean         @default(false)
-  diffDimensionsFeature Boolean         @default(false)
-  ignoreAntialiasing    Boolean         @default(true)
-  threshold             Float           @default(0.1)
   imageComparison       ImageComparison @default(pixelmatch)
+  imageComparisonConfig String          @default("{ \"threshold\": 0.1, \"ignoreAntialiasing\": true, \"allowDiffDimensions\": false }")
 
   @@unique([name])
 }
