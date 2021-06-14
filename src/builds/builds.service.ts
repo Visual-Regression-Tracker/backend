@@ -30,16 +30,22 @@ export class BuildsService {
   }
 
   async deleteOldBuilds(projectId: string, keepBuilds: number) {
-    const [total, buildList] = await Promise.all([
-      this.prismaService.build.count({ where: { projectId } }),
+    const [buildList] = await Promise.all([
       this.prismaService.build.findMany({
         where: { projectId },
         orderBy: { createdAt: 'desc' },
+        take: undefined,
+        //Keep one build less because the new build will be added to this count to keep the max allowed build correct.
+        skip: (keepBuilds - 1)
       }),
     ]);
-    for (let index = (keepBuilds - 1); index < total; index++) {
-      this.eventsGateway.buildDeleted(buildList[index]);
-    }
+    buildList.forEach(eachBuild => {
+      console.log("Deleting build" + JSON.stringify(eachBuild));
+      this.remove(eachBuild.id);
+      this.eventsGateway.buildDeleted(new BuildDto({
+        ...eachBuild,
+      }));
+    });
   }
 
   async findMany(projectId: string, take: number, skip: number): Promise<PaginatedBuildDto> {

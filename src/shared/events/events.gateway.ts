@@ -48,8 +48,8 @@ export class EventsGateway {
     this.buildUpdated(testRun.buildId);
   }
 
-  buildDeleted(build: Build) {
-    this.server.emit('build_deleted', build);
+  buildDeleted(buildDto: BuildDto) {
+    this.server.emit('build_deleted', buildDto);
   }
 
   private testRunUpdatedDebounced = debounce(
