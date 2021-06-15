@@ -3,8 +3,7 @@ import { BuildsService } from './builds.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
-import { CreateBuildDto } from './dto/build-create.dto';
-import { Build, TestRun, Project, TestStatus } from '@prisma/client';
+import { Build, TestRun, TestStatus } from '@prisma/client';
 import { mocked } from 'ts-jest/utils';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
@@ -24,6 +23,7 @@ const initService = async ({
   testRunFindManyMock = jest.fn(),
   eventsBuildUpdatedMock = jest.fn(),
   eventsBuildCreatedMock = jest.fn(),
+  eventBuildDeletedMock = jest.fn(),
   projectFindOneMock = jest.fn(),
   projectUpdateMock = jest.fn(),
 }) => {
@@ -60,6 +60,7 @@ const initService = async ({
         useValue: {
           buildUpdated: eventsBuildUpdatedMock,
           buildCreated: eventsBuildCreatedMock,
+          buildDeleted: eventBuildDeletedMock,
         },
       },
       {
@@ -108,7 +109,7 @@ describe('BuildsService', () => {
         device: null,
         os: null,
         viewport: '1800x1600',
-        customTags:'',
+        customTags: '',
         baselineName: null,
         ignoreAreas: '[]',
         tempIgnoreAreas: '[]',
@@ -177,9 +178,11 @@ describe('BuildsService', () => {
 
   it('delete', async () => {
     const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-    const buildDeleteMock = jest.fn();
+    const buildFindManyMock = jest.fn().mockImplementation(() => Promise.resolve(build));
+    const buildDeleteMock = jest.fn().mockImplementation(() => Promise.resolve(build));
     const testRunDeleteMock = jest.fn();
-    service = await initService({ buildFindUniqueMock, buildDeleteMock, testRunDeleteMock });
+    const eventBuildDeletedMock = jest.fn();
+    service = await initService({ buildFindUniqueMock, buildDeleteMock, testRunDeleteMock, eventBuildDeletedMock, buildFindManyMock });
 
     await service.remove(build.id);
 
@@ -190,6 +193,7 @@ describe('BuildsService', () => {
       },
     });
     expect(testRunDeleteMock).toHaveBeenCalledWith(build.testRuns[0].id);
+    expect(eventBuildDeletedMock).toHaveBeenCalledWith(new BuildDto(build));
     expect(buildDeleteMock).toHaveBeenCalledWith({
       where: { id: build.id },
     });

@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Build, Prisma, TestStatus } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
@@ -9,6 +9,9 @@ import { ModifyBuildDto } from './dto/build-modify.dto';
 
 @Injectable()
 export class BuildsService {
+
+  private readonly logger: Logger = new Logger(BuildsService.name);
+
   constructor(
     private prismaService: PrismaService,
     private eventsGateway: EventsGateway,
@@ -26,25 +29,6 @@ export class BuildsService {
     return new BuildDto({
       ...build,
       testRuns,
-    });
-  }
-
-  async deleteOldBuilds(projectId: string, keepBuilds: number) {
-    const [buildList] = await Promise.all([
-      this.prismaService.build.findMany({
-        where: { projectId },
-        orderBy: { createdAt: 'desc' },
-        take: undefined,
-        //Keep one build less because the new build will be added to this count to keep the max allowed build correct.
-        skip: (keepBuilds - 1)
-      }),
-    ]);
-    buildList.forEach(eachBuild => {
-      console.log("Deleting build" + JSON.stringify(eachBuild));
-      this.remove(eachBuild.id);
-      this.eventsGateway.buildDeleted(new BuildDto({
-        ...eachBuild,
-      }));
     });
   }
 
@@ -86,9 +70,31 @@ export class BuildsService {
 
     await Promise.all(build.testRuns.map((testRun) => this.testRunsService.delete(testRun.id)));
 
-    return this.prismaService.build.delete({
+    let promise = this.prismaService.build.delete({
       where: { id },
-    });
+    })
+      .then((build) => {
+        this.logger.log("Deleted build:" + JSON.stringify(build.id));
+        this.eventsGateway.buildDeleted(
+          new BuildDto({
+            ...build
+          })
+        );
+        return build;
+      });
+    return promise;
+  }
+
+  async deleteOldBuilds(projectId: string, keepBuilds: number) {
+    keepBuilds = (keepBuilds < 2) ? keepBuilds : (keepBuilds - 1);
+    this.findMany(projectId, undefined, keepBuilds)
+      .then(
+        buildList => {
+          buildList.data.forEach(eachBuild => {
+            this.remove(eachBuild.id);
+          });
+        }
+      );
   }
 
   async approve(id: string, merge: boolean): Promise<void> {
