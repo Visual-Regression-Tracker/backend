@@ -34,6 +34,10 @@ export class ProjectDto implements Project {
   imageComparison: ImageComparison;
 
   @ApiProperty()
+  @IsNumber()
+  maxBuildAllowed: number;
+  
+  @ApiProperty()
   @IsJSON()
   imageComparisonConfig: string;
 }

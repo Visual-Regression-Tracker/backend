@@ -16,6 +16,7 @@ const initController = async ({
   buildFindOrCreateMock = jest.fn(),
   buildIncrementBuildNumberMock = jest.fn(),
   eventBuildCreatedMock = jest.fn(),
+  deleteOldBuilds = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [BuildsController],
@@ -31,6 +32,7 @@ const initController = async ({
         useValue: {
           findOrCreate: buildFindOrCreateMock,
           incrementBuildNumber: buildIncrementBuildNumberMock,
+          deleteOldBuilds: deleteOldBuilds,
         },
       },
       { provide: EventsGateway, useValue: { buildCreated: eventBuildCreatedMock } },
@@ -60,7 +62,7 @@ describe('Builds Controller', () => {
     number: 12,
   };
 
-  beforeEach(async () => {});
+  beforeEach(async () => { });
 
   it('should be defined', async () => {
     controller = await initController({});
@@ -72,16 +74,19 @@ describe('Builds Controller', () => {
     const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
     const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(newBuild);
     const buildIncrementBuildNumberMock = jest.fn().mockResolvedValueOnce(buildWithNumber);
+    const deleteOldBuilds = jest.fn();
     controller = await initController({
       projectFindOneMock,
       buildFindOrCreateMock,
       buildIncrementBuildNumberMock,
       eventBuildCreatedMock,
+      deleteOldBuilds,
     });
 
     const result = await controller.create(createBuildDto);
 
     expect(result).toStrictEqual(new BuildDto(buildWithNumber));
+    expect(deleteOldBuilds).toHaveBeenCalledWith(project.id, project.maxBuildAllowed);
     expect(buildIncrementBuildNumberMock).toHaveBeenCalledWith(newBuild.id, project.id);
     expect(eventBuildCreatedMock).toHaveBeenCalledWith(new BuildDto(buildWithNumber));
   });
@@ -90,10 +95,12 @@ describe('Builds Controller', () => {
     const eventBuildCreatedMock = jest.fn();
     const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
     const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(buildWithNumber);
+    const deleteOldBuilds = jest.fn();
     controller = await initController({
       projectFindOneMock,
       buildFindOrCreateMock,
       eventBuildCreatedMock,
+      deleteOldBuilds,
     });
 
     const result = await controller.create(createBuildDto);
