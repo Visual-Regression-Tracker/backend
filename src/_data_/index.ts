@@ -1,4 +1,5 @@
 import { Baseline, Build, ImageComparison, Project, TestRun, TestVariation } from '@prisma/client';
+import { PNG } from 'pngjs';
 
 export const TEST_PROJECT: Project = {
   id: '1',
@@ -90,4 +91,18 @@ export const generateTestRun = (testRun?: Partial<TestRun>): TestRun => {
     merge: false,
     ...testRun,
   };
+};
+
+export const generatePng = (width: number, height: number): PNG => {
+  const png = new PNG({ width, height });
+  for (var y = 0; y < png.height; y++) {
+    for (var x = 0; x < png.width; x++) {
+      var idx = (png.width * y + x) << 2;
+      png.data[idx] = 255; // red
+      png.data[idx + 1] = 255; // green
+      png.data[idx + 2] = 255; // blue
+      png.data[idx + 3] = 255; // alpha (0 is transparent)
+    }
+  }
+  return png.pack();
 };
