@@ -12,8 +12,8 @@ export function scaleImageToSize(image: PNG, width: number, height: number): PNG
 
 export function applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): PNG {
   ignoreAreas.forEach((area) => {
-    for (let y = area.y; y < area.y + area.height; y++) {
-      for (let x = area.x; x < area.x + area.width; x++) {
+    for (let y = area.y; y < Math.min(area.y + area.height, image.height); y++) {
+      for (let x = area.x; x < Math.min(area.x + area.width, image.width); x++) {
         const k = 4 * (image.width * y + x);
         image.data[k + 0] = 0;
         image.data[k + 1] = 0;
