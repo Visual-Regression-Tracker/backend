@@ -43,17 +43,16 @@ async function setEmptyTestVariationTags_github_243() {
 
   return Promise.all(
     testVariations.map((testVariation) =>
-      prisma.testVariation.update({
-        where: { id: testVariation.id },
-        data: {
-          os: testVariation.os ?? '',
-          device: testVariation.device ?? '',
-          browser: testVariation.browser ?? '',
-          viewport: testVariation.viewport ?? '',
-        },
-      })
+      prisma.$executeRaw`UPDATE "public"."TestVariation" 
+      SET 
+      "os" = ${testVariation.os ?? 'NULL::text'}, 
+      "device" = ${testVariation.device ?? 'NULL::text'}, 
+      "browser" = ${testVariation.browser ?? 'NULL::text'}, 
+      "viewport" = ${testVariation.viewport ?? 'NULL::text'} 
+      WHERE 
+      "id" = ${testVariation.id}`
     )
-  ).then(() => console.info(`Finished migration ${migrationKey}`));
+  ).then(() => console.info(`Finished migration ${migrationKey}`))
 }
 
 async function manualMigrations() {
