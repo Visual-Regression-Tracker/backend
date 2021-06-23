@@ -1,6 +1,6 @@
 import { PNG } from 'pngjs';
-import { IgnoreAreaDto } from 'src/test-runs/dto/ignore-area.dto';
-import { generatePng } from 'src/_data_';
+import { IgnoreAreaDto } from '../../test-runs/dto/ignore-area.dto';
+import { generatePng } from '../../_data_';
 import { applyIgnoreAreas } from '.';
 
 describe('utils', () => {
