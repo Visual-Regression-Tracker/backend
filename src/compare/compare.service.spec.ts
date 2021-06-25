@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../shared/static/static.service';
 import { CompareService } from './compare.service';
 import { LookSameService } from './libs/looks-same/looks-same.service';
+import { OdiffService } from './libs/odiff/odiff.service';
 import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
 
 describe('CompareService', () => {
@@ -10,7 +11,7 @@ describe('CompareService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CompareService, PixelmatchService, LookSameService, StaticService, PrismaService],
+      providers: [CompareService, OdiffService, PixelmatchService, LookSameService, StaticService, PrismaService],
     }).compile();
 
     service = module.get<CompareService>(CompareService);

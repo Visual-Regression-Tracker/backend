@@ -4,7 +4,7 @@ import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { StaticService } from '../../../shared/static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
-import { scaleImageToSize, applyIgnoreAreas } from '../../utils';
+import { scaleImageToSize, applyIgnoreAreas, parseConfig } from '../../utils';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
@@ -19,12 +19,7 @@ export class PixelmatchService implements ImageComparator {
   constructor(private staticService: StaticService) {}
 
   parseConfig(configJson: string): PixelmatchConfig {
-    try {
-      return JSON.parse(configJson) ?? DEFAULT_CONFIG;
-    } catch (ex) {
-      this.logger.error('Cannot parse config, fallback to default one ' + ex);
-    }
-    return DEFAULT_CONFIG;
+    return parseConfig(configJson, DEFAULT_CONFIG, this.logger);
   }
 
   async getDiff(data: ImageCompareInput, config: PixelmatchConfig): Promise<DiffResult> {
