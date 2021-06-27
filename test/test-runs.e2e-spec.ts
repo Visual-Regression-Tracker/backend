@@ -409,8 +409,8 @@ describe('TestRuns (e2e)', () => {
       );
 
       await requestWithAuth(app, 'post', `/test-runs/delete`, user.token)
-        .send([[testRun1.id, testRun2.id]])
-        .expect(200);
+        .send([testRun1.id, testRun2.id])
+        .expect(201);
     });
   });
 
@@ -432,8 +432,8 @@ describe('TestRuns (e2e)', () => {
       );
 
       await requestWithAuth(app, 'post', `/test-runs/reject`, user.token)
-        .send([[testRun1.id, testRun2.id]])
-        .expect(200);
+        .send([testRun1.id, testRun2.id])
+        .expect(201);
     });
   });
 });
