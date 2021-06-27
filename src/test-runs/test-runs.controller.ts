@@ -14,6 +14,7 @@ import {
   UploadedFile,
   UsePipes,
   ValidationPipe,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -42,7 +43,9 @@ import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
 @ApiTags('test-runs')
 @Controller('test-runs')
 export class TestRunsController {
-  constructor(private testRunsService: TestRunsService) { }
+  private readonly logger: Logger = new Logger(TestRunsController.name);
+
+  constructor(private testRunsService: TestRunsService) {}
 
   @Get()
   @ApiOkResponse({ type: [TestRunDto] })
@@ -72,12 +75,14 @@ export class TestRunsController {
     return this.testRunsService.setStatus(id, TestStatus.failed);
   }
 
-  @Delete('/:id')
-  @ApiParam({ name: 'id', required: true })
+  @Post('/delete')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  deleteTestRun(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRun> {
-    return this.testRunsService.delete(id);
+  async delete(@Body() ids: string[]): Promise<void> {
+    this.logger.debug(`Going to delete TestRuns: ${ids}`);
+    for (const id of ids) {
+      await this.testRunsService.delete(id);
+    }
   }
 
   @Put('ignoreArea/:testRunId')

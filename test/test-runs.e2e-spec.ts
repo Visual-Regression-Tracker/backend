@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
-import { haveTestRunCreated, haveUserLogged, requestWithApiKey } from './preconditions';
+import { haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { ProjectsService } from '../src/projects/projects.service';
@@ -88,7 +88,7 @@ describe('TestRuns (e2e)', () => {
         buildsService,
         testRunsService,
         project.id,
-        "feature",
+        'feature',
         image_v2
       );
       await testRunsService.approve(testRun3.id);
@@ -388,6 +388,29 @@ describe('TestRuns (e2e)', () => {
 
       expect(featureBranchResult.status).toBe(TestStatus.autoApproved);
       expect(mainBranchResult.testVariationId).toBe(featureBranchResult.testVariationId);
+    });
+  });
+
+  describe('POST /delete', () => {
+    it('Should delete', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+      const { testRun: testRun2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+
+      await requestWithAuth(app, 'post', `/test-runs/delete`, user.token)
+        .send([[testRun1.id, testRun2.id]])
+        .expect(200);
     });
   });
 });
