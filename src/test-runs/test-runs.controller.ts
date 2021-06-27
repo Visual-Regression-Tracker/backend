@@ -67,12 +67,14 @@ export class TestRunsController {
     return this.testRunsService.approve(id, merge);
   }
 
-  @Get('reject/:id')
-  @ApiParam({ name: 'id', required: true })
+  @Post('reject')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  rejectTestRun(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRun> {
-    return this.testRunsService.setStatus(id, TestStatus.failed);
+  async reject(@Body() ids: string[]): Promise<void> {
+    this.logger.debug(`Going to reject TestRuns: ${ids}`);
+    for (const id of ids) {
+      await this.testRunsService.setStatus(id, TestStatus.failed);
+    }
   }
 
   @Post('/delete')

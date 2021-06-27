@@ -413,4 +413,27 @@ describe('TestRuns (e2e)', () => {
         .expect(200);
     });
   });
+
+  describe('POST /reject', () => {
+    it('200', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+      const { testRun: testRun2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+
+      await requestWithAuth(app, 'post', `/test-runs/reject`, user.token)
+        .send([[testRun1.id, testRun2.id]])
+        .expect(200);
+    });
+  });
 });
