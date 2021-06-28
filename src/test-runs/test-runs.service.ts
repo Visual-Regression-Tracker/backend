@@ -26,7 +26,7 @@ export class TestRunsService {
     private staticService: StaticService,
     private compareService: CompareService,
     private eventsGateway: EventsGateway
-  ) { }
+  ) {}
 
   async findMany(buildId: string): Promise<TestRunDto[]> {
     const list = await this.prismaService.testRun.findMany({
@@ -167,7 +167,7 @@ export class TestRunsService {
       data: {
         image: testRun.imageName,
         baseline: testRun.baselineName,
-        ignoreAreas: this.getIgnoteAreas(testRun),
+        ignoreAreas: this.getAllIgnoteAreas(testRun),
         diffTollerancePercent: testRun.diffTollerancePercent,
         saveDiffAsFile: true,
       },
@@ -240,12 +240,16 @@ export class TestRunsService {
           ignoreAreas: JSON.stringify(ignoreAreas),
         },
       })
-      .then(async (testRun) => {
-        const testVariation = await this.prismaService.testVariation.findUnique({
-          where: { id: testRun.testVariationId },
-        });
+      .then(async (testRun: TestRun) => {
+        const testVariation = await this.testVariationService.updateIgnoreAreas(testRun.testVariationId, ignoreAreas);
         return this.calculateDiff(testVariation.projectId, testRun);
       });
+  }
+
+  async addIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
+    const testRun = await this.findOne(id);
+    const oldIgnoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas) ?? [];
+    return this.updateIgnoreAreas(id, oldIgnoreAreas.concat(ignoreAreas));
   }
 
   async updateComment(id: string, commentDto: CommentDto): Promise<TestRun> {
@@ -256,7 +260,8 @@ export class TestRunsService {
           comment: commentDto.comment,
         },
       })
-      .then((testRun) => {
+      .then(async (testRun) => {
+        await this.testVariationService.updateComment(testRun.testVariationId, commentDto);
         this.eventsGateway.testRunUpdated(testRun);
         return testRun;
       });
@@ -276,12 +281,10 @@ export class TestRunsService {
       });
   }
 
-  private getIgnoteAreas(testRun: TestRun): IgnoreAreaDto[] {
-    let ignoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas);
-    if (testRun.ignoreAreas?.length > 0) {
-      ignoreAreas = ignoreAreas.concat(JSON.parse(testRun.tempIgnoreAreas));
-    }
-    return ignoreAreas;
+  private getAllIgnoteAreas(testRun: TestRun): IgnoreAreaDto[] {
+    const ignoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas) ?? [];
+    const tempIgnoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.tempIgnoreAreas) ?? [];
+    return ignoreAreas.concat(tempIgnoreAreas);
   }
 
   /**
@@ -358,7 +361,7 @@ export class TestRunsService {
       data: {
         image: testRun.imageName,
         baseline: baseline.baselineName,
-        ignoreAreas: this.getIgnoteAreas(testRun),
+        ignoreAreas: this.getAllIgnoteAreas(testRun),
         diffTollerancePercent: testRun.diffTollerancePercent,
         saveDiffAsFile: false,
       },

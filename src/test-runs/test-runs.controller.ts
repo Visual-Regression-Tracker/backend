@@ -15,6 +15,7 @@ import {
   UsePipes,
   ValidationPipe,
   Logger,
+  Patch,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -39,6 +40,7 @@ import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto
 import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipart.dto';
 import { FileToBodyInterceptor } from '../shared/fite-to-body.interceptor';
 import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
+import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
@@ -76,7 +78,7 @@ export class TestRunsController {
     }
   }
 
-  @Post('/delete')
+  @Post('delete')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   async delete(@Body() ids: string[]): Promise<void> {
@@ -86,15 +88,24 @@ export class TestRunsController {
     }
   }
 
-  @Put('ignoreArea/:testRunId')
-  @ApiParam({ name: 'testRunId', required: true })
+  @Post('ignoreAreas/update')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  updateIgnoreAreas(
-    @Param('testRunId', new ParseUUIDPipe()) testRunId: string,
-    @Body() ignoreAreas: IgnoreAreaDto[]
-  ): Promise<TestRun> {
-    return this.testRunsService.updateIgnoreAreas(testRunId, ignoreAreas);
+  async updateIgnoreAreas(@Body() data: UpdateIgnoreAreasDto): Promise<void> {
+    this.logger.debug(`Going to update IgnoreAreas for TestRuns: ${data.ids}`);
+    for (const id of data.ids) {
+      await this.testRunsService.updateIgnoreAreas(id, data.ignoreAreas);
+    }
+  }
+
+  @Post('ignoreAreas/add')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async addIgnoreAreas(@Body() data: UpdateIgnoreAreasDto): Promise<void> {
+    this.logger.debug(`Going to add IgnoreAreas for TestRuns: ${data.ids}`);
+    for (const id of data.ids) {
+      await this.testRunsService.addIgnoreAreas(id, data.ignoreAreas);
+    }
   }
 
   @Put('comment/:testRunId')
