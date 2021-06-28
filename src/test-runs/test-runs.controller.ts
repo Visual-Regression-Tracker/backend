@@ -55,16 +55,15 @@ export class TestRunsController {
     return this.testRunsService.findMany(buildId);
   }
 
-  @Get('approve')
-  @ApiQuery({ name: 'id', required: true })
+  @Post('approve')
   @ApiQuery({ name: 'merge', required: false })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  approveTestRun(
-    @Query('id', new ParseUUIDPipe()) id: string,
-    @Query('merge', new ParseBoolPipe()) merge: boolean
-  ): Promise<TestRun> {
-    return this.testRunsService.approve(id, merge);
+  async approveTestRun(@Body() ids: string[], @Query('merge', new ParseBoolPipe()) merge: boolean): Promise<void> {
+    this.logger.debug(`Going to approve TestRuns: ${ids}`);
+    for (const id of ids) {
+      await this.testRunsService.approve(id, merge);
+    }
   }
 
   @Post('reject')
