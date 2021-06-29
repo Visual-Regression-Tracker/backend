@@ -9,6 +9,19 @@ export const IMAGE_PATH = 'imageUploads/';
 export class StaticService {
   private readonly logger: Logger = new Logger(StaticService.name);
 
+  generateNewImage(type: 'screenshot' | 'diff' | 'baseline'): { imageName: string; imagePath: string } {
+    const imageName = `${Date.now()}.${type}.png`;
+    return {
+      imageName,
+      imagePath: this.getImagePath(imageName),
+    };
+  }
+
+  getImagePath(imageName: string): string {
+    this.ensureDirectoryExistence(IMAGE_PATH);
+    return path.resolve(IMAGE_PATH, imageName);
+  }
+
   saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): string {
     const { imageName, imagePath } = this.generateNewImage(type);
     writeFileSync(imagePath, imageBuffer);
@@ -34,19 +47,6 @@ export class StaticService {
         resolvePromise(true);
       });
     });
-  }
-
-  private generateNewImage(type: 'screenshot' | 'diff' | 'baseline'): { imageName: string; imagePath: string } {
-    const imageName = `${Date.now()}.${type}.png`;
-    return {
-      imageName,
-      imagePath: this.getImagePath(imageName),
-    };
-  }
-
-  private getImagePath(imageName: string): string {
-    this.ensureDirectoryExistence(IMAGE_PATH);
-    return path.resolve(IMAGE_PATH, imageName);
   }
 
   private ensureDirectoryExistence(dir: string) {

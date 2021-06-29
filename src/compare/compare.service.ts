@@ -2,16 +2,18 @@ import { ImageComparison, Project } from '.prisma/client';
 import { Injectable } from '@nestjs/common';
 import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
 import { ImageComparator } from './libs/image-comparator.interface';
-import { ImageCompareInput } from "./libs/ImageCompareInput";
+import { ImageCompareInput } from './libs/ImageCompareInput';
 import { PrismaService } from '../prisma/prisma.service';
 import { DiffResult } from '../test-runs/diffResult';
 import { LookSameService } from './libs/looks-same/looks-same.service';
+import { OdiffService } from './libs/odiff/odiff.service';
 
 @Injectable()
 export class CompareService {
   constructor(
     private pixelmatchService: PixelmatchService,
     private lookSameService: LookSameService,
+    private odiffService: OdiffService,
     private prismaService: PrismaService
   ) {}
 
@@ -29,6 +31,9 @@ export class CompareService {
       }
       case ImageComparison.lookSame: {
         return this.lookSameService;
+      }
+      case ImageComparison.odiff: {
+        return this.odiffService;
       }
       default: {
         return this.pixelmatchService;

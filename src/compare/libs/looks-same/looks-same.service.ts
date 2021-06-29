@@ -3,7 +3,7 @@ import { TestStatus } from '@prisma/client';
 import { PNG } from 'pngjs';
 import { StaticService } from '../../../shared/static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
-import { applyIgnoreAreas } from '../../utils';
+import { applyIgnoreAreas, parseConfig } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { LookSameResult, LooksSameConfig } from './looks-same.types';
@@ -24,12 +24,7 @@ export class LookSameService implements ImageComparator {
   constructor(private staticService: StaticService) {}
 
   parseConfig(configJson: string): LooksSameConfig {
-    try {
-      return JSON.parse(configJson) ?? DEFAULT_CONFIG;
-    } catch (ex) {
-      this.logger.error('Cannot parse config, fallback to default one ' + ex);
-    }
-    return DEFAULT_CONFIG;
+    return parseConfig(configJson, DEFAULT_CONFIG, this.logger);
   }
 
   async getDiff(data: ImageCompareInput, config: LooksSameConfig): Promise<DiffResult> {

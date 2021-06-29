@@ -1,7 +1,6 @@
 import { TestingModule, Test } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
 import { PNG } from 'pngjs';
-import { mocked } from 'ts-jest/utils';
 import { StaticService } from '../../../shared/static/static.service';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, LookSameService } from './looks-same.service';
