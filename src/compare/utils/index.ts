@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { PNG } from 'pngjs';
 import { IgnoreAreaDto } from 'src/test-runs/dto/ignore-area.dto';
 
@@ -24,3 +25,12 @@ export function applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): PNG 
   });
   return image;
 }
+
+export const parseConfig = <T>(configJson: string, defaultConfig: T, logger: Logger) => {
+  try {
+    return JSON.parse(configJson) ?? defaultConfig;
+  } catch (ex) {
+    logger.error('Cannot parse config, fallback to default one ' + ex);
+  }
+  return defaultConfig;
+};
