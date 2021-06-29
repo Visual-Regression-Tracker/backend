@@ -13,7 +13,6 @@ import { TestVariationsService } from '../test-variations/test-variations.servic
 import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData } from '../utils';
 import { CompareService } from '../compare/compare.service';
-import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
 
 @Injectable()
 export class TestRunsService {
@@ -241,7 +240,9 @@ export class TestRunsService {
         },
       })
       .then(async (testRun: TestRun) => {
-        const testVariation = await this.testVariationService.updateIgnoreAreas(testRun.testVariationId, ignoreAreas);
+        const testVariation = await this.testVariationService.update(testRun.testVariationId, {
+          ignoreAreas: testRun.ignoreAreas,
+        });
         return this.calculateDiff(testVariation.projectId, testRun);
       });
   }
@@ -261,21 +262,7 @@ export class TestRunsService {
         },
       })
       .then(async (testRun) => {
-        await this.testVariationService.updateComment(testRun.testVariationId, commentDto);
-        this.eventsGateway.testRunUpdated(testRun);
-        return testRun;
-      });
-  }
-
-  async updateCustomTags(id: string, customTagsDto: CustomTagsDto): Promise<TestRun> {
-    return this.prismaService.testRun
-      .update({
-        where: { id },
-        data: {
-          customTags: customTagsDto.customTags,
-        },
-      })
-      .then((testRun) => {
+        await this.testVariationService.update(testRun.testVariationId, commentDto);
         this.eventsGateway.testRunUpdated(testRun);
         return testRun;
       });

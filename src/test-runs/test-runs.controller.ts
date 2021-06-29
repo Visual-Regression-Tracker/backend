@@ -1,6 +1,5 @@
 import {
   Controller,
-  Delete,
   UseGuards,
   Param,
   ParseUUIDPipe,
@@ -11,11 +10,9 @@ import {
   Post,
   ParseBoolPipe,
   UseInterceptors,
-  UploadedFile,
   UsePipes,
   ValidationPipe,
   Logger,
-  Patch,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -30,7 +27,6 @@ import {
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { TestRun, TestStatus } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
-import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { CommentDto } from '../shared/dto/comment.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
@@ -39,7 +35,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto';
 import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipart.dto';
 import { FileToBodyInterceptor } from '../shared/fite-to-body.interceptor';
-import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
 import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
 
 @ApiTags('test-runs')
@@ -114,14 +109,6 @@ export class TestRunsController {
   @UseGuards(JwtAuthGuard)
   updateComment(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: CommentDto): Promise<TestRun> {
     return this.testRunsService.updateComment(id, body);
-  }
-
-  @Put('customTags/:testRunId')
-  @ApiParam({ name: 'testRunId', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  updateCustomTags(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: CustomTagsDto): Promise<TestRun> {
-    return this.testRunsService.updateCustomTags(id, body);
   }
 
   @Post()

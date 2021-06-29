@@ -3,15 +3,13 @@ import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { StaticService } from '../shared/static/static.service';
-import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { TestVariation, Baseline, Project, Build } from '@prisma/client';
-import { CommentDto } from '../shared/dto/comment.dto';
-import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
 import { PNG } from 'pngjs';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { getTestVariationUniqueData } from '../utils';
 import { TEST_PROJECT } from '../_data_';
+import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 
 const initModule = async ({
   imageDeleteMock = jest.fn(),
@@ -245,7 +243,7 @@ describe('TestVariationsService', () => {
         browser: 'browser',
         viewport: 'viewport',
         device: 'device',
-        customTags:'',
+        customTags: '',
         branchName: 'develop',
       };
 
@@ -301,7 +299,7 @@ describe('TestVariationsService', () => {
         browser: createRequest.browser,
         viewport: createRequest.viewport,
         device: createRequest.device,
-        customTags:createRequest.customTags,
+        customTags: createRequest.customTags,
         branchName: projectMock.mainBranchName,
       });
       expect(service.findUnique).toHaveBeenNthCalledWith(2, {
@@ -311,7 +309,7 @@ describe('TestVariationsService', () => {
         browser: createRequest.browser,
         viewport: createRequest.viewport,
         device: createRequest.device,
-        customTags:createRequest.customTags,
+        customTags: createRequest.customTags,
         branchName: createRequest.branchName,
       });
       expect(result).toBe(variationMainMock);
@@ -326,7 +324,7 @@ describe('TestVariationsService', () => {
         browser: 'browser',
         viewport: 'viewport',
         device: 'device',
-        customTags : '',
+        customTags: '',
         branchName: 'develop',
       };
 
@@ -347,7 +345,7 @@ describe('TestVariationsService', () => {
           browser: createRequest.browser,
           viewport: createRequest.viewport,
           device: createRequest.device,
-          customTags:createRequest.customTags,
+          customTags: createRequest.customTags,
           branchName: createRequest.branchName,
           project: {
             connect: {
@@ -359,70 +357,23 @@ describe('TestVariationsService', () => {
     });
   });
 
-  describe('updateIgnoreAreas', () => {
-    it('can update', async () => {
-      const id = 'test id';
-      const ignoreAreas: IgnoreAreaDto[] = [
-        {
-          x: 1,
-          y: 2.3,
-          width: 442.1,
-          height: 32.0,
-        },
-      ];
-      const variationUpdateMock = jest.fn();
-      service = await initModule({ variationUpdateMock });
-
-      await service.updateIgnoreAreas(id, ignoreAreas);
-
-      expect(variationUpdateMock).toBeCalledWith({
-        where: {
-          id,
-        },
-        data: {
-          ignoreAreas: JSON.stringify(ignoreAreas),
-        },
-      });
-    });
-  });
-
-  it('updateComment', async () => {
+  it('update', async () => {
     const id = 'some id';
-    const commentDto: CommentDto = {
+    const data: TestVariationUpdateDto = {
+      baselineName: 'baselineName',
       comment: 'random comment',
+      ignoreAreas: '[]',
     };
     const variationUpdateMock = jest.fn();
     service = await initModule({
       variationUpdateMock,
     });
 
-    await service.updateComment(id, commentDto);
+    await service.update(id, data);
 
     expect(variationUpdateMock).toHaveBeenCalledWith({
       where: { id },
-      data: {
-        comment: commentDto.comment,
-      },
-    });
-  });
-
-  it('updateCustomTags', async () => {
-    const id = 'some id';
-    const customTagsDto: CustomTagsDto = {
-      customTags: 'random tag',
-    };
-    const variationUpdateMock = jest.fn();
-    service = await initModule({
-      variationUpdateMock,
-    });
-
-    await service.updateCustomTags(id, customTagsDto);
-
-    expect(variationUpdateMock).toHaveBeenCalledWith({
-      where: { id },
-      data: {
-        customTags: customTagsDto.customTags,
-      },
+      data,
     });
   });
 
@@ -548,7 +499,7 @@ describe('TestVariationsService', () => {
       device: testVariation.device,
       browser: testVariation.browser,
       viewport: testVariation.viewport,
-      customTags:testVariation.customTags,
+      customTags: testVariation.customTags,
       branchName: project.mainBranchName,
     });
 

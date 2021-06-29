@@ -5,10 +5,10 @@ import {
   TestVariation,
   Baseline,
   Project,
-  ProjectIdNameBrowserDeviceOsViewportCustomTagsBranchNameCompoundUniqueInput,
   Prisma,
   TestRun,
   Build,
+  TestVariationWhereUniqueInput,
 } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
 import { CommentDto } from '../shared/dto/comment.dto';
@@ -19,7 +19,7 @@ import { PNG } from 'pngjs';
 import { CreateTestRequestDto } from 'src/test-runs/dto/create-test-request.dto';
 import { BuildDto } from 'src/builds/dto/build.dto';
 import { getTestVariationUniqueData } from '../utils';
-import { CustomTagsDto } from 'src/shared/dto/custom-tags.dto';
+import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 
 @Injectable()
 export class TestVariationsService {
@@ -30,7 +30,7 @@ export class TestVariationsService {
     private testRunsService: TestRunsService,
     @Inject(forwardRef(() => BuildsService))
     private buildsService: BuildsService
-  ) { }
+  ) {}
 
   async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
     return this.prismaService.testVariation.findUnique({
@@ -110,6 +110,17 @@ export class TestVariationsService {
     });
   }
 
+  async update(id: string, data: TestVariationUpdateDto): Promise<TestVariation> {
+    return this.prismaService.testVariation.update({
+      where: { id },
+      data: {
+        baselineName: data.baselineName,
+        ignoreAreas: data.ignoreAreas,
+        comment: data.comment,
+      },
+    });
+  }
+
   async findOrCreate(projectId: string, baselineData: BaselineDataDto): Promise<TestVariation> {
     const project = await this.prismaService.project.findUnique({ where: { id: projectId } });
 
@@ -122,11 +133,11 @@ export class TestVariationsService {
       }),
       // search current branch variation
       baselineData.branchName !== project.mainBranchName &&
-      this.findUnique({
-        projectId,
-        branchName: baselineData.branchName,
-        ...getTestVariationUniqueData(baselineData),
-      }),
+        this.findUnique({
+          projectId,
+          branchName: baselineData.branchName,
+          ...getTestVariationUniqueData(baselineData),
+        }),
     ]);
 
     if (!!currentBranchTestVariation) {
@@ -145,33 +156,6 @@ export class TestVariationsService {
         project: { connect: { id: projectId } },
         branchName: baselineData.branchName,
         ...getTestVariationUniqueData(baselineData),
-      },
-    });
-  }
-
-  async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestVariation> {
-    return this.prismaService.testVariation.update({
-      where: { id },
-      data: {
-        ignoreAreas: JSON.stringify(ignoreAreas),
-      },
-    });
-  }
-
-  async updateComment(id: string, commentDto: CommentDto): Promise<TestVariation> {
-    return this.prismaService.testVariation.update({
-      where: { id },
-      data: {
-        comment: commentDto.comment,
-      },
-    });
-  }
-
-  async updateCustomTags(id: string, customTagsDto: CustomTagsDto): Promise<TestVariation> {
-    return this.prismaService.testVariation.update({
-      where: { id },
-      data: {
-        customTags: customTagsDto.customTags,
       },
     });
   }
