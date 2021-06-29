@@ -8,7 +8,6 @@ import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
-import { CommentDto } from '../shared/dto/comment.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { TestRunDto } from '../test-runs/dto/testRun.dto';
 import { BuildsService } from '../builds/builds.service';
@@ -16,6 +15,7 @@ import { generateBaseline, generateTestRun, generateTestVariation, TEST_PROJECT 
 import { getTestVariationUniqueData } from '../utils';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import { CompareService } from '../compare/compare.service';
+import { UpdateTestRunDto } from './dto/update-test.dto';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -539,7 +539,7 @@ describe('TestRunsService', () => {
       diffName: 'diffName',
       imageName: 'imageName',
     };
-    const commentDto: CommentDto = {
+    const data: UpdateTestRunDto = {
       comment: 'random comment',
     };
     const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
@@ -551,15 +551,15 @@ describe('TestRunsService', () => {
       testVariationUpdateMock,
     });
 
-    await service.updateComment(testRun.id, commentDto);
+    await service.updateComment(testRun.id, data);
 
     expect(testRunUpdateMock).toHaveBeenCalledWith({
       where: { id: testRun.id },
       data: {
-        comment: commentDto.comment,
+        comment: data.comment,
       },
     });
-    expect(testVariationUpdateMock).toHaveBeenCalledWith(testRun.testVariationId, commentDto);
+    expect(testVariationUpdateMock).toHaveBeenCalledWith(testRun.testVariationId, data);
     expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
   });
 

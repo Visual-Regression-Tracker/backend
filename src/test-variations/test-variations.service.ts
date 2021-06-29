@@ -8,10 +8,8 @@ import {
   Prisma,
   TestRun,
   Build,
-  TestVariationWhereUniqueInput,
 } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
-import { CommentDto } from '../shared/dto/comment.dto';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';

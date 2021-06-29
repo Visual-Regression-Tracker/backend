@@ -27,7 +27,6 @@ import {
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { TestRun, TestStatus } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
-import { CommentDto } from '../shared/dto/comment.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { TestRunDto } from './dto/testRun.dto';
@@ -36,6 +35,7 @@ import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto
 import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipart.dto';
 import { FileToBodyInterceptor } from '../shared/fite-to-body.interceptor';
 import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
+import { UpdateTestRunDto } from './dto/update-test.dto';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
@@ -107,7 +107,7 @@ export class TestRunsController {
   @ApiParam({ name: 'testRunId', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  updateComment(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: CommentDto): Promise<TestRun> {
+  updateComment(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: UpdateTestRunDto): Promise<TestRun> {
     return this.testRunsService.updateComment(id, body);
   }
 

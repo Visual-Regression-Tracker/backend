@@ -7,12 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Baseline, TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
-import { CommentDto } from '../shared/dto/comment.dto';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData } from '../utils';
 import { CompareService } from '../compare/compare.service';
+import { UpdateTestRunDto } from './dto/update-test.dto';
 
 @Injectable()
 export class TestRunsService {
@@ -253,16 +253,16 @@ export class TestRunsService {
     return this.updateIgnoreAreas(id, oldIgnoreAreas.concat(ignoreAreas));
   }
 
-  async updateComment(id: string, commentDto: CommentDto): Promise<TestRun> {
+  async updateComment(id: string, data: UpdateTestRunDto): Promise<TestRun> {
     return this.prismaService.testRun
       .update({
         where: { id },
         data: {
-          comment: commentDto.comment,
+          comment: data.comment,
         },
       })
       .then(async (testRun) => {
-        await this.testVariationService.update(testRun.testVariationId, commentDto);
+        await this.testVariationService.update(testRun.testVariationId, data);
         this.eventsGateway.testRunUpdated(testRun);
         return testRun;
       });
