@@ -109,11 +109,20 @@ export class TestRunsService {
     const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
     if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
-      testVariation = await this.testVariationService.updateOrCreate({
-        projectId: testVariation.projectId,
-        baselineName,
-        testRun,
-      });
+      testVariation = await this.testVariationService.findOrCreate(
+        testVariation.projectId,
+        {
+          ...getTestVariationUniqueData(testRun),
+          branchName: testRun.branchName,
+        },
+        testRun.id,
+        baselineName
+      );
+      // testVariation = await this.testVariationService.updateOrCreate({
+      //   projectId: testVariation.projectId,
+      //   baselineName,
+      //   testRun,
+      // });
     }
 
     if (!autoApprove || (autoApprove && testRun.baselineBranchName === testRun.branchName)) {
