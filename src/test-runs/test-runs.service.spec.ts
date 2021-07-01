@@ -8,7 +8,6 @@ import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
-import { CommentDto } from '../shared/dto/comment.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { TestRunDto } from '../test-runs/dto/testRun.dto';
 import { BuildsService } from '../builds/builds.service';
@@ -16,7 +15,7 @@ import { generateBaseline, generateTestRun, generateTestVariation, TEST_PROJECT 
 import { getTestVariationUniqueData } from '../utils';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import { CompareService } from '../compare/compare.service';
-import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
+import { UpdateTestRunDto } from './dto/update-test.dto';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -39,7 +38,8 @@ const initService = async ({
   testVariationCreateMock = jest.fn(),
   testVariationFindManyMock = jest.fn(),
   baselineCreateMock = jest.fn(),
-  testVariationFindOrCreateMock = jest.fn(),
+  testVariationFindMock = jest.fn(),
+  testVariationUpdateMock = jest.fn(),
   testVariationGetDetailsMock = jest.fn(),
   testVariationFindUniqueMock = jest.fn(),
   projectFindUniqueMock = jest.fn(),
@@ -93,8 +93,9 @@ const initService = async ({
       {
         provide: TestVariationsService,
         useValue: {
-          findOrCreate: testVariationFindOrCreateMock,
+          find: testVariationFindMock,
           getDetails: testVariationGetDetailsMock,
+          update: testVariationUpdateMock,
         },
       },
       {
@@ -274,7 +275,7 @@ describe('TestRunsService', () => {
         device: testVariation.device,
         os: testVariation.os,
         viewport: testVariation.viewport,
-        customTags:testVariation.customTags,
+        customTags: testVariation.customTags,
         baselineName: testVariation.baselineName,
         ignoreAreas: testVariation.ignoreAreas,
         tempIgnoreAreas: JSON.stringify(createTestRequestDto.ignoreAreas),
@@ -339,7 +340,7 @@ describe('TestRunsService', () => {
       data: {
         image: testRun.imageName,
         baseline: testRun.baselineName,
-        ignoreAreas: service['getIgnoteAreas'](testRun),
+        ignoreAreas: service['getAllIgnoteAreas'](testRun),
         diffTollerancePercent: testRun.diffTollerancePercent,
         saveDiffAsFile: true,
       },
@@ -503,16 +504,17 @@ describe('TestRunsService', () => {
       testVariationId: 'testVariationId',
       diffName: 'diffName',
       imageName: 'imageName',
+      ignoreAreas: JSON.stringify(ignoreAreas),
     };
     const testVariation = {
       id: 'testVariationId',
       projectId: 'someProjectId',
     };
     const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
-    const testVariationFindUniqueMock = jest.fn().mockResolvedValueOnce(testVariation);
+    const testVariationUpdateMock = jest.fn().mockResolvedValueOnce(testVariation);
     service = await initService({
       testRunUpdateMock,
-      testVariationFindUniqueMock,
+      testVariationUpdateMock,
     });
     service.calculateDiff = jest.fn();
 
@@ -524,56 +526,41 @@ describe('TestRunsService', () => {
         ignoreAreas: JSON.stringify(ignoreAreas),
       },
     });
-    expect(testVariationFindUniqueMock).toHaveBeenCalledWith({
-      where: { id: testVariation.id },
+    expect(testVariationUpdateMock).toHaveBeenCalledWith(testRun.testVariationId, {
+      ignoreAreas: testRun.ignoreAreas,
     });
     expect(service.calculateDiff).toHaveBeenCalledWith(testVariation.projectId, testRun);
   });
 
-  it('updateComment', async () => {
-    const id = 'some id';
-    const commentDto: CommentDto = {
+  it('update', async () => {
+    const testRun = {
+      id: 'testRunId',
+      testVariationId: 'testVariationId',
+      diffName: 'diffName',
+      imageName: 'imageName',
+    };
+    const data: UpdateTestRunDto = {
       comment: 'random comment',
     };
-    const testRunUpdateMock = jest.fn().mockResolvedValueOnce(id);
+    const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
+    const testVariationUpdateMock = jest.fn();
     const eventTestRunUpdatedMock = jest.fn();
     service = await initService({
       testRunUpdateMock,
       eventTestRunUpdatedMock,
+      testVariationUpdateMock,
     });
 
-    await service.updateComment(id, commentDto);
+    await service.update(testRun.id, data);
 
     expect(testRunUpdateMock).toHaveBeenCalledWith({
-      where: { id },
+      where: { id: testRun.id },
       data: {
-        comment: commentDto.comment,
+        comment: data.comment,
       },
     });
-    expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(id);
-  });
-
-  it('update custom tags', async () => {
-    const id = 'some id';
-    const customTagDto: CustomTagsDto = {
-      customTags: 'random tag',
-    };
-    const testRunUpdateMock = jest.fn().mockResolvedValueOnce(id);
-    const eventTestRunUpdatedMock = jest.fn();
-    service = await initService({
-      testRunUpdateMock,
-      eventTestRunUpdatedMock,
-    });
-
-    await service.updateCustomTags(id, customTagDto);
-
-    expect(testRunUpdateMock).toHaveBeenCalledWith({
-      where: { id },
-      data: {
-        customTags: customTagDto.customTags,
-      },
-    });
-    expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(id);
+    expect(testVariationUpdateMock).toHaveBeenCalledWith(testRun.testVariationId, data);
+    expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
   });
 
   it('postTestRun', async () => {
@@ -586,6 +573,7 @@ describe('TestRunsService', () => {
       viewport: 'viewport',
       device: 'device',
       branchName: 'develop',
+      customTags: 'customTags',
     };
     const testVariation: TestVariation = {
       id: '123',
@@ -630,13 +618,13 @@ describe('TestRunsService', () => {
       merge: false,
     };
     const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
-    const testVariationFindOrCreateMock = jest.fn().mockResolvedValueOnce(testVariation);
+    const testVariationFindMock = jest.fn().mockResolvedValueOnce(testVariation);
     const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
     const deleteMock = jest.fn();
     const createMock = jest.fn().mockResolvedValueOnce(testRun);
     const service = await initService({
       projectFindUniqueMock,
-      testVariationFindOrCreateMock,
+      testVariationFindMock,
       testRunFindManyMock,
     });
     service.delete = deleteMock;
@@ -651,7 +639,7 @@ describe('TestRunsService', () => {
 
     await service.postTestRun({ createTestRequestDto, imageBuffer });
 
-    expect(testVariationFindOrCreateMock).toHaveBeenCalledWith(createTestRequestDto.projectId, baselineData);
+    expect(testVariationFindMock).toHaveBeenCalledWith(createTestRequestDto);
     expect(testRunFindManyMock).toHaveBeenCalledWith({
       where: {
         buildId: createTestRequestDto.buildId,

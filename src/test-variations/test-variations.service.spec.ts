@@ -3,15 +3,12 @@ import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { StaticService } from '../shared/static/static.service';
-import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { TestVariation, Baseline, Project, Build } from '@prisma/client';
-import { CommentDto } from '../shared/dto/comment.dto';
-import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
 import { PNG } from 'pngjs';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
-import { getTestVariationUniqueData } from '../utils';
 import { TEST_PROJECT } from '../_data_';
+import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 
 const initModule = async ({
   imageDeleteMock = jest.fn(),
@@ -84,6 +81,7 @@ const initModule = async ({
 
 describe('TestVariationsService', () => {
   let service: TestVariationsService;
+  const projectMock = TEST_PROJECT;
 
   describe('getDetails', () => {
     it('can find one', async () => {
@@ -109,9 +107,7 @@ describe('TestVariationsService', () => {
     });
   });
 
-  describe('findOrCreate', () => {
-    const projectMock = TEST_PROJECT;
-
+  describe('find', () => {
     it('can find by main branch', async () => {
       const createRequest: CreateTestRequestDto = {
         buildId: 'buildId',
@@ -145,10 +141,7 @@ describe('TestVariationsService', () => {
       service = await initModule({ projectFindUniqueMock });
       service.findUnique = jest.fn().mockResolvedValueOnce(variationMock).mockResolvedValueOnce(undefined);
 
-      const result = await service.findOrCreate(createRequest.projectId, {
-        ...getTestVariationUniqueData(createRequest),
-        branchName: createRequest.branchName,
-      });
+      const result = await service.find(createRequest);
 
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(service.findUnique).toHaveBeenNthCalledWith(1, {
@@ -207,10 +200,7 @@ describe('TestVariationsService', () => {
       service = await initModule({ projectFindUniqueMock });
       service.findUnique = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(variationMock);
 
-      const result = await service.findOrCreate(createRequest.projectId, {
-        ...getTestVariationUniqueData(createRequest),
-        branchName: createRequest.branchName,
-      });
+      const result = await service.find(createRequest);
 
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(service.findUnique).toHaveBeenNthCalledWith(1, {
@@ -245,7 +235,7 @@ describe('TestVariationsService', () => {
         browser: 'browser',
         viewport: 'viewport',
         device: 'device',
-        customTags:'',
+        customTags: '',
         branchName: 'develop',
       };
 
@@ -288,10 +278,7 @@ describe('TestVariationsService', () => {
         .mockResolvedValueOnce(variationMainMock)
         .mockResolvedValueOnce(variationFeatureMock);
 
-      const result = await service.findOrCreate(createRequest.projectId, {
-        ...getTestVariationUniqueData(createRequest),
-        branchName: createRequest.branchName,
-      });
+      const result = await service.find(createRequest);
 
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(service.findUnique).toHaveBeenNthCalledWith(1, {
@@ -301,7 +288,7 @@ describe('TestVariationsService', () => {
         browser: createRequest.browser,
         viewport: createRequest.viewport,
         device: createRequest.device,
-        customTags:createRequest.customTags,
+        customTags: createRequest.customTags,
         branchName: projectMock.mainBranchName,
       });
       expect(service.findUnique).toHaveBeenNthCalledWith(2, {
@@ -311,118 +298,72 @@ describe('TestVariationsService', () => {
         browser: createRequest.browser,
         viewport: createRequest.viewport,
         device: createRequest.device,
-        customTags:createRequest.customTags,
+        customTags: createRequest.customTags,
         branchName: createRequest.branchName,
       });
       expect(result).toBe(variationMainMock);
     });
+  });
 
-    it('can create if not found', async () => {
-      const createRequest: CreateTestRequestDto = {
-        buildId: 'buildId',
-        projectId: projectMock.id,
-        name: 'Test name',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags : '',
-        branchName: 'develop',
-      };
+  it('create', async () => {
+    const createRequest: CreateTestRequestDto = {
+      buildId: 'buildId',
+      projectId: projectMock.id,
+      name: 'Test name',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: '',
+      branchName: 'develop',
+    };
 
-      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
-      const variationCreateMock = jest.fn();
-      service = await initModule({ projectFindUniqueMock, variationCreateMock });
-      service.findUnique = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+    const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
+    const variationCreateMock = jest.fn();
+    service = await initModule({ projectFindUniqueMock, variationCreateMock });
+    service.findUnique = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
 
-      await service.findOrCreate(createRequest.projectId, {
-        ...getTestVariationUniqueData(createRequest),
+    await service.create({
+      testRunId: 'testRunId',
+      createTestRequestDto: createRequest,
+    });
+
+    expect(variationCreateMock).toHaveBeenCalledWith({
+      data: {
+        name: createRequest.name,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
         branchName: createRequest.branchName,
-      });
-
-      expect(variationCreateMock).toHaveBeenCalledWith({
-        data: {
-          name: createRequest.name,
-          os: createRequest.os,
-          browser: createRequest.browser,
-          viewport: createRequest.viewport,
-          device: createRequest.device,
-          customTags:createRequest.customTags,
-          branchName: createRequest.branchName,
-          project: {
-            connect: {
-              id: createRequest.projectId,
-            },
+        testRuns: { connect: { id: 'testRunId' } },
+        project: {
+          connect: {
+            id: createRequest.projectId,
           },
         },
-      });
+      },
     });
   });
 
-  describe('updateIgnoreAreas', () => {
-    it('can update', async () => {
-      const id = 'test id';
-      const ignoreAreas: IgnoreAreaDto[] = [
-        {
-          x: 1,
-          y: 2.3,
-          width: 442.1,
-          height: 32.0,
-        },
-      ];
-      const variationUpdateMock = jest.fn();
-      service = await initModule({ variationUpdateMock });
-
-      await service.updateIgnoreAreas(id, ignoreAreas);
-
-      expect(variationUpdateMock).toBeCalledWith({
-        where: {
-          id,
-        },
-        data: {
-          ignoreAreas: JSON.stringify(ignoreAreas),
-        },
-      });
-    });
-  });
-
-  it('updateComment', async () => {
+  it('update', async () => {
     const id = 'some id';
-    const commentDto: CommentDto = {
+    const data: TestVariationUpdateDto = {
+      baselineName: 'baselineName',
       comment: 'random comment',
+      ignoreAreas: '[]',
     };
     const variationUpdateMock = jest.fn();
     service = await initModule({
       variationUpdateMock,
     });
 
-    await service.updateComment(id, commentDto);
+    await service.update(id, data);
 
     expect(variationUpdateMock).toHaveBeenCalledWith({
       where: { id },
-      data: {
-        comment: commentDto.comment,
-      },
-    });
-  });
-
-  it('updateCustomTags', async () => {
-    const id = 'some id';
-    const customTagsDto: CustomTagsDto = {
-      customTags: 'random tag',
-    };
-    const variationUpdateMock = jest.fn();
-    service = await initModule({
-      variationUpdateMock,
-    });
-
-    await service.updateCustomTags(id, customTagsDto);
-
-    expect(variationUpdateMock).toHaveBeenCalledWith({
-      where: { id },
-      data: {
-        customTags: customTagsDto.customTags,
-      },
+      data,
     });
   });
 
@@ -515,10 +456,6 @@ describe('TestVariationsService', () => {
       height: 10,
     });
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image).mockReturnValueOnce(null);
-    const findOrCreateMock = jest
-      .fn()
-      .mockResolvedValueOnce(testVariationMainBranch)
-      .mockResolvedValueOnce(testVariationMainBranch);
     const testRunCreateMock = jest.fn();
     const buildUpdateMock = jest.fn();
     const service = await initModule({
@@ -529,7 +466,10 @@ describe('TestVariationsService', () => {
       variationFindManyMock,
       getImageMock,
     });
-    service.findOrCreate = findOrCreateMock;
+    service.find = jest
+      .fn()
+      .mockResolvedValueOnce(testVariationMainBranch)
+      .mockResolvedValueOnce(testVariationMainBranch);
 
     await service.merge(project.id, mergedBranch);
 
@@ -542,17 +482,27 @@ describe('TestVariationsService', () => {
       where: { projectId: project.id, branchName: mergedBranch },
     });
     expect(getImageMock).toHaveBeenCalledWith(testVariation.baselineName);
-    expect(service.findOrCreate).toHaveBeenCalledWith(project.id, {
+    expect(service.find).toHaveBeenNthCalledWith(1, {
       name: testVariation.name,
       os: testVariation.os,
       device: testVariation.device,
       browser: testVariation.browser,
       viewport: testVariation.viewport,
-      customTags:testVariation.customTags,
+      customTags: testVariation.customTags,
       branchName: project.mainBranchName,
+      projectId: project.id,
+    });
+    expect(service.find).toHaveBeenNthCalledWith(2, {
+      name: testVariationSecond.name,
+      os: testVariationSecond.os,
+      device: testVariationSecond.device,
+      browser: testVariationSecond.browser,
+      viewport: testVariationSecond.viewport,
+      customTags: testVariationSecond.customTags,
+      branchName: project.mainBranchName,
+      projectId: project.id,
     });
 
-    await new Promise((r) => setTimeout(r, 1));
     expect(testRunCreateMock).toHaveBeenNthCalledWith(1, {
       testVariation: testVariationMainBranch,
       createTestRequestDto: {

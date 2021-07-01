@@ -7,13 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Baseline, TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
-import { CommentDto } from '../shared/dto/comment.dto';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData } from '../utils';
 import { CompareService } from '../compare/compare.service';
-import { CustomTagsDto } from '../shared/dto/custom-tags.dto';
+import { UpdateTestRunDto } from './dto/update-test.dto';
 
 @Injectable()
 export class TestRunsService {
@@ -26,7 +25,7 @@ export class TestRunsService {
     private staticService: StaticService,
     private compareService: CompareService,
     private eventsGateway: EventsGateway
-  ) { }
+  ) {}
 
   async findMany(buildId: string): Promise<TestRunDto[]> {
     const list = await this.prismaService.testRun.findMany({
@@ -59,11 +58,13 @@ export class TestRunsService {
   }): Promise<TestRunResultDto> {
     const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
 
+    let testVariation = await this.testVariationService.find(createTestRequestDto);
     // creates variatioin if does not exist
-    const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto.projectId, {
-      ...getTestVariationUniqueData(createTestRequestDto),
-      branchName: createTestRequestDto.branchName,
-    });
+    if (!testVariation) {
+      testVariation = await this.testVariationService.create({
+        createTestRequestDto,
+      });
+    }
 
     // delete previous test run if exists
     const [previousTestRun] = await this.prismaService.testRun.findMany({
@@ -103,18 +104,43 @@ export class TestRunsService {
   async approve(id: string, merge = false, autoApprove = false): Promise<TestRun> {
     this.logger.log(`Approving testRun: ${id} merge: ${merge} autoApprove: ${autoApprove}`);
     const testRun = await this.findOne(id);
-    let testVariation = testRun.testVariation;
+    let { testVariation } = testRun;
+    const { projectId } = testVariation;
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName);
     const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
     if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
-      testVariation = await this.testVariationService.updateOrCreate({
-        projectId: testVariation.projectId,
-        baselineName,
-        testRun,
+      // replace main branch with feature branch test variation
+      const featureBranchTestVariation = await this.testVariationService.findUnique({
+        projectId,
+        ...testRun,
       });
+
+      if (!featureBranchTestVariation) {
+        testVariation = await this.testVariationService.create({
+          testRunId: id,
+          createTestRequestDto: {
+            projectId,
+            branchName: testRun.branchName,
+            ...getTestVariationUniqueData(testRun),
+          },
+        });
+      } else {
+        testVariation = featureBranchTestVariation;
+      }
+
+      // carry over data from testRun
+      testVariation = await this.testVariationService.update(
+        testVariation.id,
+        {
+          baselineName: testRun.baselineName,
+          ignoreAreas: testRun.ignoreAreas,
+          comment: testRun.comment,
+        },
+        testRun.id
+      );
     }
 
     if (!autoApprove || (autoApprove && testRun.baselineBranchName === testRun.branchName)) {
@@ -167,7 +193,7 @@ export class TestRunsService {
       data: {
         image: testRun.imageName,
         baseline: testRun.baselineName,
-        ignoreAreas: this.getIgnoteAreas(testRun),
+        ignoreAreas: this.getAllIgnoteAreas(testRun),
         diffTollerancePercent: testRun.diffTollerancePercent,
         saveDiffAsFile: true,
       },
@@ -240,48 +266,39 @@ export class TestRunsService {
           ignoreAreas: JSON.stringify(ignoreAreas),
         },
       })
-      .then(async (testRun) => {
-        const testVariation = await this.prismaService.testVariation.findUnique({
-          where: { id: testRun.testVariationId },
+      .then(async (testRun: TestRun) => {
+        const testVariation = await this.testVariationService.update(testRun.testVariationId, {
+          ignoreAreas: testRun.ignoreAreas,
         });
         return this.calculateDiff(testVariation.projectId, testRun);
       });
   }
 
-  async updateComment(id: string, commentDto: CommentDto): Promise<TestRun> {
+  async addIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
+    const testRun = await this.findOne(id);
+    const oldIgnoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas) ?? [];
+    return this.updateIgnoreAreas(id, oldIgnoreAreas.concat(ignoreAreas));
+  }
+
+  async update(id: string, data: UpdateTestRunDto): Promise<TestRun> {
     return this.prismaService.testRun
       .update({
         where: { id },
         data: {
-          comment: commentDto.comment,
+          comment: data.comment,
         },
       })
-      .then((testRun) => {
+      .then(async (testRun) => {
+        await this.testVariationService.update(testRun.testVariationId, data);
         this.eventsGateway.testRunUpdated(testRun);
         return testRun;
       });
   }
 
-  async updateCustomTags(id: string, customTagsDto: CustomTagsDto): Promise<TestRun> {
-    return this.prismaService.testRun
-      .update({
-        where: { id },
-        data: {
-          customTags: customTagsDto.customTags,
-        },
-      })
-      .then((testRun) => {
-        this.eventsGateway.testRunUpdated(testRun);
-        return testRun;
-      });
-  }
-
-  private getIgnoteAreas(testRun: TestRun): IgnoreAreaDto[] {
-    let ignoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas);
-    if (testRun.ignoreAreas?.length > 0) {
-      ignoreAreas = ignoreAreas.concat(JSON.parse(testRun.tempIgnoreAreas));
-    }
-    return ignoreAreas;
+  private getAllIgnoteAreas(testRun: TestRun): IgnoreAreaDto[] {
+    const ignoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas) ?? [];
+    const tempIgnoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.tempIgnoreAreas) ?? [];
+    return ignoreAreas.concat(tempIgnoreAreas);
   }
 
   /**
@@ -358,7 +375,7 @@ export class TestRunsService {
       data: {
         image: testRun.imageName,
         baseline: baseline.baselineName,
-        ignoreAreas: this.getIgnoteAreas(testRun),
+        ignoreAreas: this.getAllIgnoteAreas(testRun),
         diffTollerancePercent: testRun.diffTollerancePercent,
         saveDiffAsFile: false,
       },
