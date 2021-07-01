@@ -58,11 +58,13 @@ export class TestRunsService {
   }): Promise<TestRunResultDto> {
     const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
 
+    let testVariation = await this.testVariationService.find(createTestRequestDto);
     // creates variatioin if does not exist
-    const testVariation = await this.testVariationService.findOrCreate(createTestRequestDto.projectId, {
-      ...getTestVariationUniqueData(createTestRequestDto),
-      branchName: createTestRequestDto.branchName,
-    });
+    if (!testVariation) {
+      testVariation = await this.testVariationService.create({
+        createTestRequestDto,
+      });
+    }
 
     // delete previous test run if exists
     const [previousTestRun] = await this.prismaService.testRun.findMany({
@@ -102,27 +104,43 @@ export class TestRunsService {
   async approve(id: string, merge = false, autoApprove = false): Promise<TestRun> {
     this.logger.log(`Approving testRun: ${id} merge: ${merge} autoApprove: ${autoApprove}`);
     const testRun = await this.findOne(id);
-    let testVariation = testRun.testVariation;
+    let { testVariation } = testRun;
+    const { projectId } = testVariation;
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName);
     const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
     if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
-      testVariation = await this.testVariationService.findOrCreate(
-        testVariation.projectId,
+      // replace main branch with feature branch test variation
+      const featureBranchTestVariation = await this.testVariationService.findUnique({
+        projectId,
+        ...testRun,
+      });
+
+      if (!featureBranchTestVariation) {
+        testVariation = await this.testVariationService.create({
+          testRunId: id,
+          createTestRequestDto: {
+            projectId,
+            branchName: testRun.branchName,
+            ...getTestVariationUniqueData(testRun),
+          },
+        });
+      } else {
+        testVariation = featureBranchTestVariation;
+      }
+
+      // carry over data from testRun
+      testVariation = await this.testVariationService.update(
+        testVariation.id,
         {
-          ...getTestVariationUniqueData(testRun),
-          branchName: testRun.branchName,
+          baselineName: testRun.baselineName,
+          ignoreAreas: testRun.ignoreAreas,
+          comment: testRun.comment,
         },
-        testRun.id,
-        baselineName
+        testRun.id
       );
-      // testVariation = await this.testVariationService.updateOrCreate({
-      //   projectId: testVariation.projectId,
-      //   baselineName,
-      //   testRun,
-      // });
     }
 
     if (!autoApprove || (autoApprove && testRun.baselineBranchName === testRun.branchName)) {

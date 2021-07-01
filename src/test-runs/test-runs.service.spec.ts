@@ -38,7 +38,7 @@ const initService = async ({
   testVariationCreateMock = jest.fn(),
   testVariationFindManyMock = jest.fn(),
   baselineCreateMock = jest.fn(),
-  testVariationFindOrCreateMock = jest.fn(),
+  testVariationFindMock = jest.fn(),
   testVariationUpdateMock = jest.fn(),
   testVariationGetDetailsMock = jest.fn(),
   testVariationFindUniqueMock = jest.fn(),
@@ -93,7 +93,7 @@ const initService = async ({
       {
         provide: TestVariationsService,
         useValue: {
-          findOrCreate: testVariationFindOrCreateMock,
+          find: testVariationFindMock,
           getDetails: testVariationGetDetailsMock,
           update: testVariationUpdateMock,
         },
@@ -573,6 +573,7 @@ describe('TestRunsService', () => {
       viewport: 'viewport',
       device: 'device',
       branchName: 'develop',
+      customTags: 'customTags',
     };
     const testVariation: TestVariation = {
       id: '123',
@@ -617,13 +618,13 @@ describe('TestRunsService', () => {
       merge: false,
     };
     const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
-    const testVariationFindOrCreateMock = jest.fn().mockResolvedValueOnce(testVariation);
+    const testVariationFindMock = jest.fn().mockResolvedValueOnce(testVariation);
     const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
     const deleteMock = jest.fn();
     const createMock = jest.fn().mockResolvedValueOnce(testRun);
     const service = await initService({
       projectFindUniqueMock,
-      testVariationFindOrCreateMock,
+      testVariationFindMock,
       testRunFindManyMock,
     });
     service.delete = deleteMock;
@@ -638,7 +639,7 @@ describe('TestRunsService', () => {
 
     await service.postTestRun({ createTestRequestDto, imageBuffer });
 
-    expect(testVariationFindOrCreateMock).toHaveBeenCalledWith(createTestRequestDto.projectId, baselineData);
+    expect(testVariationFindMock).toHaveBeenCalledWith(createTestRequestDto);
     expect(testRunFindManyMock).toHaveBeenCalledWith({
       where: {
         buildId: createTestRequestDto.buildId,

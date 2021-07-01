@@ -44,6 +44,10 @@ describe('TestRuns (e2e)', () => {
 
   beforeEach(async () => {
     user = await haveUserLogged(usersService);
+    project = await projecstService.findOne('TestRun E2E test');
+    if (project) {
+      await projecstService.remove(project.id);
+    }
     project = await projecstService.create({
       ...TEST_PROJECT,
       name: 'TestRun E2E test',
@@ -51,7 +55,6 @@ describe('TestRuns (e2e)', () => {
   });
 
   afterEach(async () => {
-    await projecstService.remove(project.id);
     await usersService.delete(user.id);
   });
 
@@ -312,8 +315,8 @@ describe('TestRuns (e2e)', () => {
       expect(result.status).toBe(TestStatus.approved);
       expect(result.baselineBranchName).toBe(project.mainBranchName);
       const testVariation = await testVariationsService.getDetails(result.testVariationId);
-      expect(testVariation.baselines).toHaveLength(2);
       expect(testVariation.branchName).toBe('develop');
+      expect(testVariation.baselines).toHaveLength(2);
     });
 
     it('approve changes with merge', async () => {
@@ -408,9 +411,7 @@ describe('TestRuns (e2e)', () => {
         image_v1
       );
 
-      await requestWithAuth(app, 'post', `/test-runs/delete`, user.token)
-        .send([testRun1.id, testRun2.id])
-        .expect(201);
+      await requestWithAuth(app, 'post', `/test-runs/delete`, user.token).send([testRun1.id, testRun2.id]).expect(201);
     });
   });
 
@@ -431,9 +432,7 @@ describe('TestRuns (e2e)', () => {
         image_v1
       );
 
-      await requestWithAuth(app, 'post', `/test-runs/reject`, user.token)
-        .send([testRun1.id, testRun2.id])
-        .expect(201);
+      await requestWithAuth(app, 'post', `/test-runs/reject`, user.token).send([testRun1.id, testRun2.id]).expect(201);
     });
   });
 });

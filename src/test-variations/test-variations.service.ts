@@ -1,6 +1,6 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation, Baseline, Project, Prisma, Build } from '@prisma/client';
+import { TestVariation, Baseline, Project, Prisma, Build, TestRun } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import { BuildsService } from '../builds/builds.service';
@@ -39,99 +39,61 @@ export class TestVariationsService {
   }
 
   async findUnique(
-    uniqueInput: Prisma.ProjectIdNameBrowserDeviceOsViewportCustomTagsBranchNameCompoundUniqueInput
+    data: Prisma.ProjectIdNameBrowserDeviceOsViewportCustomTagsBranchNameCompoundUniqueInput
   ): Promise<TestVariation | null> {
     return this.prismaService.testVariation.findUnique({
       where: {
-        projectId_name_browser_device_os_viewport_customTags_branchName: uniqueInput,
+        projectId_name_browser_device_os_viewport_customTags_branchName: {
+          projectId: data.projectId,
+          name: data.name,
+          browser: data.browser,
+          device: data.device,
+          os: data.os,
+          viewport: data.viewport,
+          customTags: data.customTags,
+          branchName: data.branchName,
+        },
       },
     });
   }
 
-  // async updateOrCreate({
-  //   projectId,
-  //   baselineName,
-  //   testRun,
-  // }: {
-  //   projectId: string;
-  //   baselineName: string;
-  //   testRun: TestRun;
-  // }) {
-  //   return this.prismaService.testVariation.upsert({
-  //     where: {
-  //       projectId_name_browser_device_os_viewport_customTags_branchName: {
-  //         projectId,
-  //         branchName: testRun.branchName,
-  //         ...getTestVariationUniqueData(testRun),
-  //       },
-  //     },
-  //     update: {
-  //       baselineName,
-  //       ignoreAreas: testRun.ignoreAreas,
-  //       comment: testRun.comment,
-  //       project: {
-  //         connect: {
-  //           id: projectId,
-  //         },
-  //       },
-  //       testRuns: {
-  //         connect: {
-  //           id: testRun.id,
-  //         },
-  //       },
-  //     },
-  //     create: {
-  //       baselineName,
-  //       ...getTestVariationUniqueData(testRun),
-  //       ignoreAreas: testRun.ignoreAreas,
-  //       comment: testRun.comment,
-  //       branchName: testRun.branchName,
-  //       project: {
-  //         connect: {
-  //           id: projectId,
-  //         },
-  //       },
-  //       testRuns: {
-  //         connect: {
-  //           id: testRun.id,
-  //         },
-  //       },
-  //     },
-  //   });
-  // }
-
-  async update(id: string, data: TestVariationUpdateDto): Promise<TestVariation> {
+  async update(id: string, data: TestVariationUpdateDto, testRunId?: string): Promise<TestVariation> {
     return this.prismaService.testVariation.update({
       where: { id },
       data: {
         baselineName: data.baselineName,
         ignoreAreas: data.ignoreAreas,
         comment: data.comment,
+        testRuns: testRunId ? { connect: { id: testRunId } } : undefined,
       },
     });
   }
 
-  async findOrCreate(
-    projectId: string,
-    baselineData: BaselineDataDto,
-    testRunId?: string,
-    baselineName?: string
-  ): Promise<TestVariation> {
-    const project = await this.prismaService.project.findUnique({ where: { id: projectId } });
+  /**
+   * Tries to get test variation for the same branch
+   * Falls back to main branch if not found
+   * @param projectId
+   * @param baselineData
+   * @returns
+   */
+  async find(
+    createTestRequestDto: Omit<CreateTestRequestDto, 'buildId' | 'ignoreAreas'>
+  ): Promise<TestVariation | null> {
+    const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
 
     const [mainBranchTestVariation, currentBranchTestVariation] = await Promise.all([
       // search main branch variation
       this.findUnique({
-        projectId,
+        projectId: createTestRequestDto.projectId,
         branchName: project.mainBranchName,
-        ...getTestVariationUniqueData(baselineData),
+        ...getTestVariationUniqueData(createTestRequestDto),
       }),
       // search current branch variation
-      baselineData.branchName !== project.mainBranchName &&
+      createTestRequestDto.branchName !== project.mainBranchName &&
         this.findUnique({
-          projectId,
-          branchName: baselineData.branchName,
-          ...getTestVariationUniqueData(baselineData),
+          projectId: createTestRequestDto.projectId,
+          branchName: createTestRequestDto.branchName,
+          ...getTestVariationUniqueData(createTestRequestDto),
         }),
     ]);
 
@@ -145,14 +107,24 @@ export class TestVariationsService {
     if (!!mainBranchTestVariation) {
       return mainBranchTestVariation;
     }
+  }
 
+  /**
+   * Creates empty test variation (no baseline)
+   */
+  create({
+    testRunId,
+    createTestRequestDto,
+  }: {
+    testRunId?: string;
+    createTestRequestDto: Omit<CreateTestRequestDto, 'buildId' | 'ignoreAreas'>;
+  }): Promise<TestVariation> {
     return this.prismaService.testVariation.create({
       data: {
-        project: { connect: { id: projectId } },
+        project: { connect: { id: createTestRequestDto.projectId } },
         testRuns: testRunId ? { connect: { id: testRunId } } : undefined,
-        branchName: baselineData.branchName,
-        baselineName,
-        ...getTestVariationUniqueData(baselineData),
+        branchName: createTestRequestDto.branchName,
+        ...getTestVariationUniqueData(createTestRequestDto),
       },
     });
   }
@@ -199,35 +171,38 @@ export class TestVariationsService {
     });
 
     // compare to main branch variations
-    testVariations.map(async (sideBranchTestVariation) => {
-      const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
-      if (baseline) {
-        try {
-          // get main branch variation
-          const mainBranchTestVariation = await this.findOrCreate(projectId, {
-            ...getTestVariationUniqueData(sideBranchTestVariation),
-            branchName: project.mainBranchName,
-          });
+    await Promise.all(
+      testVariations.map(async (sideBranchTestVariation) => {
+        const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
+        if (baseline) {
+          try {
+            // get main branch variation
+            const mainBranchTestVariation = await this.find({
+              projectId,
+              branchName: project.mainBranchName,
+              ...getTestVariationUniqueData(sideBranchTestVariation),
+            });
 
-          // get side branch request
-          const createTestRequestDto: CreateTestRequestDto = {
-            ...sideBranchTestVariation,
-            buildId: build.id,
-            diffTollerancePercent: 0,
-            merge: true,
-            ignoreAreas: JSON.parse(sideBranchTestVariation.ignoreAreas),
-          };
+            // get side branch request
+            const createTestRequestDto: CreateTestRequestDto = {
+              ...sideBranchTestVariation,
+              buildId: build.id,
+              diffTollerancePercent: 0,
+              merge: true,
+              ignoreAreas: JSON.parse(sideBranchTestVariation.ignoreAreas),
+            };
 
-          return this.testRunsService.create({
-            testVariation: mainBranchTestVariation,
-            createTestRequestDto,
-            imageBuffer: PNG.sync.write(baseline),
-          });
-        } catch (err) {
-          console.log(err);
+            return this.testRunsService.create({
+              testVariation: mainBranchTestVariation,
+              createTestRequestDto,
+              imageBuffer: PNG.sync.write(baseline),
+            });
+          } catch (err) {
+            console.log(err);
+          }
         }
-      }
-    });
+      })
+    );
 
     // stop build
     return this.buildsService.update(build.id, { isRunning: false });
