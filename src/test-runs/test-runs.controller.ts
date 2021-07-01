@@ -13,6 +13,7 @@ import {
   UsePipes,
   ValidationPipe,
   Logger,
+  Patch,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -103,12 +104,13 @@ export class TestRunsController {
     }
   }
 
-  @Put('comment/:testRunId')
+  @Patch('update/:testRunId')
   @ApiParam({ name: 'testRunId', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  updateComment(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: UpdateTestRunDto): Promise<TestRun> {
-    return this.testRunsService.updateComment(id, body);
+  update(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: UpdateTestRunDto): Promise<TestRun> {
+    this.logger.debug(`Going to update TestRuns: ${id}`);
+    return this.testRunsService.update(id, body);
   }
 
   @Post()

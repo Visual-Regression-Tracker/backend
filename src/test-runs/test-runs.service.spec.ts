@@ -532,7 +532,7 @@ describe('TestRunsService', () => {
     expect(service.calculateDiff).toHaveBeenCalledWith(testVariation.projectId, testRun);
   });
 
-  it('updateComment', async () => {
+  it('update', async () => {
     const testRun = {
       id: 'testRunId',
       testVariationId: 'testVariationId',
@@ -551,7 +551,7 @@ describe('TestRunsService', () => {
       testVariationUpdateMock,
     });
 
-    await service.updateComment(testRun.id, data);
+    await service.update(testRun.id, data);
 
     expect(testRunUpdateMock).toHaveBeenCalledWith({
       where: { id: testRun.id },

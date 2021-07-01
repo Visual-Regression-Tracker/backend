@@ -280,7 +280,7 @@ export class TestRunsService {
     return this.updateIgnoreAreas(id, oldIgnoreAreas.concat(ignoreAreas));
   }
 
-  async updateComment(id: string, data: UpdateTestRunDto): Promise<TestRun> {
+  async update(id: string, data: UpdateTestRunDto): Promise<TestRun> {
     return this.prismaService.testRun
       .update({
         where: { id },
