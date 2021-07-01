@@ -44,10 +44,6 @@ describe('TestRuns (e2e)', () => {
 
   beforeEach(async () => {
     user = await haveUserLogged(usersService);
-    project = await projecstService.findOne('TestRun E2E test');
-    if (project) {
-      await projecstService.remove(project.id);
-    }
     project = await projecstService.create({
       ...TEST_PROJECT,
       name: 'TestRun E2E test',
@@ -55,6 +51,7 @@ describe('TestRuns (e2e)', () => {
   });
 
   afterEach(async () => {
+    await projecstService.remove(project.id);
     await usersService.delete(user.id);
   });
 
