@@ -75,7 +75,10 @@ describe('BuildDto', () => {
       createdAt: new Date(),
       userId: null,
       isRunning: true,
-      testRuns: [generateTestRun({ status: TestStatus.ok }), generateTestRun({ status: TestStatus.approved })],
+      testRuns: [
+        generateTestRun({ status: TestStatus.ok, merge: true }),
+        generateTestRun({ status: TestStatus.approved, merge: true }),
+      ],
     };
     const buildDto: BuildDto = {
       id: build.id,
