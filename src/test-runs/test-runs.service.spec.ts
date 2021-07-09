@@ -270,6 +270,11 @@ describe('TestRunsService', () => {
             id: createTestRequestDto.buildId,
           },
         },
+        project: {
+          connect: {
+            id: createTestRequestDto.projectId,
+          },
+        },
         name: testVariation.name,
         browser: testVariation.browser,
         device: testVariation.device,
@@ -291,32 +296,7 @@ describe('TestRunsService', () => {
   });
 
   it('calculateDiff', async () => {
-    const testRun: TestRun = {
-      id: 'id',
-      buildId: 'buildId',
-      imageName: 'imageName',
-      baselineName: 'baselineName',
-      diffName: 'diffName',
-      diffTollerancePercent: 12,
-      diffPercent: 12,
-      pixelMisMatchCount: 123,
-      status: 'new',
-      testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
-      updatedAt: new Date(),
-      createdAt: new Date(),
-      name: 'ss2f77',
-      browser: 'chromium',
-      device: null,
-      os: null,
-      viewport: '1800x1600',
-      customTags: '',
-      ignoreAreas: JSON.stringify(ignoreAreas),
-      tempIgnoreAreas: JSON.stringify(tempIgnoreAreas),
-      comment: 'some comment',
-      baselineBranchName: 'master',
-      branchName: 'develop',
-      merge: false,
-    };
+    const testRun: TestRun = generateTestRun();
     const testRunUpdateMock = jest.fn();
     const baselineMock = 'baseline image';
     const imageeMock = 'image';
@@ -349,32 +329,7 @@ describe('TestRunsService', () => {
   });
 
   describe('saveDiffResult', () => {
-    const testRun: TestRun = {
-      id: 'id',
-      buildId: 'buildId',
-      imageName: 'imageName',
-      baselineName: 'baselineName',
-      diffName: 'diffName',
-      diffTollerancePercent: 12,
-      diffPercent: 12,
-      pixelMisMatchCount: 123,
-      status: 'new',
-      testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
-      updatedAt: new Date(),
-      createdAt: new Date(),
-      name: 'ss2f77',
-      browser: 'chromium',
-      device: null,
-      os: null,
-      viewport: '1800x1600',
-      customTags: '',
-      ignoreAreas: JSON.stringify(ignoreAreas),
-      tempIgnoreAreas: JSON.stringify(tempIgnoreAreas),
-      comment: 'some comment',
-      baselineBranchName: 'master',
-      branchName: 'develop',
-      merge: false,
-    };
+    const testRun: TestRun = generateTestRun();
     it('no results', async () => {
       const id = 'some id';
       const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
@@ -431,32 +386,7 @@ describe('TestRunsService', () => {
 
   it('findMany', async () => {
     const buildId = 'some id';
-    const testRun: TestRun = {
-      id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
-      imageName: '1592423768112.screenshot.png',
-      diffName: 'diffName',
-      diffPercent: 12,
-      diffTollerancePercent: 1,
-      pixelMisMatchCount: 123,
-      status: 'new',
-      buildId: buildId,
-      testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
-      updatedAt: new Date(),
-      createdAt: new Date(),
-      name: 'ss2f77',
-      browser: 'chromium',
-      device: null,
-      os: null,
-      viewport: '1800x1600',
-      customTags: '',
-      baselineName: null,
-      ignoreAreas: '[]',
-      tempIgnoreAreas: '[]',
-      comment: 'some comment',
-      baselineBranchName: 'master',
-      branchName: 'develop',
-      merge: false,
-    };
+    const testRun: TestRun = generateTestRun();
     const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
     service = await initService({
       testRunFindManyMock,
@@ -591,32 +521,7 @@ describe('TestRunsService', () => {
       updatedAt: new Date(),
       branchName: 'master',
     };
-    const testRun: TestRun = {
-      id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
-      imageName: '1592423768112.screenshot.png',
-      diffName: 'diffName',
-      diffPercent: 12,
-      diffTollerancePercent: 1,
-      pixelMisMatchCount: 123,
-      status: 'new',
-      buildId: '146e7a8d-89f0-4565-aa2c-e61efabb0afd',
-      testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
-      updatedAt: new Date(),
-      createdAt: new Date(),
-      name: 'ss2f77',
-      browser: 'chromium',
-      device: null,
-      customTags: '',
-      os: null,
-      viewport: '1800x1600',
-      baselineName: null,
-      ignoreAreas: '[]',
-      tempIgnoreAreas: '[]',
-      comment: 'some comment',
-      baselineBranchName: 'master',
-      branchName: 'develop',
-      merge: false,
-    };
+    const testRun: TestRun = generateTestRun();
     const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
     const testVariationFindMock = jest.fn().mockResolvedValueOnce(testVariation);
     const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);

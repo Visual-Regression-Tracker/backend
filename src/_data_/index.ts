@@ -76,7 +76,7 @@ export const generateTestRun = (testRun?: Partial<TestRun>): TestRun => {
     status: 'new',
     buildId: '146e7a8d-89f0-4565-aa2c-e61efabb0afd',
     testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
-    projectId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
+    projectId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fcc',
     updatedAt: new Date(),
     createdAt: new Date(),
     name: 'ss2f77',
