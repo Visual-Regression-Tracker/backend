@@ -1,4 +1,4 @@
-import { forwardRef, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { BuildsService } from '../builds/builds.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
@@ -9,13 +9,15 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
+
   constructor(
     private prismaService: PrismaService,
     @Inject(forwardRef(() => BuildsService))
     private buildsService: BuildsService,
     @Inject(forwardRef(() => TestVariationsService))
     private testVariationsService: TestVariationsService
-  ) { }
+  ) {}
 
   async findOne(idOrName: string): Promise<Project> {
     const isUUID = uuidAPIKey.isUUID(idOrName);
@@ -64,6 +66,7 @@ export class ProjectsService {
   }
 
   async remove(id: string): Promise<Project> {
+    this.logger.debug(`Going to remove Project ${id}`);
     const project = await this.prismaService.project.findUnique({
       where: { id },
       include: {
@@ -72,10 +75,12 @@ export class ProjectsService {
       },
     });
 
-    await Promise.all(project.builds.map((build) => this.buildsService.remove(build.id)));
-    await Promise.all(
-      project.testVariations.map((testVariation) => this.testVariationsService.delete(testVariation.id))
-    );
+    for (const build of project.builds) {
+      await this.buildsService.remove(build.id);
+    }
+    for (const testVariation of project.testVariations) {
+      await this.testVariationsService.delete(testVariation.id);
+    }
 
     return this.prismaService.project.delete({
       where: { id },

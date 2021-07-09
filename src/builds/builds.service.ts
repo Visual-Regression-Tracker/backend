@@ -9,7 +9,6 @@ import { ModifyBuildDto } from './dto/build-modify.dto';
 
 @Injectable()
 export class BuildsService {
-
   private readonly logger: Logger = new Logger(BuildsService.name);
 
   constructor(
@@ -17,7 +16,7 @@ export class BuildsService {
     private eventsGateway: EventsGateway,
     @Inject(forwardRef(() => TestRunsService))
     private testRunsService: TestRunsService
-  ) { }
+  ) {}
 
   async findOne(id: string): Promise<BuildDto> {
     const [build, testRuns] = await Promise.all([
@@ -61,6 +60,8 @@ export class BuildsService {
   }
 
   async remove(id: string): Promise<Build> {
+    this.logger.debug(`Going to remove Build ${id}`);
+
     const build = await this.prismaService.build.findUnique({
       where: { id },
       include: {
@@ -70,14 +71,15 @@ export class BuildsService {
 
     await Promise.all(build.testRuns.map((testRun) => this.testRunsService.delete(testRun.id)));
 
-    let promise = this.prismaService.build.delete({
-      where: { id },
-    })
+    let promise = this.prismaService.build
+      .delete({
+        where: { id },
+      })
       .then((build) => {
-        this.logger.log("Deleted build:" + JSON.stringify(build.id));
+        this.logger.log('Deleted build:' + JSON.stringify(build.id));
         this.eventsGateway.buildDeleted(
           new BuildDto({
-            ...build
+            ...build,
           })
         );
         return build;
@@ -86,15 +88,12 @@ export class BuildsService {
   }
 
   async deleteOldBuilds(projectId: string, keepBuilds: number) {
-    keepBuilds = (keepBuilds < 2) ? keepBuilds : (keepBuilds - 1);
-    this.findMany(projectId, undefined, keepBuilds)
-      .then(
-        buildList => {
-          buildList.data.forEach(eachBuild => {
-            this.remove(eachBuild.id);
-          });
-        }
-      );
+    keepBuilds = keepBuilds < 2 ? keepBuilds : keepBuilds - 1;
+    this.findMany(projectId, undefined, keepBuilds).then((buildList) => {
+      buildList.data.forEach((eachBuild) => {
+        this.remove(eachBuild.id);
+      });
+    });
   }
 
   async approve(id: string, merge: boolean): Promise<void> {
@@ -127,11 +126,11 @@ export class BuildsService {
   }) {
     const where: Prisma.BuildWhereUniqueInput = ciBuildId
       ? {
-        projectId_ciBuildId: {
-          projectId,
-          ciBuildId,
-        },
-      }
+          projectId_ciBuildId: {
+            projectId,
+            ciBuildId,
+          },
+        }
       : { id: projectId };
     return this.prismaService.build.upsert({
       where,
