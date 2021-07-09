@@ -1,5 +1,5 @@
 import { Build, TestRun, TestStatus } from '@prisma/client';
-import { generateTestRun } from 'src/_data_';
+import { generateTestRun } from '../../_data_';
 import { BuildDto } from './build.dto';
 
 describe('BuildDto', () => {
