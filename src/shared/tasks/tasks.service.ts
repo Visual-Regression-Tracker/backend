@@ -1,7 +1,7 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { TestVariationsService } from 'src/test-variations/test-variations.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { TestVariationsService } from '../../test-variations/test-variations.service';
 
 @Injectable()
 export class TasksService {
