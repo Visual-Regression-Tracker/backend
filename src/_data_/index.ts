@@ -33,6 +33,7 @@ export const generateBaseline = (baseline?: Partial<Baseline>): Baseline => {
     baselineName: 'baselineName',
     testVariationId: 'testVariationId',
     testRunId: 'testRunId',
+    userId: 'userId',
     updatedAt: new Date(),
     createdAt: new Date(),
     ...baseline,
