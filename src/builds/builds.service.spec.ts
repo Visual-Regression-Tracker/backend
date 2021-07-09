@@ -7,6 +7,7 @@ import { Build, TestRun, TestStatus } from '@prisma/client';
 import { mocked } from 'ts-jest/utils';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
+import { generateTestRun } from '../_data_';
 
 jest.mock('./dto/build.dto');
 
@@ -91,34 +92,7 @@ describe('BuildsService', () => {
     createdAt: new Date(),
     userId: null,
     isRunning: true,
-    testRuns: [
-      {
-        id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
-        imageName: '1592423768112.screenshot.png',
-        diffName: null,
-        diffPercent: null,
-        diffTollerancePercent: 1,
-        pixelMisMatchCount: null,
-        status: 'new',
-        buildId: '146e7a8d-89f0-4565-aa2c-e61efabb0afd',
-        testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        name: 'ss2f77',
-        browser: 'chromium',
-        device: null,
-        os: null,
-        viewport: '1800x1600',
-        customTags: '',
-        baselineName: null,
-        ignoreAreas: '[]',
-        tempIgnoreAreas: '[]',
-        comment: 'some comment',
-        branchName: 'develop',
-        baselineBranchName: 'master',
-        merge: false,
-      },
-    ],
+    testRuns: [generateTestRun()],
   };
 
   const buildDto: BuildDto = {
@@ -182,7 +156,13 @@ describe('BuildsService', () => {
     const buildDeleteMock = jest.fn().mockImplementation(() => Promise.resolve(build));
     const testRunDeleteMock = jest.fn();
     const eventBuildDeletedMock = jest.fn();
-    service = await initService({ buildFindUniqueMock, buildDeleteMock, testRunDeleteMock, eventBuildDeletedMock, buildFindManyMock });
+    service = await initService({
+      buildFindUniqueMock,
+      buildDeleteMock,
+      testRunDeleteMock,
+      eventBuildDeletedMock,
+      buildFindManyMock,
+    });
 
     await service.remove(build.id);
 
