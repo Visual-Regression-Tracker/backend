@@ -1,8 +1,7 @@
-import { Injectable, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation, Baseline, Project, Prisma, Build, TestRun } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
-import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { PNG } from 'pngjs';
@@ -13,6 +12,8 @@ import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 
 @Injectable()
 export class TestVariationsService {
+  private readonly logger = new Logger(TestVariationsService.name);
+
   constructor(
     private prismaService: PrismaService,
     private staticService: StaticService,
@@ -219,6 +220,7 @@ export class TestVariationsService {
   }
 
   async delete(id: string): Promise<TestVariation> {
+    this.logger.debug(`Going to remove TestVariation ${id}`);
     const testVariation = await this.getDetails(id);
 
     // delete Baselines
