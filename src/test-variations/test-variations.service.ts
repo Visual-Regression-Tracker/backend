@@ -224,7 +224,9 @@ export class TestVariationsService {
     const testVariation = await this.getDetails(id);
 
     // delete Baselines
-    await Promise.all(testVariation.baselines.map((baseline) => this.deleteBaseline(baseline)));
+    for (const baseline of testVariation.baselines) {
+      await this.deleteBaseline(baseline);
+    }
 
     // disconnect TestRuns
     // workaround due to  https://github.com/prisma/prisma/issues/2810
@@ -238,6 +240,8 @@ export class TestVariationsService {
   }
 
   async deleteBaseline(baseline: Baseline): Promise<Baseline> {
+    this.logger.debug(`Going to remove Baseline ${baseline.id}`);
+
     this.staticService.deleteImage(baseline.baselineName);
     return this.prismaService.baseline.delete({
       where: { id: baseline.id },
