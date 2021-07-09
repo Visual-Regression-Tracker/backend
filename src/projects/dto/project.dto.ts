@@ -36,7 +36,11 @@ export class ProjectDto implements Project {
   @ApiProperty()
   @IsNumber()
   maxBuildAllowed: number;
-  
+
+  @ApiProperty()
+  @IsNumber()
+  maxBranchLifetime: number;
+
   @ApiProperty()
   @IsJSON()
   imageComparisonConfig: string;

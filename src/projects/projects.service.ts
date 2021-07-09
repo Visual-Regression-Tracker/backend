@@ -57,6 +57,7 @@ export class ProjectsService {
         autoApproveFeature: projectDto.autoApproveFeature,
         imageComparison: projectDto.imageComparison,
         maxBuildAllowed: projectDto.maxBuildAllowed,
+        maxBranchLifetime: projectDto.maxBranchLifetime,
         imageComparisonConfig: projectDto.imageComparisonConfig,
       },
     });
