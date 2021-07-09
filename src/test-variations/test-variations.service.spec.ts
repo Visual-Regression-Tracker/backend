@@ -97,6 +97,7 @@ describe('TestVariationsService', () => {
           baselines: {
             include: {
               testRun: true,
+              user: true,
             },
             orderBy: {
               createdAt: 'desc',
@@ -555,6 +556,7 @@ describe('TestVariationsService', () => {
           baselineName: 'image name 1',
           testVariationId: testVariationId,
           testRunId: 'test run id 1',
+          userId: 'userId',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -588,6 +590,7 @@ describe('TestVariationsService', () => {
       baselineName: 'image name 1',
       testVariationId: 'test variation id',
       testRunId: 'test run id 1',
+      userId: 'userId',
       createdAt: new Date(),
       updatedAt: new Date(),
     };

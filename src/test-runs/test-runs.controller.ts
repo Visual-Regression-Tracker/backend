@@ -3,7 +3,6 @@ import {
   UseGuards,
   Param,
   ParseUUIDPipe,
-  Put,
   Body,
   Get,
   Query,
@@ -26,7 +25,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
-import { TestRun, TestStatus } from '@prisma/client';
+import { TestRun, TestStatus, User } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
@@ -37,13 +36,15 @@ import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipa
 import { FileToBodyInterceptor } from '../shared/fite-to-body.interceptor';
 import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
 import { UpdateTestRunDto } from './dto/update-test.dto';
+import { Reflector } from '@nestjs/core';
+import { CurrentUser } from '../shared/current-user.decorator';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
 export class TestRunsController {
   private readonly logger: Logger = new Logger(TestRunsController.name);
 
-  constructor(private testRunsService: TestRunsService) {}
+  constructor(private testRunsService: TestRunsService, private reflector: Reflector) {}
 
   @Get()
   @ApiOkResponse({ type: [TestRunDto] })
@@ -57,10 +58,14 @@ export class TestRunsController {
   @ApiQuery({ name: 'merge', required: false })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  async approveTestRun(@Body() ids: string[], @Query('merge', new ParseBoolPipe()) merge: boolean): Promise<void> {
+  async approveTestRun(
+    @CurrentUser() user: User,
+    @Body() ids: string[],
+    @Query('merge', new ParseBoolPipe()) merge: boolean
+  ): Promise<void> {
     this.logger.debug(`Going to approve TestRuns: ${ids}`);
     for (const id of ids) {
-      await this.testRunsService.approve(id, merge);
+      await this.testRunsService.approve(id, merge, false, user.id);
     }
   }
 

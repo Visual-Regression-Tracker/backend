@@ -95,13 +95,8 @@ export class TestRunsService {
 
   /**
    * Confirm difference for testRun
-   *
-   * @param id
-   * @param merge replaces main branch baseline with feature one
-   * @param autoApprove set auto approve status
-   * @returns
    */
-  async approve(id: string, merge = false, autoApprove = false): Promise<TestRun> {
+  async approve(id: string, merge = false, autoApprove = false, userId?: string): Promise<TestRun> {
     this.logger.log(`Approving testRun: ${id} merge: ${merge} autoApprove: ${autoApprove}`);
     const testRun = await this.findOne(id);
     let { testVariation } = testRun;
@@ -147,6 +142,7 @@ export class TestRunsService {
       // add baseline
       await this.testVariationService.addBaseline({
         id: testVariation.id,
+        userId,
         testRunId: testRun.id,
         baselineName,
       });

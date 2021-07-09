@@ -29,6 +29,7 @@ export class TestVariationsService {
         baselines: {
           include: {
             testRun: true,
+            user: true,
           },
           orderBy: {
             createdAt: 'desc',
@@ -131,10 +132,12 @@ export class TestVariationsService {
 
   async addBaseline({
     id,
+    userId,
     testRunId,
     baselineName,
   }: {
     id: string;
+    userId: string;
     testRunId: string;
     baselineName: string;
   }): Promise<TestVariation> {
@@ -150,6 +153,13 @@ export class TestVariationsService {
                 id: testRunId,
               },
             },
+            user: userId
+              ? {
+                  connect: {
+                    id: userId,
+                  },
+                }
+              : undefined,
           },
         },
       },
