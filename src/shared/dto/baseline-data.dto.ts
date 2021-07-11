@@ -26,7 +26,7 @@ export class BaselineDataDto {
   @IsString()
   device?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   customTags?: string;
