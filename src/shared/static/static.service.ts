@@ -23,6 +23,12 @@ export class StaticService {
   }
 
   saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): string {
+    try {
+      new PNG().parse(imageBuffer);
+    } catch (ex) {
+      throw new Error('Cannot parse image as PNG file');
+    }
+
     const { imageName, imagePath } = this.generateNewImage(type);
     writeFileSync(imagePath, imageBuffer);
     return imageName;
