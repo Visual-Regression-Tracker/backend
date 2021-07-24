@@ -12,10 +12,6 @@ import { UserLoginRequestDto } from './dto/user-login-request.dto';
 export class UsersService {
   constructor(private prismaService: PrismaService, private authService: AuthService) {}
 
-  userList(): Promise<User[]> {
-    return this.prismaService.user.findMany();
-  }
-
   async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
     const user = {
       email: createUserDto.email.trim().toLowerCase(),

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { User } from '@prisma/client';
+import { Role, User } from '@prisma/client';
 
 export class UserDto {
   @ApiProperty()
@@ -17,11 +17,15 @@ export class UserDto {
   @ApiProperty()
   readonly apiKey: string;
 
+  @ApiProperty()
+  readonly role: Role;
+
   constructor(user: User) {
     this.id = user.id;
     this.email = user.email;
     this.firstName = user.firstName;
     this.lastName = user.lastName;
     this.apiKey = user.apiKey;
+    this.role = user.role;
   }
 }
