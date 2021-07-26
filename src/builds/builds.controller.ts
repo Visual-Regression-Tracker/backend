@@ -26,8 +26,8 @@ import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { EventsGateway } from '../shared/events/events.gateway';
-import { RoleGuard } from 'src/auth/guards/role.guard';
-import { Roles } from 'src/shared/roles.decorator';
+import { RoleGuard } from '../auth/guards/role.guard';
+import { Roles } from '../shared/roles.decorator';
 
 @Controller('builds')
 @ApiTags('builds')

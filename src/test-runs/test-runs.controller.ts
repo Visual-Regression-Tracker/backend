@@ -38,8 +38,8 @@ import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
 import { UpdateTestRunDto } from './dto/update-test.dto';
 import { Reflector } from '@nestjs/core';
 import { CurrentUser } from '../shared/current-user.decorator';
-import { RoleGuard } from 'src/auth/guards/role.guard';
-import { Roles } from 'src/shared/roles.decorator';
+import { RoleGuard } from '../auth/guards/role.guard';
+import { Roles } from '../shared/roles.decorator';
 
 @ApiTags('test-runs')
 @Controller('test-runs')

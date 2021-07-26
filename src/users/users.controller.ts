@@ -9,9 +9,9 @@ import { UpdateUserDto } from './dto/user-update.dto';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
 import { CurrentUser } from '../shared/current-user.decorator';
 import { Role, User } from '@prisma/client';
-import { RoleGuard } from 'src/auth/guards/role.guard';
-import { Roles } from 'src/shared/roles.decorator';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { RoleGuard } from '../auth/guards/role.guard';
+import { Roles } from '../shared/roles.decorator';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('users')
 @ApiTags('users')

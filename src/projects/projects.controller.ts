@@ -6,8 +6,8 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { Project, Role } from '@prisma/client';
 import { ProjectDto } from './dto/project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
-import { RoleGuard } from 'src/auth/guards/role.guard';
-import { Roles } from 'src/shared/roles.decorator';
+import { RoleGuard } from '../auth/guards/role.guard';
+import { Roles } from '../shared/roles.decorator';
 
 @Controller('projects')
 @ApiTags('projects')

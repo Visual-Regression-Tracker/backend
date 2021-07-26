@@ -5,8 +5,8 @@ import { TestVariation, Baseline, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { BuildDto } from '../builds/dto/build.dto';
-import { RoleGuard } from 'src/auth/guards/role.guard';
-import { Roles } from 'src/shared/roles.decorator';
+import { RoleGuard } from '../auth/guards/role.guard';
+import { Roles } from '../shared/roles.decorator';
 
 @ApiTags('test-variations')
 @Controller('test-variations')

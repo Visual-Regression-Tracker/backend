@@ -1,4 +1,4 @@
-import { ExecutionContext, Injectable, CanActivate, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, Injectable, CanActivate } from '@nestjs/common';
 import { Role, User } from '@prisma/client';
 import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -19,7 +19,6 @@ export class RoleGuard implements CanActivate {
   }
 
   checkPermission = (user: User): boolean => {
-    console.log(user);
     switch (user.role) {
       case Role.admin: {
         return true;
