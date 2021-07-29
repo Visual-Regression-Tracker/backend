@@ -25,7 +25,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
-import { TestRun, TestStatus, User } from '@prisma/client';
+import { Role, TestRun, TestStatus, User } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
@@ -36,15 +36,16 @@ import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipa
 import { FileToBodyInterceptor } from '../shared/fite-to-body.interceptor';
 import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
 import { UpdateTestRunDto } from './dto/update-test.dto';
-import { Reflector } from '@nestjs/core';
 import { CurrentUser } from '../shared/current-user.decorator';
+import { RoleGuard } from '../auth/guards/role.guard';
+import { Roles } from '../shared/roles.decorator';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
 export class TestRunsController {
   private readonly logger: Logger = new Logger(TestRunsController.name);
 
-  constructor(private testRunsService: TestRunsService, private reflector: Reflector) {}
+  constructor(private testRunsService: TestRunsService) {}
 
   @Get()
   @ApiOkResponse({ type: [TestRunDto] })
@@ -57,7 +58,8 @@ export class TestRunsController {
   @Post('approve')
   @ApiQuery({ name: 'merge', required: false })
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   async approveTestRun(
     @CurrentUser() user: User,
     @Body() ids: string[],
@@ -71,7 +73,8 @@ export class TestRunsController {
 
   @Post('reject')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   async reject(@Body() ids: string[]): Promise<void> {
     this.logger.debug(`Going to reject TestRuns: ${ids}`);
     for (const id of ids) {
@@ -81,7 +84,8 @@ export class TestRunsController {
 
   @Post('delete')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   async delete(@Body() ids: string[]): Promise<void> {
     this.logger.debug(`Going to delete TestRuns: ${ids}`);
     for (const id of ids) {
@@ -91,7 +95,8 @@ export class TestRunsController {
 
   @Post('ignoreAreas/update')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   async updateIgnoreAreas(@Body() data: UpdateIgnoreAreasDto): Promise<void> {
     this.logger.debug(`Going to update IgnoreAreas for TestRuns: ${data.ids}`);
     for (const id of data.ids) {
@@ -101,7 +106,8 @@ export class TestRunsController {
 
   @Post('ignoreAreas/add')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   async addIgnoreAreas(@Body() data: UpdateIgnoreAreasDto): Promise<void> {
     this.logger.debug(`Going to add IgnoreAreas for TestRuns: ${data.ids}`);
     for (const id of data.ids) {
@@ -112,7 +118,8 @@ export class TestRunsController {
   @Patch('update/:testRunId')
   @ApiParam({ name: 'testRunId', required: true })
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   update(@Param('testRunId', new ParseUUIDPipe()) id: string, @Body() body: UpdateTestRunDto): Promise<TestRun> {
     this.logger.debug(`Going to update TestRuns: ${id}`);
     return this.testRunsService.update(id, body);
@@ -121,7 +128,8 @@ export class TestRunsController {
   @Post()
   @ApiSecurity('api_key')
   @ApiOkResponse({ type: TestRunResultDto })
-  @UseGuards(ApiGuard)
+  @UseGuards(ApiGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   postTestRun(@Body() createTestRequestDto: CreateTestRequestBase64Dto): Promise<TestRunResultDto> {
     const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
     return this.testRunsService.postTestRun({
@@ -135,7 +143,8 @@ export class TestRunsController {
   @ApiBody({ type: CreateTestRequestMultipartDto })
   @ApiOkResponse({ type: TestRunResultDto })
   @ApiConsumes('multipart/form-data')
-  @UseGuards(ApiGuard)
+  @UseGuards(ApiGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   @UseInterceptors(FileInterceptor('image'), FileToBodyInterceptor)
   @UsePipes(new ValidationPipe({ transform: true }))
   postTestRunMultipart(@Body() createTestRequestDto: CreateTestRequestMultipartDto): Promise<TestRunResultDto> {

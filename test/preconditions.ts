@@ -7,10 +7,9 @@ import { TestRunsService } from 'src/test-runs/test-runs.service';
 import { readFileSync } from 'fs';
 import { TestRunResultDto } from 'src/test-runs/dto/testRunResult.dto';
 import { Build } from '@prisma/client';
+import { CreateUserDto } from 'src/users/dto/user-create.dto';
 
-export const generateUser = (
-  password: string
-): { email: string; password: string; firstName: string; lastName: string } => ({
+export const generateUser = (password: string): CreateUserDto => ({
   email: `${uuidAPIKey.create().uuid}@example.com'`,
   password,
   firstName: 'fName',
@@ -37,6 +36,8 @@ export const requestWithApiKey = (
 export const haveUserLogged = async (usersService: UsersService) => {
   const password = '123456';
   const user = await usersService.create(generateUser(password));
+
+  await usersService.assignRole({ id: user.id, role: 'admin' });
 
   return usersService.login({
     email: user.email,

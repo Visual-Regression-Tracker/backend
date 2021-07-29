@@ -7,14 +7,14 @@ import { UserDto } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
 import { AuthService } from '../auth/auth.service';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
+import { AssignRoleDto } from './dto/assign-role.dto';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class UsersService {
-  constructor(private prismaService: PrismaService, private authService: AuthService) {}
+  private readonly logger: Logger = new Logger(UsersService.name);
 
-  userList(): Promise<User[]> {
-    return this.prismaService.user.findMany();
-  }
+  constructor(private prismaService: PrismaService, private authService: AuthService) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
     const user = {
@@ -37,11 +37,23 @@ export class UsersService {
   }
 
   async delete(id: string): Promise<User> {
+    this.logger.debug(`Removing User: ${id}`);
     return this.prismaService.user.delete({ where: { id } });
   }
 
   async get(id: string): Promise<UserDto> {
     const user = await this.findOne(id);
+    return new UserDto(user);
+  }
+
+  async assignRole(data: AssignRoleDto): Promise<UserDto> {
+    const { id, role } = data;
+    this.logger.debug(`Assigning role ${role} to User: ${id}`);
+
+    const user = await this.prismaService.user.update({
+      where: { id },
+      data: { role },
+    });
     return new UserDto(user);
   }
 
