@@ -13,10 +13,13 @@ import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { Logger } from '@nestjs/common';
 
 @Controller('users')
 @ApiTags('users')
 export class UsersController {
+  private readonly logger: Logger = new Logger(UsersController.name);
+
   constructor(private usersService: UsersService, private prismaService: PrismaService) {}
 
   @Post('register')
@@ -65,14 +68,16 @@ export class UsersController {
     return users.map((user) => new UserDto(user));
   }
 
-  @Delete(':id')
+  @Delete()
   @ApiOkResponse({ type: Boolean })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin)
-  async delete(@Param('id', new ParseUUIDPipe()) id: string): Promise<boolean> {
-    const user = await this.usersService.delete(id);
-    return !!user;
+  async delete(@Body() ids: string[]): Promise<void> {
+    this.logger.debug(`Going to remove User: ${ids}`);
+    for (const id of ids) {
+      await this.usersService.delete(id);
+    }
   }
 
   @Patch('assignRole')
@@ -81,6 +86,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin)
   async assignRole(@Body() data: AssignRoleDto): Promise<UserDto> {
+    this.logger.debug(`Going to assign role ${data.role} to User: ${data.id}`);
     return this.usersService.assignRole(data);
   }
 }

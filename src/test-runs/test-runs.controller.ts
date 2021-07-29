@@ -36,7 +36,6 @@ import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipa
 import { FileToBodyInterceptor } from '../shared/fite-to-body.interceptor';
 import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
 import { UpdateTestRunDto } from './dto/update-test.dto';
-import { Reflector } from '@nestjs/core';
 import { CurrentUser } from '../shared/current-user.decorator';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
@@ -46,7 +45,7 @@ import { Roles } from '../shared/roles.decorator';
 export class TestRunsController {
   private readonly logger: Logger = new Logger(TestRunsController.name);
 
-  constructor(private testRunsService: TestRunsService, private reflector: Reflector) {}
+  constructor(private testRunsService: TestRunsService) {}
 
   @Get()
   @ApiOkResponse({ type: [TestRunDto] })
