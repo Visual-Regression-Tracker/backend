@@ -12,6 +12,7 @@ import { Role, User } from '@prisma/client';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { AssignRoleDto } from './dto/assign-role.dto';
 
 @Controller('users')
 @ApiTags('users')
@@ -70,26 +71,16 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin)
   async delete(@Param('id', new ParseUUIDPipe()) id: string): Promise<boolean> {
-    const user = await this.prismaService.user.delete({ where: { id } });
+    const user = await this.usersService.delete(id);
     return !!user;
   }
 
-  @Patch('assignRole/:id')
+  @Patch('assignRole')
   @ApiOkResponse({ type: UserDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin)
-  async assignRole(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() data: Pick<UpdateUserDto, 'role'>
-  ): Promise<UserDto> {
-    const user = await this.prismaService.user.update({
-      where: { id },
-      data: {
-        role: data.role,
-      },
-    });
-
-    return new UserDto(user);
+  async assignRole(@Body() data: AssignRoleDto): Promise<UserDto> {
+    return this.usersService.assignRole(data);
   }
 }

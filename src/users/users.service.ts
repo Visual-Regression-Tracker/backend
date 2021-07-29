@@ -7,6 +7,7 @@ import { UserDto } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
 import { AuthService } from '../auth/auth.service';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
+import { AssignRoleDto } from './dto/assign-role.dto';
 
 @Injectable()
 export class UsersService {
@@ -38,6 +39,15 @@ export class UsersService {
 
   async get(id: string): Promise<UserDto> {
     const user = await this.findOne(id);
+    return new UserDto(user);
+  }
+
+  async assignRole(data: AssignRoleDto): Promise<UserDto> {
+    const { id, role } = data;
+    const user = await this.prismaService.user.update({
+      where: { id },
+      data: { role },
+    });
     return new UserDto(user);
   }
 
