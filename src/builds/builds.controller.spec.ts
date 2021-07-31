@@ -53,10 +53,6 @@ describe('Builds Controller', () => {
     project: 'name',
   };
   const project = TEST_PROJECT;
-  const newBuild: Build = {
-    ...TEST_BUILD,
-    number: null,
-  };
   const buildWithNumber: Build = {
     ...TEST_BUILD,
     number: 12,
@@ -70,16 +66,12 @@ describe('Builds Controller', () => {
   });
 
   it('should create new build', async () => {
-    const eventBuildCreatedMock = jest.fn();
     const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
-    const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(newBuild);
-    const buildIncrementBuildNumberMock = jest.fn().mockResolvedValueOnce(buildWithNumber);
+    const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(buildWithNumber);
     const deleteOldBuilds = jest.fn();
     controller = await initController({
       projectFindOneMock,
       buildFindOrCreateMock,
-      buildIncrementBuildNumberMock,
-      eventBuildCreatedMock,
       deleteOldBuilds,
     });
 
@@ -87,8 +79,6 @@ describe('Builds Controller', () => {
 
     expect(result).toStrictEqual(new BuildDto(buildWithNumber));
     expect(deleteOldBuilds).toHaveBeenCalledWith(project.id, project.maxBuildAllowed);
-    expect(buildIncrementBuildNumberMock).toHaveBeenCalledWith(newBuild.id, project.id);
-    expect(eventBuildCreatedMock).toHaveBeenCalledWith(new BuildDto(buildWithNumber));
   });
 
   it('should reuse build', async () => {

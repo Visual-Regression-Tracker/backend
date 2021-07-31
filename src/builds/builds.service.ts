@@ -132,7 +132,8 @@ export class BuildsService {
           },
         }
       : { id: projectId };
-    return this.prismaService.build.upsert({
+
+    let build = await this.prismaService.build.upsert({
       where,
       create: {
         ciBuildId,
@@ -148,6 +149,14 @@ export class BuildsService {
         isRunning: true,
       },
     });
+
+    // assigne build number
+    if (!build.number) {
+      build = await this.incrementBuildNumber(build.id, projectId);
+      this.eventsGateway.buildCreated(new BuildDto(build));
+    }
+
+    return build;
   }
 
   async incrementBuildNumber(buildId: string, projectId: string): Promise<Build> {

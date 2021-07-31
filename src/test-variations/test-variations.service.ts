@@ -80,10 +80,10 @@ export class TestVariationsService {
    * @returns
    */
   async find(
-    createTestRequestDto: BaselineDataDto & { projectId: string; targetBranch?: string }
+    createTestRequestDto: BaselineDataDto & { projectId: string; sourceBranch?: string }
   ): Promise<TestVariation | null> {
     const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
-    const mainBranch = createTestRequestDto.targetBranch ?? project.mainBranchName;
+    const mainBranch = createTestRequestDto.sourceBranch ?? project.mainBranchName;
 
     const [mainBranchTestVariation, currentBranchTestVariation] = await Promise.all([
       // search main branch variation
@@ -176,42 +176,43 @@ export class TestVariationsService {
       projectId,
     });
 
-    // find side branch variations
+    // find source branch variations
     const testVariations: TestVariation[] = await this.prismaService.testVariation.findMany({
       where: { projectId, branchName: fromBranch },
     });
 
-    // compare to target branch variations
-    for (const sideBranchTestVariation of testVariations) {
-      const baseline = this.staticService.getImage(sideBranchTestVariation.baselineName);
+    // compare source to destination branch variations
+    for (const sourceBranchTestVariation of testVariations) {
+      const baseline = this.staticService.getImage(sourceBranchTestVariation.baselineName);
       if (baseline) {
-        try {
-          // get destination branch variation
-          const mainBranchTestVariation = await this.find({
-            projectId,
-            branchName: toBranch,
-            ...getTestVariationUniqueData(sideBranchTestVariation),
-          });
+        // get destination branch request
+        const createTestRequestDto: CreateTestRequestDto = {
+          ...sourceBranchTestVariation,
+          branchName: toBranch,
+          buildId: build.id,
+          diffTollerancePercent: 0,
+          merge: true,
+          ignoreAreas: JSON.parse(sourceBranchTestVariation.ignoreAreas),
+        };
 
-          // get side branch request
-          const createTestRequestDto: CreateTestRequestDto = {
-            ...sideBranchTestVariation,
-            buildId: build.id,
-            diffTollerancePercent: 0,
-            merge: true,
-            ignoreAreas: JSON.parse(sideBranchTestVariation.ignoreAreas),
-          };
+        // get destination branch variation
+        let destintionBranchTestVariation = await this.find({
+          projectId,
+          branchName: toBranch,
+          ...getTestVariationUniqueData(sourceBranchTestVariation),
+        });
 
-          const testRun = await this.testRunsService.create({
-            testVariation: mainBranchTestVariation,
-            createTestRequestDto,
-            imageBuffer: PNG.sync.write(baseline),
-          });
-
-          await this.testRunsService.calculateDiff(projectId, testRun);
-        } catch (err) {
-          console.log(err);
+        if (destintionBranchTestVariation.branchName !== toBranch) {
+          destintionBranchTestVariation = await this.create({ createTestRequestDto });
         }
+
+        const testRun = await this.testRunsService.create({
+          testVariation: destintionBranchTestVariation,
+          createTestRequestDto,
+          imageBuffer: PNG.sync.write(baseline),
+        });
+
+        await this.testRunsService.calculateDiff(projectId, testRun);
       }
     }
 
