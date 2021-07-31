@@ -26,15 +26,22 @@ model Build {
 }
 
 model Project {
-  id             String          @id @default(uuid())
-  name           String
-  mainBranchName String          @default("master")
-  builds         Build[]
-  buildsCounter  Int             @default(0)
-  testVariations TestVariation[]
-  updatedAt      DateTime        @updatedAt
-  createdAt      DateTime        @default(now())
+  id                    String          @id @default(uuid())
+  name                  String
+  mainBranchName        String          @default("master")
+  builds                Build[]
+  buildsCounter         Int             @default(0)
+  maxBuildAllowed       Int             @default(100)
+  maxBranchLifetime     Int             @default(30)
+  testVariations        TestVariation[]
+  updatedAt             DateTime        @updatedAt
+  createdAt             DateTime        @default(now())
+  // config
+  autoApproveFeature    Boolean         @default(false)
+  imageComparison       ImageComparison @default(pixelmatch)
+  imageComparisonConfig String          @default("{ \"threshold\": 0.1, \"ignoreAntialiasing\": true, \"allowDiffDimensions\": false }")
 
+  TestRun TestRun[]
   @@unique([name])
 }
 
@@ -50,6 +57,8 @@ model TestRun {
   build                 Build          @relation(fields: [buildId], references: [id])
   testVariationId       String?
   testVariation         TestVariation? @relation(fields: [testVariationId], references: [id])
+  projectId             String?
+  project               Project?       @relation(fields: [projectId], references: [id])
   merge                 Boolean        @default(false)
   updatedAt             DateTime       @updatedAt
   createdAt             DateTime       @default(now())
@@ -59,6 +68,7 @@ model TestRun {
   device                String?
   os                    String?
   viewport              String?
+  customTags            String?        @default("")
   baselineName          String?
   comment               String?
   baseline              Baseline?
@@ -72,10 +82,11 @@ model TestVariation {
   id           String     @id @default(uuid())
   name         String
   branchName   String     @default("master")
-  browser      String?
-  device       String?
-  os           String?
-  viewport     String?
+  browser      String     @default("")
+  device       String     @default("")
+  os           String     @default("")
+  viewport     String     @default("")
+  customTags   String     @default("")
   baselineName String?
   ignoreAreas  String     @default("[]")
   projectId    String
@@ -86,7 +97,7 @@ model TestVariation {
   updatedAt    DateTime   @updatedAt
   createdAt    DateTime   @default(now())
 
-  @@unique([projectId, name, browser, device, os, viewport, branchName])
+  @@unique([projectId, name, browser, device, os, viewport, customTags, branchName])
 }
 
 model Baseline {
@@ -96,21 +107,25 @@ model Baseline {
   testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
   testRunId       String?
   testRun         TestRun?      @relation(fields: [testRunId], references: [id])
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id])
   updatedAt       DateTime      @updatedAt
   createdAt       DateTime      @default(now())
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
+  id        String     @id @default(uuid())
+  email     String     @unique
   password  String
   firstName String?
   lastName  String?
-  apiKey    String   @unique
-  isActive  Boolean  @default(true)
+  apiKey    String     @unique
+  isActive  Boolean    @default(true)
   builds    Build[]
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  baselines Baseline[]
+  role      Role       @default(guest)
+  updatedAt DateTime   @updatedAt
+  createdAt DateTime   @default(now())
 }
 
 enum TestStatus {
@@ -120,4 +135,16 @@ enum TestStatus {
   unresolved
   approved
   autoApproved
+}
+
+enum ImageComparison {
+  pixelmatch
+  lookSame
+  odiff
+}
+
+enum Role {
+  admin
+  editor
+  guest
 }

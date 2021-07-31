@@ -2,14 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
-import { haveTestRunCreated, haveUserLogged } from './preconditions';
+import { haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { Project, TestStatus } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
-import { PrismaService } from '../src/prisma/prisma.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
+import { TEST_PROJECT } from '../src/_data_';
 
 jest.useFakeTimers();
 
@@ -25,6 +25,7 @@ describe('TestRuns (e2e)', () => {
 
   const image_v1 = './test/image.png';
   const image_v2 = './test/image_edited.png';
+  const image_v3 = './test/image_edited_2.png';
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -43,7 +44,10 @@ describe('TestRuns (e2e)', () => {
 
   beforeEach(async () => {
     user = await haveUserLogged(usersService);
-    project = await projecstService.create({ name: 'TestRun E2E test', mainBranchName: 'master' });
+    project = await projecstService.create({
+      ...TEST_PROJECT,
+      name: 'TestRun E2E test',
+    });
   });
 
   afterEach(async () => {
@@ -72,8 +76,24 @@ describe('TestRuns (e2e)', () => {
         image_v1
       );
       await testRunsService.approve(testRun1.id);
+      const { testRun: testRun2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v2
+      );
+      await testRunsService.approve(testRun2.id);
+      const { testRun: testRun3 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'feature',
+        image_v2
+      );
+      await testRunsService.approve(testRun3.id);
 
-      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v2);
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v3);
 
       expect(testRun.status).toBe(TestStatus.unresolved);
     });
@@ -94,6 +114,7 @@ describe('TestRuns (e2e)', () => {
     });
 
     it('Auto approve not rebased feature branch then Ok after rebase', async () => {
+      await projecstService.update({ ...project, autoApproveFeature: true });
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
@@ -132,6 +153,7 @@ describe('TestRuns (e2e)', () => {
     });
 
     it('Auto approve merged feature into feature branch', async () => {
+      await projecstService.update({ ...project, autoApproveFeature: true });
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
@@ -147,6 +169,7 @@ describe('TestRuns (e2e)', () => {
     });
 
     it('Auto approve merged feature into main branch', async () => {
+      await projecstService.update({ ...project, autoApproveFeature: true });
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
@@ -176,8 +199,32 @@ describe('TestRuns (e2e)', () => {
     });
   });
 
+  describe('POST /multipart', () => {
+    const url = '/test-runs/multipart';
+
+    it('should post multipart', async () => {
+      const build = await buildsService.findOrCreate({ projectId: project.id, branchName: project.mainBranchName });
+
+      await requestWithApiKey(app, 'post', url, user.apiKey)
+        .set('Content-type', 'multipart/form-data')
+        .field('name', 'Multipart image')
+        .field('os', 'Windows')
+        .field('browser', 'Browser')
+        .field('viewport', '123x456')
+        .field('device', 'Desktop')
+        .field('branchName', project.mainBranchName)
+        .field('buildId', build.id)
+        .field('projectId', project.id)
+        .field('diffTollerancePercent', '0.12')
+        .field('merge', 'false')
+        .field('ignoreAreas', '[]')
+        .attach('image', image_v1)
+        .expect(201);
+    });
+  });
+
   describe('POST /approve', () => {
-    it('approve changes in existing testVariation', async () => {
+    it('approve changes in new main branch', async () => {
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
@@ -193,7 +240,83 @@ describe('TestRuns (e2e)', () => {
       expect(testVariation.baselines).toHaveLength(1);
     });
 
-    it('approve changes in existing testVariation with merge', async () => {
+    it('approve changes in new feature branch', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+
+      const result = await testRunsService.approve(testRun1.id);
+
+      expect(result.status).toBe(TestStatus.approved);
+      const testVariation = await testVariationsService.getDetails(result.testVariationId);
+      expect(testVariation.baselines).toHaveLength(1);
+      expect(testVariation.branchName).toBe('develop');
+    });
+
+    it('approve changes in main vs feature branch', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v1
+      );
+      const mainBranchResult = await testRunsService.approve(testRun1.id);
+      const { testRun: testRun2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v2
+      );
+
+      const featureBranchResult = await testRunsService.approve(testRun2.id);
+
+      expect(featureBranchResult.status).toBe(TestStatus.approved);
+      const testVariation = await testVariationsService.getDetails(featureBranchResult.testVariationId);
+      expect(testVariation.baselines).toHaveLength(1);
+      expect(testVariation.branchName).toBe('develop');
+    });
+
+    it('approve changes in updated main vs feature branch', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+      await testRunsService.approve(testRun1.id);
+      const { testRun: testRun2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v2
+      );
+      await testRunsService.approve(testRun2.id);
+      const { testRun: testRun3 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+
+      const result = await testRunsService.approve(testRun3.id);
+
+      expect(result.status).toBe(TestStatus.approved);
+      expect(result.baselineBranchName).toBe(project.mainBranchName);
+      const testVariation = await testVariationsService.getDetails(result.testVariationId);
+      expect(testVariation.branchName).toBe('develop');
+      expect(testVariation.baselines).toHaveLength(2);
+    });
+
+    it('approve changes with merge', async () => {
       const { testRun: testRun1 } = await haveTestRunCreated(
         buildsService,
         testRunsService,
@@ -265,6 +388,48 @@ describe('TestRuns (e2e)', () => {
 
       expect(featureBranchResult.status).toBe(TestStatus.autoApproved);
       expect(mainBranchResult.testVariationId).toBe(featureBranchResult.testVariationId);
+    });
+  });
+
+  describe('POST /delete', () => {
+    it('Should delete', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+      const { testRun: testRun2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+
+      await requestWithAuth(app, 'post', `/test-runs/delete`, user.token).send([testRun1.id, testRun2.id]).expect(201);
+    });
+  });
+
+  describe('POST /reject', () => {
+    it('200', async () => {
+      const { testRun: testRun1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+      const { testRun: testRun2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'develop',
+        image_v1
+      );
+
+      await requestWithAuth(app, 'post', `/test-runs/reject`, user.token).send([testRun1.id, testRun2.id]).expect(201);
     });
   });
 });

@@ -1,17 +1,17 @@
-import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query, Put, Body, Delete } from '@nestjs/common';
+import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query, Delete } from '@nestjs/common';
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery, ApiOkResponse } from '@nestjs/swagger';
 import { TestVariationsService } from './test-variations.service';
-import { TestVariation, Baseline } from '@prisma/client';
+import { TestVariation, Baseline, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
-import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
-import { CommentDto } from '../shared/dto/comment.dto';
 import { BuildDto } from '../builds/dto/build.dto';
+import { RoleGuard } from '../auth/guards/role.guard';
+import { Roles } from '../shared/roles.decorator';
 
 @ApiTags('test-variations')
 @Controller('test-variations')
 export class TestVariationsController {
-  constructor(private testVariations: TestVariationsService, private prismaService: PrismaService) {}
+  constructor(private testVariations: TestVariationsService, private prismaService: PrismaService) { }
 
   @Get()
   @ApiQuery({ name: 'projectId', required: true })
@@ -31,32 +31,14 @@ export class TestVariationsController {
     return this.testVariations.getDetails(id);
   }
 
-  @Put('ignoreArea/:variationId')
-  @ApiParam({ name: 'variationId', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  updateIgnoreAreas(
-    @Param('variationId', new ParseUUIDPipe()) variationId: string,
-    @Body() ignoreAreas: IgnoreAreaDto[]
-  ): Promise<TestVariation> {
-    return this.testVariations.updateIgnoreAreas(variationId, ignoreAreas);
-  }
-
-  @Put('comment/:id')
-  @ApiParam({ name: 'id', required: true })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  updateComment(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: CommentDto): Promise<TestVariation> {
-    return this.testVariations.updateComment(id, body);
-  }
-
   @Get('merge/')
   @ApiQuery({ name: 'projectId', required: true })
   @ApiQuery({ name: 'fromBranch', required: true })
   @ApiQuery({ name: 'toBranch', required: true })
   @ApiOkResponse({ type: BuildDto })
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   merge(
     @Query('projectId', new ParseUUIDPipe()) projectId: string,
     @Query('fromBranch') fromBranch: string,
@@ -68,7 +50,8 @@ export class TestVariationsController {
   @Delete(':id')
   @ApiParam({ name: 'id', required: true })
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   delete(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestVariation> {
     return this.testVariations.delete(id);
   }

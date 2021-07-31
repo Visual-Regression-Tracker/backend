@@ -3,7 +3,7 @@ FROM node:12-alpine AS builder
 # Create app directory
 WORKDIR /app
 
-RUN npm install -g @prisma/cli --unsafe-perm
+RUN npm install -g @prisma/cli@2.12.1 --unsafe-perm
 
 COPY ./prisma/schema.prisma ./
 

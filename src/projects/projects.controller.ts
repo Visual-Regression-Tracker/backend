@@ -3,8 +3,11 @@ import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiParam } from '@nestjs/swagger
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { Project } from '@prisma/client';
+import { Project, Role } from '@prisma/client';
 import { ProjectDto } from './dto/project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { RoleGuard } from '../auth/guards/role.guard';
+import { Roles } from '../shared/roles.decorator';
 
 @Controller('projects')
 @ApiTags('projects')
@@ -21,7 +24,8 @@ export class ProjectsController {
 
   @Post()
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
   create(@Body() createProjectDto: CreateProjectDto): Promise<Project> {
     return this.projectsService.create(createProjectDto);
@@ -29,15 +33,17 @@ export class ProjectsController {
 
   @Put()
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
-  update(@Body() projectDto: ProjectDto): Promise<Project> {
+  update(@Body() projectDto: UpdateProjectDto): Promise<Project> {
     return this.projectsService.update(projectDto);
   }
 
   @Delete(':id')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
   @ApiParam({ name: 'id', required: true })
   remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Project> {

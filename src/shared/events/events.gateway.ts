@@ -10,7 +10,7 @@ export class EventsGateway {
   @WebSocketServer()
   server: Server;
 
-  constructor(private prismaService: PrismaService) {}
+  constructor(private prismaService: PrismaService) { }
 
   private debounceTimeout = 1500;
   private maxWait = 3000;
@@ -41,9 +41,15 @@ export class EventsGateway {
   }
 
   testRunDeleted(testRun: TestRun): void {
+    this.testRunsCreatedQueued = this.testRunsCreatedQueued.filter((tr) => tr.id !== testRun.id);
+    this.testRunsUpdatedQueued = this.testRunsUpdatedQueued.filter((tr) => tr.id !== testRun.id);
     this.testRunsDeletedQueued.push(testRun);
     this.testRunDeletedDebounced();
     this.buildUpdated(testRun.buildId);
+  }
+
+  buildDeleted(buildDto: BuildDto) {
+    this.server.emit('build_deleted', buildDto);
   }
 
   private testRunUpdatedDebounced = debounce(

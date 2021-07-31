@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 import uuidAPIKey from 'uuid-apikey';
 import { genSalt, hash } from 'bcryptjs';
 
@@ -20,29 +20,38 @@ seed()
 async function createDefaultUser() {
   const userList = await prisma.user.findMany();
   console.log(userList);
-  if (userList.length === 0) {
-    const defaultEmail = 'visual-regression-tracker@example.com';
-    const defaultPassword = '123456';
-    const salt = await genSalt(10);
-    await prisma.user
-      .create({
-        data: {
-          email: defaultEmail,
-          firstName: 'fname',
-          lastName: 'lname',
-          apiKey: uuidAPIKey.create({ noDashes: true }).apiKey,
-          password: await hash(defaultPassword, salt),
-        },
-      })
-      .then((user) => {
-        console.log('###########################');
-        console.log('## CREATING DEFAULT USER ##');
-        console.log('###########################');
-        console.log('');
-        console.log(`The user with the email "${defaultEmail}" and password "${defaultPassword}" was created`);
-        console.log(`The Api key is: ${user.apiKey}`);
-      });
-  }
+
+  const defaultEmail = 'visual-regression-tracker@example.com';
+  const defaultPassword = '123456';
+  const salt = await genSalt(10);
+
+  await prisma.user
+    .upsert({
+      where: {
+        email: defaultEmail,
+      },
+      update: {
+        role: Role.admin,
+      },
+      create: {
+        email: defaultEmail,
+        firstName: 'fname',
+        lastName: 'lname',
+        role: Role.admin,
+        apiKey: uuidAPIKey.create({ noDashes: true }).apiKey,
+        password: await hash(defaultPassword, salt),
+      },
+    })
+    .then((user) => {
+      console.log('###########################');
+      console.log('####### DEFAULT USER ######');
+      console.log('###########################');
+      console.log('');
+      console.log(
+        `The user with the email "${defaultEmail}" and password "${defaultPassword}" was created (if not changed before)`
+      );
+      console.log(`The Api key is: ${user.apiKey}`);
+    });
 }
 
 async function createDefaultProject() {

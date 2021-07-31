@@ -9,6 +9,7 @@ import { ProjectsService } from '../src/projects/projects.service';
 import { Project } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
+import { TEST_PROJECT } from '../src/_data_';
 
 jest.useFakeTimers();
 
@@ -39,7 +40,10 @@ describe('TestVariations (e2e)', () => {
 
   beforeEach(async () => {
     user = await haveUserLogged(usersService);
-    project = await projecstService.create({ name: 'TestVariations E2E test', mainBranchName: 'master' });
+    project = await projecstService.create({
+      ...TEST_PROJECT,
+      name: 'TestVariations E2E test',
+    });
   });
 
   afterEach(async () => {

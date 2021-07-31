@@ -40,7 +40,10 @@ jobs:
       uses: jakejarvis/wait-action@v0.1.0
       with:
         time: '5s'
-      
+    
+    - name: Apply Manual DB migrations
+      run: npx ts-node ./prisma/manual_migrations.ts 
+
     - name: Apply DB migrations
       run: npx prisma migrate up -c --experimental
 

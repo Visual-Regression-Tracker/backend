@@ -9,17 +9,21 @@ import { PrismaService } from './prisma/prisma.service';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { HttpExceptionFilter } from './http-exception.filter';
+import { CompareModule } from './compare/compare.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     CacheModule.register(),
+    ScheduleModule.forRoot(),
     AuthModule,
     UsersModule,
     BuildsModule,
     ProjectsModule,
     TestRunsModule,
     TestVariationsModule,
+    CompareModule,
   ],
   providers: [
     PrismaService,

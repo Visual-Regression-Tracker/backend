@@ -3,11 +3,11 @@ import { BuildsService } from './builds.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
-import { CreateBuildDto } from './dto/build-create.dto';
-import { Build, TestRun, Project, TestStatus } from '@prisma/client';
+import { Build, TestRun, TestStatus } from '@prisma/client';
 import { mocked } from 'ts-jest/utils';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
+import { generateTestRun } from '../_data_';
 
 jest.mock('./dto/build.dto');
 
@@ -21,8 +21,10 @@ const initService = async ({
   buildCountMock = jest.fn(),
   testRunDeleteMock = jest.fn(),
   testRunApproveMock = jest.fn(),
+  testRunFindManyMock = jest.fn(),
   eventsBuildUpdatedMock = jest.fn(),
   eventsBuildCreatedMock = jest.fn(),
+  eventBuildDeletedMock = jest.fn(),
   projectFindOneMock = jest.fn(),
   projectUpdateMock = jest.fn(),
 }) => {
@@ -51,6 +53,7 @@ const initService = async ({
         useValue: {
           approve: testRunApproveMock,
           delete: testRunDeleteMock,
+          findMany: testRunFindManyMock,
         },
       },
       {
@@ -58,6 +61,7 @@ const initService = async ({
         useValue: {
           buildUpdated: eventsBuildUpdatedMock,
           buildCreated: eventsBuildCreatedMock,
+          buildDeleted: eventBuildDeletedMock,
         },
       },
       {
@@ -88,33 +92,7 @@ describe('BuildsService', () => {
     createdAt: new Date(),
     userId: null,
     isRunning: true,
-    testRuns: [
-      {
-        id: '10fb5e02-64e0-4cf5-9f17-c00ab3c96658',
-        imageName: '1592423768112.screenshot.png',
-        diffName: null,
-        diffPercent: null,
-        diffTollerancePercent: 1,
-        pixelMisMatchCount: null,
-        status: 'new',
-        buildId: '146e7a8d-89f0-4565-aa2c-e61efabb0afd',
-        testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        name: 'ss2f77',
-        browser: 'chromium',
-        device: null,
-        os: null,
-        viewport: '1800x1600',
-        baselineName: null,
-        ignoreAreas: '[]',
-        tempIgnoreAreas: '[]',
-        comment: 'some comment',
-        branchName: 'develop',
-        baselineBranchName: 'master',
-        merge: false,
-      },
-    ],
+    testRuns: [generateTestRun()],
   };
 
   const buildDto: BuildDto = {
@@ -136,17 +114,13 @@ describe('BuildsService', () => {
 
   it('findOne', async () => {
     const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
+    const testRunFindManyMock = jest.fn().mockResolvedValueOnce(build.testRuns);
     mocked(BuildDto).mockReturnValueOnce(buildDto);
-    service = await initService({ buildFindUniqueMock });
+    service = await initService({ buildFindUniqueMock, testRunFindManyMock });
 
     const result = await service.findOne('someId');
 
-    expect(buildFindUniqueMock).toHaveBeenCalledWith({
-      where: { id: 'someId' },
-      include: {
-        testRuns: true,
-      },
-    });
+    expect(mocked(BuildDto)).toHaveBeenCalledWith({ ...build, testRuns: build.testRuns });
     expect(result).toBe(buildDto);
   });
 
@@ -163,7 +137,6 @@ describe('BuildsService', () => {
       where: { projectId },
     });
     expect(buildFindManyMock).toHaveBeenCalledWith({
-      include: { testRuns: true },
       take: 10,
       skip: 20,
       orderBy: { createdAt: 'desc' },
@@ -177,93 +150,19 @@ describe('BuildsService', () => {
     });
   });
 
-  describe('create', () => {
-    const createBuildDto: CreateBuildDto = {
-      ciBuildId: 'ciBuildId',
-      branchName: 'branchName',
-      project: 'name',
-    };
-
-    const project: Project = {
-      id: 'project id',
-      name: 'name',
-      mainBranchName: 'master',
-      buildsCounter: 1,
-      updatedAt: new Date(),
-      createdAt: new Date(),
-    };
-
-    it('should create', async () => {
-      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(null);
-      const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
-      const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
-      const projectUpdateMock = jest.fn().mockResolvedValueOnce(project);
-      const eventsBuildCreatedMock = jest.fn();
-      mocked(BuildDto).mockReturnValue(buildDto);
-      service = await initService({
-        buildCreateMock,
-        buildFindUniqueMock,
-        eventsBuildCreatedMock,
-        projectFindOneMock,
-        projectUpdateMock,
-      });
-
-      const result = await service.create(createBuildDto);
-
-      expect(projectFindOneMock).toHaveBeenCalledWith(createBuildDto.project);
-      expect(buildFindUniqueMock).toHaveBeenCalledWith({
-        where: {
-          projectId_ciBuildId: {
-            projectId: project.id,
-            ciBuildId: createBuildDto.ciBuildId,
-          },
-        },
-      });
-      expect(projectUpdateMock).toHaveBeenCalledWith({
-        where: { id: project.id },
-        data: {
-          buildsCounter: {
-            increment: 1,
-          },
-        },
-      });
-      expect(buildCreateMock).toHaveBeenCalledWith({
-        data: {
-          branchName: createBuildDto.branchName,
-          ciBuildId: createBuildDto.ciBuildId,
-          isRunning: true,
-          number: project.buildsCounter,
-          project: {
-            connect: {
-              id: project.id,
-            },
-          },
-        },
-      });
-      expect(eventsBuildCreatedMock).toHaveBeenCalledWith(buildDto);
-      expect(result).toBe(buildDto);
-    });
-
-    it('should reuse by ciBuildId', async () => {
-      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-      const projectFindOneMock = jest.fn().mockResolvedValueOnce(project);
-      mocked(BuildDto).mockReturnValue(buildDto);
-      service = await initService({
-        buildFindUniqueMock,
-        projectFindOneMock,
-      });
-
-      const result = await service.create(createBuildDto);
-
-      expect(result).toBe(buildDto);
-    });
-  });
-
   it('delete', async () => {
     const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-    const buildDeleteMock = jest.fn();
+    const buildFindManyMock = jest.fn().mockImplementation(() => Promise.resolve(build));
+    const buildDeleteMock = jest.fn().mockImplementation(() => Promise.resolve(build));
     const testRunDeleteMock = jest.fn();
-    service = await initService({ buildFindUniqueMock, buildDeleteMock, testRunDeleteMock });
+    const eventBuildDeletedMock = jest.fn();
+    service = await initService({
+      buildFindUniqueMock,
+      buildDeleteMock,
+      testRunDeleteMock,
+      eventBuildDeletedMock,
+      buildFindManyMock,
+    });
 
     await service.remove(build.id);
 
@@ -274,6 +173,7 @@ describe('BuildsService', () => {
       },
     });
     expect(testRunDeleteMock).toHaveBeenCalledWith(build.testRuns[0].id);
+    expect(eventBuildDeletedMock).toHaveBeenCalledWith(new BuildDto(build));
     expect(buildDeleteMock).toHaveBeenCalledWith({
       where: { id: build.id },
     });
@@ -290,9 +190,6 @@ describe('BuildsService', () => {
 
     expect(buildUpdateMock).toHaveBeenCalledWith({
       where: { id },
-      include: {
-        testRuns: true,
-      },
       data: { isRunning: false },
     });
     expect(eventsBuildUpdatedMock).toHaveBeenCalledWith(id);
@@ -305,8 +202,8 @@ describe('BuildsService', () => {
       ...build.testRuns[0],
       status: TestStatus.approved,
     });
-    mocked(BuildDto).mockReturnValueOnce(buildDto);
     service = await initService({ buildFindUniqueMock, testRunApproveMock });
+    service.findOne = jest.fn();
 
     await service.approve('someId', true);
 
@@ -323,14 +220,5 @@ describe('BuildsService', () => {
       },
     });
     expect(testRunApproveMock).toHaveBeenCalledWith(build.testRuns[0].id, true);
-    expect(mocked(BuildDto)).toHaveBeenCalledWith({
-      ...build,
-      testRuns: [
-        {
-          ...build.testRuns[0],
-          status: TestStatus.approved,
-        },
-      ],
-    });
   });
 });

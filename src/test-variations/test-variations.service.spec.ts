@@ -3,13 +3,12 @@ import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { StaticService } from '../shared/static/static.service';
-import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
-import { TestVariation, Baseline, Project, Build, TestRun } from '@prisma/client';
-import { CommentDto } from '../shared/dto/comment.dto';
-import { convertBaselineDataToQuery } from '../shared/dto/baseline-data.dto';
+import { TestVariation, Baseline, Project, Build } from '@prisma/client';
 import { PNG } from 'pngjs';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
+import { TEST_PROJECT } from '../_data_';
+import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 
 const initModule = async ({
   imageDeleteMock = jest.fn(),
@@ -21,7 +20,7 @@ const initModule = async ({
   variationDeleteMock = jest.fn(),
   baselineDeleteMock = jest.fn(),
   projectFindUniqueMock = jest.fn(),
-  buildCreateMock = jest.fn(),
+  buildFindOrCreateMock = jest.fn(),
   buildUpdateMock = jest.fn(),
   testRunCreateMock = jest.fn(),
   testRunFindMany = jest.fn(),
@@ -41,7 +40,7 @@ const initModule = async ({
       {
         provide: BuildsService,
         useValue: {
-          create: buildCreateMock,
+          findOrCreate: buildFindOrCreateMock,
           update: buildUpdateMock,
         },
       },
@@ -82,6 +81,7 @@ const initModule = async ({
 
 describe('TestVariationsService', () => {
   let service: TestVariationsService;
+  const projectMock = TEST_PROJECT;
 
   describe('getDetails', () => {
     it('can find one', async () => {
@@ -97,6 +97,7 @@ describe('TestVariationsService', () => {
           baselines: {
             include: {
               testRun: true,
+              user: true,
             },
             orderBy: {
               createdAt: 'desc',
@@ -107,26 +108,17 @@ describe('TestVariationsService', () => {
     });
   });
 
-  describe('findOrCreate', () => {
-    const projectMock: Project = {
-      id: '12',
-      name: 'Project',
-      buildsCounter: 0,
-      mainBranchName: 'master',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
+  describe('find', () => {
     it('can find by main branch', async () => {
       const createRequest: CreateTestRequestDto = {
         buildId: 'buildId',
         projectId: projectMock.id,
         name: 'Test name',
-        imageBase64: 'Image',
         os: 'OS',
         browser: 'browser',
         viewport: 'viewport',
         device: 'device',
+        customTags: '',
         branchName: 'develop',
       };
 
@@ -139,40 +131,39 @@ describe('TestVariationsService', () => {
         browser: 'browser',
         viewport: 'viewport',
         device: 'device',
+        customTags: '',
         ignoreAreas: '[]',
         comment: 'some comment',
         branchName: 'develop',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      const variationFindManyMock = jest.fn().mockResolvedValueOnce([variationMock]).mockResolvedValueOnce([undefined]);
       const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
-      service = await initModule({ variationFindManyMock, projectFindUniqueMock });
+      service = await initModule({ projectFindUniqueMock });
+      service.findUnique = jest.fn().mockResolvedValueOnce(variationMock).mockResolvedValueOnce(undefined);
 
-      const result = await service.findOrCreate(createRequest.projectId, convertBaselineDataToQuery(createRequest));
+      const result = await service.find(createRequest);
 
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
-      expect(variationFindManyMock).toHaveBeenNthCalledWith(1, {
-        where: {
-          name: createRequest.name,
-          projectId: createRequest.projectId,
-          os: createRequest.os,
-          browser: createRequest.browser,
-          viewport: createRequest.viewport,
-          device: createRequest.device,
-          branchName: projectMock.mainBranchName,
-        },
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: projectMock.mainBranchName,
       });
-      expect(variationFindManyMock).toHaveBeenNthCalledWith(2, {
-        where: {
-          name: createRequest.name,
-          projectId: createRequest.projectId,
-          os: createRequest.os,
-          browser: createRequest.browser,
-          viewport: createRequest.viewport,
-          device: createRequest.device,
-          branchName: createRequest.branchName,
-        },
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: createRequest.branchName,
       });
       expect(result).toBe(variationMock);
     });
@@ -182,11 +173,11 @@ describe('TestVariationsService', () => {
         buildId: 'buildId',
         projectId: projectMock.id,
         name: 'Test name',
-        imageBase64: 'Image',
         os: 'OS',
         browser: 'browser',
         viewport: 'viewport',
         device: 'device',
+        customTags: '',
         branchName: 'develop',
       };
 
@@ -199,277 +190,345 @@ describe('TestVariationsService', () => {
         browser: 'browser',
         viewport: 'viewport',
         device: 'device',
+        customTags: '',
         ignoreAreas: '[]',
         comment: 'some comment',
         branchName: 'develop',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      const variationFindManyMock = jest.fn().mockResolvedValueOnce([undefined]).mockResolvedValueOnce([variationMock]);
       const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
-      service = await initModule({ variationFindManyMock, projectFindUniqueMock });
+      service = await initModule({ projectFindUniqueMock });
+      service.findUnique = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(variationMock);
 
-      const result = await service.findOrCreate(createRequest.projectId, convertBaselineDataToQuery(createRequest));
+      const result = await service.find(createRequest);
 
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
-      expect(variationFindManyMock).toHaveBeenNthCalledWith(1, {
-        where: {
-          name: createRequest.name,
-          projectId: createRequest.projectId,
-          os: createRequest.os,
-          browser: createRequest.browser,
-          viewport: createRequest.viewport,
-          device: createRequest.device,
-          branchName: projectMock.mainBranchName,
-        },
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: projectMock.mainBranchName,
       });
-      expect(variationFindManyMock).toHaveBeenNthCalledWith(2, {
-        where: {
-          name: createRequest.name,
-          projectId: createRequest.projectId,
-          os: createRequest.os,
-          browser: createRequest.browser,
-          viewport: createRequest.viewport,
-          device: createRequest.device,
-          branchName: createRequest.branchName,
-        },
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: createRequest.branchName,
       });
       expect(result).toBe(variationMock);
     });
 
-    it('can create if not found', async () => {
+    it('can find by current branch but main branch is more relevant', async () => {
       const createRequest: CreateTestRequestDto = {
         buildId: 'buildId',
         projectId: projectMock.id,
         name: 'Test name',
-        imageBase64: 'Image',
         os: 'OS',
         browser: 'browser',
         viewport: 'viewport',
         device: 'device',
+        customTags: '',
         branchName: 'develop',
       };
 
-      const variationFindManyMock = jest.fn().mockResolvedValueOnce([undefined]).mockResolvedValueOnce([undefined]);
+      const variationMainMock: TestVariation = {
+        id: '123',
+        projectId: projectMock.id,
+        name: 'Test name',
+        baselineName: 'baselineName',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        customTags: '',
+        ignoreAreas: '[]',
+        comment: 'some comment',
+        branchName: 'master',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const variationFeatureMock: TestVariation = {
+        id: '123',
+        projectId: projectMock.id,
+        name: 'Test name',
+        baselineName: 'baselineName',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        customTags: '',
+        ignoreAreas: '[]',
+        comment: 'some comment',
+        branchName: 'develop',
+        createdAt: new Date(),
+        updatedAt: new Date(variationMainMock.updatedAt.getDate() - 1),
+      };
       const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
-      const variationCreateMock = jest.fn();
-      service = await initModule({ variationFindManyMock, projectFindUniqueMock, variationCreateMock });
+      service = await initModule({ projectFindUniqueMock });
+      service.findUnique = jest
+        .fn()
+        .mockResolvedValueOnce(variationMainMock)
+        .mockResolvedValueOnce(variationFeatureMock);
 
-      await service.findOrCreate(createRequest.projectId, convertBaselineDataToQuery(createRequest));
+      const result = await service.find(createRequest);
 
-      expect(variationCreateMock).toHaveBeenCalledWith({
-        data: {
-          name: createRequest.name,
-          os: createRequest.os,
-          browser: createRequest.browser,
-          viewport: createRequest.viewport,
-          device: createRequest.device,
-          branchName: createRequest.branchName,
-          project: {
-            connect: {
-              id: createRequest.projectId,
-            },
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: projectMock.mainBranchName,
+      });
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: createRequest.branchName,
+      });
+      expect(result).toBe(variationMainMock);
+    });
+  });
+
+  it('create', async () => {
+    const createRequest: CreateTestRequestDto = {
+      buildId: 'buildId',
+      projectId: projectMock.id,
+      name: 'Test name',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: '',
+      branchName: 'develop',
+    };
+
+    const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
+    const variationCreateMock = jest.fn();
+    service = await initModule({ projectFindUniqueMock, variationCreateMock });
+    service.findUnique = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+
+    await service.create({
+      testRunId: 'testRunId',
+      createTestRequestDto: createRequest,
+    });
+
+    expect(variationCreateMock).toHaveBeenCalledWith({
+      data: {
+        name: createRequest.name,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: createRequest.branchName,
+        testRuns: { connect: { id: 'testRunId' } },
+        project: {
+          connect: {
+            id: createRequest.projectId,
           },
         },
-      });
+      },
     });
   });
 
-  describe('updateIgnoreAreas', () => {
-    it('can update', async () => {
-      const id = 'test id';
-      const ignoreAreas: IgnoreAreaDto[] = [
-        {
-          x: 1,
-          y: 2.3,
-          width: 442.1,
-          height: 32.0,
-        },
-      ];
-      const variationUpdateMock = jest.fn();
-      service = await initModule({ variationUpdateMock });
-
-      await service.updateIgnoreAreas(id, ignoreAreas);
-
-      expect(variationUpdateMock).toBeCalledWith({
-        where: {
-          id,
-        },
-        data: {
-          ignoreAreas: JSON.stringify(ignoreAreas),
-        },
-      });
-    });
-  });
-
-  it('updateComment', async () => {
+  it('update', async () => {
     const id = 'some id';
-    const commentDto: CommentDto = {
+    const data: TestVariationUpdateDto = {
+      baselineName: 'baselineName',
       comment: 'random comment',
+      ignoreAreas: '[]',
     };
     const variationUpdateMock = jest.fn();
     service = await initModule({
       variationUpdateMock,
     });
 
-    await service.updateComment(id, commentDto);
+    await service.update(id, data);
 
     expect(variationUpdateMock).toHaveBeenCalledWith({
       where: { id },
-      data: {
-        comment: commentDto.comment,
-      },
+      data,
     });
   });
 
-  // it('merge', async () => {
-  //   const mergedBranch = 'develop';
-  //   const project: Project = {
-  //     id: 'some id',
-  //     buildsCounter: 0,
-  //     name: 'some name',
-  //     mainBranchName: 'master',
-  //     updatedAt: new Date(),
-  //     createdAt: new Date(),
-  //   };
-  //   const build: Build = {
-  //     id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
-  //     ciBuildId: 'ciBuildId',
-  //     number: null,
-  //     branchName: project.mainBranchName,
-  //     status: null,
-  //     projectId: project.id,
-  //     updatedAt: new Date(),
-  //     createdAt: new Date(),
-  //     userId: null,
-  //     isRunning: true,
-  //   };
-  //   const testVariation: TestVariation = {
-  //     id: '123',
-  //     projectId: project.id,
-  //     name: 'Test name',
-  //     baselineName: 'baselineName',
-  //     os: 'OS',
-  //     browser: 'browser',
-  //     viewport: 'viewport',
-  //     device: 'device',
-  //     ignoreAreas: '[]',
-  //     comment: 'some comment',
-  //     createdAt: new Date(),
-  //     updatedAt: new Date(),
-  //     branchName: mergedBranch,
-  //   };
-  //   const testVariationSecond: TestVariation = {
-  //     id: '123',
-  //     projectId: project.id,
-  //     name: 'Test name second',
-  //     baselineName: 'baselineName',
-  //     os: 'OS',
-  //     browser: 'browser',
-  //     viewport: 'viewport',
-  //     device: 'device',
-  //     ignoreAreas: '[]',
-  //     comment: 'some comment',
-  //     createdAt: new Date(),
-  //     updatedAt: new Date(),
-  //     branchName: mergedBranch,
-  //   };
-  //   const testVariationNoBaseline: TestVariation = {
-  //     id: '123',
-  //     projectId: project.id,
-  //     name: 'Test name',
-  //     baselineName: null,
-  //     os: 'OS',
-  //     browser: 'browser',
-  //     viewport: 'viewport',
-  //     device: 'device',
-  //     ignoreAreas: '[]',
-  //     comment: 'some comment',
-  //     createdAt: new Date(),
-  //     updatedAt: new Date(),
-  //     branchName: mergedBranch,
-  //   };
-  //   const testVariationMainBranch: TestVariation = {
-  //     id: '123',
-  //     projectId: project.id,
-  //     name: 'Test name',
-  //     baselineName: 'baselineName',
-  //     os: 'OS',
-  //     browser: 'browser',
-  //     viewport: 'viewport',
-  //     device: 'device',
-  //     ignoreAreas: '[]',
-  //     comment: 'some comment',
-  //     createdAt: new Date(),
-  //     updatedAt: new Date(),
-  //     branchName: project.mainBranchName,
-  //   };
-  //   const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(project);
-  //   const buildCreateMock = jest.fn().mockResolvedValueOnce(build);
-  //   const variationFindManyMock = jest
-  //     .fn()
-  //     .mockResolvedValueOnce([testVariation, testVariationSecond, testVariationNoBaseline]);
-  //   const image = new PNG({
-  //     width: 10,
-  //     height: 10,
-  //   });
-  //   const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image).mockReturnValueOnce(null);
-  //   const findOrCreateMock = jest
-  //     .fn()
-  //     .mockResolvedValueOnce(testVariationMainBranch)
-  //     .mockResolvedValueOnce(testVariationMainBranch);
-  //   const testRunCreateMock = jest.fn();
-  //   const buildUpdateMock = jest.fn();
-  //   const service = await initModule({
-  //     projectFindUniqueMock,
-  //     buildCreateMock,
-  //     buildUpdateMock,
-  //     testRunCreateMock,
-  //     variationFindManyMock,
-  //     getImageMock,
-  //   });
-  //   service.findOrCreate = findOrCreateMock;
+  it('merge', async () => {
+    const mergedBranch = 'develop';
+    const project: Project = TEST_PROJECT;
+    const build: Build = {
+      id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+      ciBuildId: 'ciBuildId',
+      number: null,
+      branchName: project.mainBranchName,
+      status: null,
+      projectId: project.id,
+      updatedAt: new Date(),
+      createdAt: new Date(),
+      userId: null,
+      isRunning: true,
+    };
+    const testVariation: TestVariation = {
+      id: '123',
+      projectId: project.id,
+      name: 'Test name',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: '',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      branchName: mergedBranch,
+    };
+    const testVariationSecond: TestVariation = {
+      id: '123',
+      projectId: project.id,
+      name: 'Test name second',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: '',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      branchName: mergedBranch,
+    };
+    const testVariationNoBaseline: TestVariation = {
+      id: '123',
+      projectId: project.id,
+      name: 'Test name',
+      baselineName: null,
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: '',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      branchName: mergedBranch,
+    };
+    const testVariationMainBranch: TestVariation = {
+      id: '123',
+      projectId: project.id,
+      name: 'Test name',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: '',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      branchName: project.mainBranchName,
+    };
+    const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(project);
+    const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(build);
+    const variationFindManyMock = jest
+      .fn()
+      .mockResolvedValueOnce([testVariation, testVariationSecond, testVariationNoBaseline]);
+    const image = new PNG({
+      width: 10,
+      height: 10,
+    });
+    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image).mockReturnValueOnce(null);
+    const testRunCreateMock = jest.fn();
+    const buildUpdateMock = jest.fn();
+    const service = await initModule({
+      projectFindUniqueMock,
+      buildFindOrCreateMock,
+      buildUpdateMock,
+      testRunCreateMock,
+      variationFindManyMock,
+      getImageMock,
+    });
+    service.find = jest
+      .fn()
+      .mockResolvedValueOnce(testVariationMainBranch)
+      .mockResolvedValueOnce(testVariationMainBranch);
 
-  //   await service.merge(project.id, mergedBranch);
+    await service.merge(project.id, mergedBranch);
 
-  //   expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: project.id } });
-  //   expect(buildCreateMock).toHaveBeenCalledWith({
-  //     branchName: project.mainBranchName,
-  //     project: project.id,
-  //   });
-  //   expect(variationFindManyMock).toHaveBeenCalledWith({
-  //     where: { projectId: project.id, branchName: mergedBranch },
-  //   });
-  //   expect(getImageMock).toHaveBeenCalledWith(testVariation.baselineName);
-  //   expect(service.findOrCreate).toHaveBeenCalledWith(project.id, {
-  //     name: testVariation.name,
-  //     os: testVariation.os,
-  //     device: testVariation.device,
-  //     browser: testVariation.browser,
-  //     viewport: testVariation.viewport,
-  //     branchName: project.mainBranchName,
-  //   });
+    expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: project.id } });
+    expect(buildFindOrCreateMock).toHaveBeenCalledWith({
+      branchName: project.mainBranchName,
+      projectId: project.id,
+    });
+    expect(variationFindManyMock).toHaveBeenCalledWith({
+      where: { projectId: project.id, branchName: mergedBranch },
+    });
+    expect(getImageMock).toHaveBeenCalledWith(testVariation.baselineName);
+    expect(service.find).toHaveBeenNthCalledWith(1, {
+      name: testVariation.name,
+      os: testVariation.os,
+      device: testVariation.device,
+      browser: testVariation.browser,
+      viewport: testVariation.viewport,
+      customTags: testVariation.customTags,
+      branchName: project.mainBranchName,
+      projectId: project.id,
+    });
+    expect(service.find).toHaveBeenNthCalledWith(2, {
+      name: testVariationSecond.name,
+      os: testVariationSecond.os,
+      device: testVariationSecond.device,
+      browser: testVariationSecond.browser,
+      viewport: testVariationSecond.viewport,
+      customTags: testVariationSecond.customTags,
+      branchName: project.mainBranchName,
+      projectId: project.id,
+    });
 
-  //   await new Promise((r) => setTimeout(r, 1));
-  //   expect(testRunCreateMock).toHaveBeenNthCalledWith(1, testVariationMainBranch, {
-  //     ...testVariation,
-  //     buildId: build.id,
-  //     imageBase64: PNG.sync.write(image).toString('base64'),
-  //     diffTollerancePercent: 0,
-  //     merge: true,
-  //     ignoreAreas: JSON.parse(testVariation.ignoreAreas),
-  //   });
-  //   expect(testRunCreateMock).toHaveBeenNthCalledWith(2, testVariationMainBranch, {
-  //     ...testVariationSecond,
-  //     buildId: build.id,
-  //     imageBase64: PNG.sync.write(image).toString('base64'),
-  //     diffTollerancePercent: 0,
-  //     merge: true,
-  //     ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
-  //   });
-  //   expect(testRunCreateMock).toHaveBeenCalledTimes(2);
-  //   expect(buildUpdateMock).toHaveBeenCalledWith(build.id, { isRunning: false });
-  // });
+    expect(testRunCreateMock).toHaveBeenNthCalledWith(1, {
+      testVariation: testVariationMainBranch,
+      createTestRequestDto: {
+        ...testVariation,
+        buildId: build.id,
+        diffTollerancePercent: 0,
+        merge: true,
+        ignoreAreas: JSON.parse(testVariation.ignoreAreas),
+      },
+      imageBuffer: PNG.sync.write(image),
+    });
+    expect(testRunCreateMock).toHaveBeenNthCalledWith(2, {
+      testVariation: testVariationMainBranch,
+      createTestRequestDto: {
+        ...testVariationSecond,
+        buildId: build.id,
+        diffTollerancePercent: 0,
+        merge: true,
+        ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
+      },
+      imageBuffer: PNG.sync.write(image),
+    });
+    expect(testRunCreateMock).toHaveBeenCalledTimes(2);
+    expect(buildUpdateMock).toHaveBeenCalledWith(build.id, { isRunning: false });
+  });
 
   it('delete', async () => {
     const testRunId = 'test run id';
@@ -485,6 +544,7 @@ describe('TestVariationsService', () => {
       browser: 'browser',
       viewport: 'viewport',
       device: 'device',
+      customTags: '',
       ignoreAreas: '[]',
       comment: 'some comment',
       branchName: 'develop',
@@ -496,6 +556,7 @@ describe('TestVariationsService', () => {
           baselineName: 'image name 1',
           testVariationId: testVariationId,
           testRunId: 'test run id 1',
+          userId: 'userId',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -529,6 +590,7 @@ describe('TestVariationsService', () => {
       baselineName: 'image name 1',
       testVariationId: 'test variation id',
       testRunId: 'test run id 1',
+      userId: 'userId',
       createdAt: new Date(),
       updatedAt: new Date(),
     };

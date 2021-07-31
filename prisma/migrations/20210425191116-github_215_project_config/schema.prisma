@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = "***"
+}
+
+model Build {
+  id         String    @id @default(uuid())
+  ciBuildId  String?
+  number     Int?
+  branchName String?
+  status     String?
+  testRuns   TestRun[]
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id])
+  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime  @default(now())
+  user       User?     @relation(fields: [userId], references: [id])
+  userId     String?
+  isRunning  Boolean?
+
+  @@unique([projectId, ciBuildId])
+}
+
+model Project {
+  id                    String          @id @default(uuid())
+  name                  String
+  mainBranchName        String          @default("master")
+  builds                Build[]
+  buildsCounter         Int             @default(0)
+  testVariations        TestVariation[]
+  updatedAt             DateTime        @updatedAt
+  createdAt             DateTime        @default(now())
+  // config
+  autoApproveFeature    Boolean         @default(false)
+  diffDimensionsFeature Boolean         @default(false)
+  ignoreAntialiasing    Boolean         @default(true)
+  threshold             Float           @default(0.1)
+  imageComparison       ImageComparison @default(pixelmatch)
+
+  @@unique([name])
+}
+
+model TestRun {
+  id                    String         @id @default(uuid())
+  imageName             String
+  diffName              String?
+  diffPercent           Float?
+  diffTollerancePercent Float          @default(0)
+  pixelMisMatchCount    Int?
+  status                TestStatus
+  buildId               String
+  build                 Build          @relation(fields: [buildId], references: [id])
+  testVariationId       String?
+  testVariation         TestVariation? @relation(fields: [testVariationId], references: [id])
+  merge                 Boolean        @default(false)
+  updatedAt             DateTime       @updatedAt
+  createdAt             DateTime       @default(now())
+  // Test variation data
+  name                  String         @default("")
+  browser               String?
+  device                String?
+  os                    String?
+  viewport              String?
+  baselineName          String?
+  comment               String?
+  baseline              Baseline?
+  branchName            String         @default("master")
+  baselineBranchName    String?
+  ignoreAreas           String         @default("[]")
+  tempIgnoreAreas       String         @default("[]")
+}
+
+model TestVariation {
+  id           String     @id @default(uuid())
+  name         String
+  branchName   String     @default("master")
+  browser      String     @default("")
+  device       String     @default("")
+  os           String     @default("")
+  viewport     String     @default("")
+  baselineName String?
+  ignoreAreas  String     @default("[]")
+  projectId    String
+  project      Project    @relation(fields: [projectId], references: [id])
+  testRuns     TestRun[]
+  baselines    Baseline[]
+  comment      String?
+  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime   @default(now())
+
+  @@unique([projectId, name, browser, device, os, viewport, branchName])
+}
+
+model Baseline {
+  id              String        @id @default(uuid())
+  baselineName    String
+  testVariationId String
+  testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
+  testRunId       String?
+  testRun         TestRun?      @relation(fields: [testRunId], references: [id])
+  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime      @default(now())
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  apiKey    String   @unique
+  isActive  Boolean  @default(true)
+  builds    Build[]
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+enum TestStatus {
+  failed
+  new
+  ok
+  unresolved
+  approved
+  autoApproved
+}
+
+enum ImageComparison {
+  pixelmatch
+  lookSame
+  odiff
+}

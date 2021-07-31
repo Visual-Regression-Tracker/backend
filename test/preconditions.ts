@@ -6,11 +6,10 @@ import { BuildsService } from 'src/builds/builds.service';
 import { TestRunsService } from 'src/test-runs/test-runs.service';
 import { readFileSync } from 'fs';
 import { TestRunResultDto } from 'src/test-runs/dto/testRunResult.dto';
-import { BuildDto } from 'src/builds/dto/build.dto';
+import { Build } from '@prisma/client';
+import { CreateUserDto } from 'src/users/dto/user-create.dto';
 
-export const generateUser = (
-  password: string
-): { email: string; password: string; firstName: string; lastName: string } => ({
+export const generateUser = (password: string): CreateUserDto => ({
   email: `${uuidAPIKey.create().uuid}@example.com'`,
   password,
   firstName: 'fName',
@@ -21,25 +20,24 @@ export const requestWithAuth = (
   app: INestApplication,
   method: 'post' | 'get' | 'put' | 'delete' | 'patch',
   url: string,
-  body = {},
   token: string
 ): Test =>
   request(app.getHttpServer())
     [method](url)
-    .set('Authorization', 'Bearer ' + token)
-    .send(body);
+    .set('Authorization', 'Bearer ' + token);
 
 export const requestWithApiKey = (
   app: INestApplication,
   method: 'post' | 'get' | 'put' | 'delete' | 'patch',
   url: string,
-  body = {},
   apiKey: string
-): Test => request(app.getHttpServer())[method](url).set('apiKey', apiKey).send(body);
+): Test => request(app.getHttpServer())[method](url).set('apiKey', apiKey);
 
 export const haveUserLogged = async (usersService: UsersService) => {
   const password = '123456';
   const user = await usersService.create(generateUser(password));
+
+  await usersService.assignRole({ id: user.id, role: 'admin' });
 
   return usersService.login({
     email: user.email,
@@ -54,15 +52,17 @@ export const haveTestRunCreated = async (
   branchName: string,
   imagePath: string,
   merge?: boolean
-): Promise<{ testRun: TestRunResultDto; build: BuildDto }> => {
-  const build = await buildsService.create({ project: projectId, branchName });
+): Promise<{ testRun: TestRunResultDto; build: Build }> => {
+  const build = await buildsService.findOrCreate({ projectId: projectId, branchName });
   const testRun = await testRunsService.postTestRun({
-    projectId: build.projectId,
-    branchName: build.branchName,
-    imageBase64: readFileSync(imagePath).toString('base64'),
-    buildId: build.id,
-    name: 'Image name',
-    merge,
+    createTestRequestDto: {
+      projectId: build.projectId,
+      branchName: build.branchName,
+      buildId: build.id,
+      name: 'Image name',
+      merge,
+    },
+    imageBuffer: readFileSync(imagePath),
   });
   return {
     build,

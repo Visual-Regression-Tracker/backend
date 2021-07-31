@@ -5,6 +5,9 @@ set -e
 
 echo Start applying migrations...
 
+# apply manual migration
+npx ts-node manual_migrations.ts
+
 # apply migration
 npx prisma migrate up -c --auto-approve --experimental
 

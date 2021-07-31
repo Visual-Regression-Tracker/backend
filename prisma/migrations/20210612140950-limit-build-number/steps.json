@@ -1,0 +1,37 @@
+{
+  "version": "0.3.14-fixed",
+  "steps": [
+    {
+      "tag": "CreateField",
+      "model": "Project",
+      "field": "maxBuildAllowed",
+      "type": "Int",
+      "arity": "Required"
+    },
+    {
+      "tag": "CreateDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "Project",
+          "field": "maxBuildAllowed"
+        },
+        "directive": "default"
+      }
+    },
+    {
+      "tag": "CreateArgument",
+      "location": {
+        "tag": "Directive",
+        "path": {
+          "tag": "Field",
+          "model": "Project",
+          "field": "maxBuildAllowed"
+        },
+        "directive": "default"
+      },
+      "argument": "",
+      "value": "100"
+    }
+  ]
+}
