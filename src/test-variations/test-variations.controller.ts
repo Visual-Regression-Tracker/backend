@@ -7,11 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BuildDto } from '../builds/dto/build.dto';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
+import { MergeParams } from './types';
 
 @ApiTags('test-variations')
 @Controller('test-variations')
 export class TestVariationsController {
-  constructor(private testVariations: TestVariationsService, private prismaService: PrismaService) { }
+  constructor(private testVariations: TestVariationsService, private prismaService: PrismaService) {}
 
   @Get()
   @ApiQuery({ name: 'projectId', required: true })
@@ -33,16 +34,15 @@ export class TestVariationsController {
 
   @Get('merge/')
   @ApiQuery({ name: 'projectId', required: true })
-  @ApiQuery({ name: 'branchName', required: true })
+  @ApiQuery({ name: 'fromBranch', required: true })
+  @ApiQuery({ name: 'toBranch', required: true })
   @ApiOkResponse({ type: BuildDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  merge(
-    @Query('projectId', new ParseUUIDPipe()) projectId: string,
-    @Query('branchName') branchName: string
-  ): Promise<BuildDto> {
-    return this.testVariations.merge(projectId, branchName);
+  merge(@Query() params: MergeParams): Promise<BuildDto> {
+    const { projectId, fromBranch, toBranch } = params;
+    return this.testVariations.merge(projectId, fromBranch, toBranch);
   }
 
   @Delete(':id')

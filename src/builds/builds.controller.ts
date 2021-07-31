@@ -25,7 +25,6 @@ import { MixedGuard } from '../auth/guards/mixed.guard';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
 import { ProjectsService } from '../projects/projects.service';
-import { EventsGateway } from '../shared/events/events.gateway';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
 
@@ -34,7 +33,6 @@ import { Roles } from '../shared/roles.decorator';
 export class BuildsController {
   constructor(
     private buildsService: BuildsService,
-    private eventsGateway: EventsGateway,
     @Inject(forwardRef(() => ProjectsService))
     private projectService: ProjectsService
   ) {}
@@ -75,15 +73,11 @@ export class BuildsController {
   async create(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
     const project = await this.projectService.findOne(createBuildDto.project);
     await this.buildsService.deleteOldBuilds(project.id, project.maxBuildAllowed);
-    let build = await this.buildsService.findOrCreate({
+    const build = await this.buildsService.findOrCreate({
       projectId: project.id,
       branchName: createBuildDto.branchName,
       ciBuildId: createBuildDto.ciBuildId,
     });
-    if (!build.number) {
-      build = await this.buildsService.incrementBuildNumber(build.id, project.id);
-      this.eventsGateway.buildCreated(new BuildDto(build));
-    }
     return new BuildDto(build);
   }
 

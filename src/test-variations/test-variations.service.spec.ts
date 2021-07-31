@@ -25,6 +25,7 @@ const initModule = async ({
   testRunCreateMock = jest.fn(),
   testRunFindMany = jest.fn(),
   testRunDeleteMock = jest.fn(),
+  testRuncalCulateDiffMock = jest.fn(),
   $executeRawMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
@@ -49,6 +50,7 @@ const initModule = async ({
         useValue: {
           delete: testRunDeleteMock,
           create: testRunCreateMock,
+          calculateDiff: testRuncalCulateDiffMock,
         },
       },
       {
@@ -369,13 +371,14 @@ describe('TestVariationsService', () => {
   });
 
   it('merge', async () => {
-    const mergedBranch = 'develop';
+    const fromBranch = 'develop';
+    const targetBranch = 'test';
     const project: Project = TEST_PROJECT;
     const build: Build = {
       id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
       ciBuildId: 'ciBuildId',
       number: null,
-      branchName: project.mainBranchName,
+      branchName: targetBranch,
       status: null,
       projectId: project.id,
       updatedAt: new Date(),
@@ -397,7 +400,7 @@ describe('TestVariationsService', () => {
       comment: 'some comment',
       createdAt: new Date(),
       updatedAt: new Date(),
-      branchName: mergedBranch,
+      branchName: fromBranch,
     };
     const testVariationSecond: TestVariation = {
       id: '123',
@@ -413,7 +416,7 @@ describe('TestVariationsService', () => {
       comment: 'some comment',
       createdAt: new Date(),
       updatedAt: new Date(),
-      branchName: mergedBranch,
+      branchName: fromBranch,
     };
     const testVariationNoBaseline: TestVariation = {
       id: '123',
@@ -429,9 +432,9 @@ describe('TestVariationsService', () => {
       comment: 'some comment',
       createdAt: new Date(),
       updatedAt: new Date(),
-      branchName: mergedBranch,
+      branchName: fromBranch,
     };
-    const testVariationMainBranch: TestVariation = {
+    const testVariationSourceBranch: TestVariation = {
       id: '123',
       projectId: project.id,
       name: 'Test name',
@@ -445,9 +448,12 @@ describe('TestVariationsService', () => {
       comment: 'some comment',
       createdAt: new Date(),
       updatedAt: new Date(),
-      branchName: project.mainBranchName,
+      branchName: fromBranch,
     };
-    const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(project);
+    const testVariationTargetBranch: TestVariation = {
+      ...testVariationSourceBranch,
+      branchName: targetBranch,
+    };
     const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(build);
     const variationFindManyMock = jest
       .fn()
@@ -459,30 +465,30 @@ describe('TestVariationsService', () => {
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image).mockReturnValueOnce(null);
     const testRunCreateMock = jest.fn();
     const buildUpdateMock = jest.fn();
+    const testRuncalCulateDiffMock = jest.fn();
     const service = await initModule({
-      projectFindUniqueMock,
       buildFindOrCreateMock,
       buildUpdateMock,
       testRunCreateMock,
+      testRuncalCulateDiffMock,
       variationFindManyMock,
       getImageMock,
     });
     service.find = jest
       .fn()
-      .mockResolvedValueOnce(testVariationMainBranch)
-      .mockResolvedValueOnce(testVariationMainBranch);
+      .mockResolvedValueOnce(testVariationSourceBranch)
+      .mockResolvedValueOnce(testVariationSourceBranch);
+    service.create = jest
+      .fn()
+      .mockResolvedValueOnce(testVariationTargetBranch)
+      .mockResolvedValueOnce(testVariationTargetBranch);
 
-    await service.merge(project.id, mergedBranch);
+    await service.merge(project.id, fromBranch, targetBranch);
 
-    expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: project.id } });
     expect(buildFindOrCreateMock).toHaveBeenCalledWith({
-      branchName: project.mainBranchName,
+      branchName: targetBranch,
       projectId: project.id,
     });
-    expect(variationFindManyMock).toHaveBeenCalledWith({
-      where: { projectId: project.id, branchName: mergedBranch },
-    });
-    expect(getImageMock).toHaveBeenCalledWith(testVariation.baselineName);
     expect(service.find).toHaveBeenNthCalledWith(1, {
       name: testVariation.name,
       os: testVariation.os,
@@ -490,7 +496,7 @@ describe('TestVariationsService', () => {
       browser: testVariation.browser,
       viewport: testVariation.viewport,
       customTags: testVariation.customTags,
-      branchName: project.mainBranchName,
+      branchName: targetBranch,
       projectId: project.id,
     });
     expect(service.find).toHaveBeenNthCalledWith(2, {
@@ -500,14 +506,14 @@ describe('TestVariationsService', () => {
       browser: testVariationSecond.browser,
       viewport: testVariationSecond.viewport,
       customTags: testVariationSecond.customTags,
-      branchName: project.mainBranchName,
+      branchName: targetBranch,
       projectId: project.id,
     });
-
     expect(testRunCreateMock).toHaveBeenNthCalledWith(1, {
-      testVariation: testVariationMainBranch,
+      testVariation: testVariationTargetBranch,
       createTestRequestDto: {
         ...testVariation,
+        branchName: targetBranch,
         buildId: build.id,
         diffTollerancePercent: 0,
         merge: true,
@@ -516,9 +522,10 @@ describe('TestVariationsService', () => {
       imageBuffer: PNG.sync.write(image),
     });
     expect(testRunCreateMock).toHaveBeenNthCalledWith(2, {
-      testVariation: testVariationMainBranch,
+      testVariation: testVariationTargetBranch,
       createTestRequestDto: {
         ...testVariationSecond,
+        branchName: targetBranch,
         buildId: build.id,
         diffTollerancePercent: 0,
         merge: true,
