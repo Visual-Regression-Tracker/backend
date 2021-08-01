@@ -8,10 +8,13 @@ import { CreateUserDto } from '../src/users/dto/user-create.dto';
 import { UserLoginRequestDto } from '../src/users/dto/user-login-request.dto';
 import { compareSync } from 'bcryptjs';
 import { requestWithAuth, generateUser } from './preconditions';
+import { UserLoginResponseDto } from 'src/users/dto/user-login-response.dto';
+import { User } from '@prisma/client';
 
 describe('Users (e2e)', () => {
   let app: INestApplication;
   let usersService: UsersService;
+  let user: Partial<User>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -27,8 +30,12 @@ describe('Users (e2e)', () => {
     await app.close();
   });
 
+  afterEach(async () => {
+    await usersService.delete(user.id);
+  });
+
   it('POST /register', () => {
-    const user: CreateUserDto = {
+    user = {
       email: `${uuidAPIKey.create().uuid}@example.com'`,
       password: '123456',
       firstName: 'fName',
@@ -43,12 +50,13 @@ describe('Users (e2e)', () => {
         expect(res.body.firstName).toBe(user.firstName);
         expect(res.body.lastName).toBe(user.lastName);
         expect(res.body.apiKey).not.toBeNull();
+        user.id = res.body.id;
       });
   });
 
   it('POST /login', async () => {
     const password = '123456';
-    const user = await usersService.create(generateUser(password));
+    user = await usersService.create(generateUser(password));
     const loginData: UserLoginRequestDto = {
       email: user.email,
       password,
@@ -70,7 +78,7 @@ describe('Users (e2e)', () => {
 
   it('GET /newApiKey', async () => {
     const password = '123456';
-    const user = await usersService.create(generateUser(password));
+    user = await usersService.create(generateUser(password));
     const loggedUser = await usersService.login({
       email: user.email,
       password,
@@ -86,7 +94,7 @@ describe('Users (e2e)', () => {
   it('PUT /password', async () => {
     const newPassword = 'newPassword';
     const password = '123456';
-    const user = await usersService.create(generateUser(password));
+    user = await usersService.create(generateUser(password));
     const loggedUser = await usersService.login({
       email: user.email,
       password,
@@ -100,7 +108,7 @@ describe('Users (e2e)', () => {
 
   it('PUT /', async () => {
     const password = '123456';
-    const user = await usersService.create(generateUser(password));
+    user = await usersService.create(generateUser(password));
     const editedUser = {
       email: `${uuidAPIKey.create().uuid}@example.com'`,
       firstName: 'EDITEDfName',

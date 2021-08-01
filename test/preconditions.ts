@@ -10,7 +10,7 @@ import { Build } from '@prisma/client';
 import { CreateUserDto } from 'src/users/dto/user-create.dto';
 
 export const generateUser = (password: string): CreateUserDto => ({
-  email: `${uuidAPIKey.create().uuid}@example.com'`,
+  email: `${uuidAPIKey.create().uuid}@example.com`,
   password,
   firstName: 'fName',
   lastName: 'lName',
