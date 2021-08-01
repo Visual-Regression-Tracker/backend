@@ -24,6 +24,7 @@ export class TasksService {
       const testVariations = await this.prismaService.testVariation.findMany({
         where: {
           updatedAt: { lte: dateRemoveAfter },
+          branchName: { not: project.mainBranchName },
         },
       });
       this.logger.debug(
