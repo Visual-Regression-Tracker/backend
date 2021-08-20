@@ -10,13 +10,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     let status: number;
     const isUniqueConstaintException = this.isUniqueConstraintException(exception);
-    const isUserAuthorized = this.isUserAuthorized(exception);
+    const isForbiddenException = this.isForbiddenException(exception);
     try {
       status = isUniqueConstaintException ? HttpStatus.BAD_REQUEST : exception.getStatus();
     } catch {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
     }
-    const message = (isUniqueConstaintException || isUserAuthorized) ? this.getCustomMessageForException(exception) : exception.message;
+    const message = (isUniqueConstaintException || isForbiddenException) ? this.getCustomMessageForException(exception) : exception.message;
 
     Logger.error(exception, exception.stack);
 
@@ -29,7 +29,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     });
   }
 
-  isUserAuthorized(exception: HttpException): boolean {
+  isForbiddenException(exception: HttpException): boolean {
     return exception.message.includes("Forbidden resource");
   }
 
