@@ -11,6 +11,7 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { HttpExceptionFilter } from './http-exception.filter';
 import { CompareModule } from './compare/compare.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { UserLogsModule } from './shared/user-logs/user-logs.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     TestRunsModule,
     TestVariationsModule,
     CompareModule,
+    UserLogsModule
   ],
   providers: [
     PrismaService,

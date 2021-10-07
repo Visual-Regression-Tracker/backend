@@ -39,13 +39,14 @@ import { UpdateTestRunDto } from './dto/update-test.dto';
 import { CurrentUser } from '../shared/current-user.decorator';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
+import { UserLogInterceptor } from 'src/shared/user-logs/user-log-interceptor';
 
 @ApiTags('test-runs')
 @Controller('test-runs')
 export class TestRunsController {
   private readonly logger: Logger = new Logger(TestRunsController.name);
 
-  constructor(private testRunsService: TestRunsService) {}
+  constructor(private testRunsService: TestRunsService) { }
 
   @Get()
   @ApiOkResponse({ type: [TestRunDto] })
@@ -60,6 +61,7 @@ export class TestRunsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
+  @UseInterceptors(UserLogInterceptor)
   async approveTestRun(
     @CurrentUser() user: User,
     @Body() ids: string[],
@@ -75,6 +77,7 @@ export class TestRunsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
+  @UseInterceptors(UserLogInterceptor)
   async reject(@Body() ids: string[]): Promise<void> {
     this.logger.debug(`Going to reject TestRuns: ${ids}`);
     for (const id of ids) {
@@ -86,6 +89,7 @@ export class TestRunsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
+  @UseInterceptors(UserLogInterceptor)
   async delete(@Body() ids: string[]): Promise<void> {
     this.logger.debug(`Going to delete TestRuns: ${ids}`);
     for (const id of ids) {

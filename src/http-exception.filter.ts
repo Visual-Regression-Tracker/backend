@@ -9,14 +9,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     let status: number;
-    const isUniqueConstaintException = this.isUniqueConstraintException(exception);
+    const isUniqueConstraintException = this.isUniqueConstraintException(exception);
     const isForbiddenException = this.isForbiddenException(exception);
     try {
-      status = isUniqueConstaintException ? HttpStatus.BAD_REQUEST : exception.getStatus();
+      status = isUniqueConstraintException ? HttpStatus.BAD_REQUEST : exception.getStatus();
     } catch {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
     }
-    const message = (isUniqueConstaintException || isForbiddenException) ? this.getCustomMessageForException(exception) : exception.message;
+    const message = (isUniqueConstraintException || isForbiddenException) ? this.getCustomMessageForException(exception) : exception.message;
 
     Logger.error(exception, exception.stack);
 

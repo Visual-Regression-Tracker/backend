@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Body, Post, Param, ParseUUIDPipe, Delete, Put } from '@nestjs/common';
+import { Controller, Get, UseGuards, Body, Post, Param, ParseUUIDPipe, Delete, Put, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ProjectsService } from './projects.service';
@@ -8,6 +8,7 @@ import { ProjectDto } from './dto/project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
+import { UserLogInterceptor } from 'src/shared/user-logs/user-log-interceptor';
 
 @Controller('projects')
 @ApiTags('projects')
@@ -27,6 +28,7 @@ export class ProjectsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
+  @UseInterceptors(UserLogInterceptor)
   create(@Body() createProjectDto: CreateProjectDto): Promise<Project> {
     return this.projectsService.create(createProjectDto);
   }
@@ -36,6 +38,7 @@ export class ProjectsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
+  @UseInterceptors(UserLogInterceptor)
   update(@Body() projectDto: UpdateProjectDto): Promise<Project> {
     return this.projectsService.update(projectDto);
   }
@@ -46,6 +49,7 @@ export class ProjectsController {
   @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
   @ApiParam({ name: 'id', required: true })
+  @UseInterceptors(UserLogInterceptor)
   remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Project> {
     return this.projectsService.remove(id);
   }

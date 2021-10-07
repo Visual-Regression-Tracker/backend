@@ -13,6 +13,7 @@ import {
   ParseBoolPipe,
   forwardRef,
   Inject,
+  UseInterceptors,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
@@ -27,6 +28,7 @@ import { ModifyBuildDto } from './dto/build-modify.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
+import { UserLogInterceptor } from 'src/shared/user-logs/user-log-interceptor';
 
 @Controller('builds')
 @ApiTags('builds')
@@ -61,6 +63,7 @@ export class BuildsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
+  @UseInterceptors(UserLogInterceptor)
   remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Build> {
     return this.buildsService.remove(id);
   }
@@ -70,6 +73,7 @@ export class BuildsController {
   @ApiSecurity('api_key')
   @UseGuards(ApiGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
+  @UseInterceptors(UserLogInterceptor)
   async create(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
     const project = await this.projectService.findOne(createBuildDto.project);
     await this.buildsService.deleteOldBuilds(project.id, project.maxBuildAllowed);

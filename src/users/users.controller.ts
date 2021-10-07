@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Put, Delete, Param, ParseUUIDPipe, Patch } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Put, Delete, Param, ParseUUIDPipe, Patch, UseInterceptors } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { ApiOkResponse, ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
@@ -14,6 +14,7 @@ import { Roles } from '../shared/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { Logger } from '@nestjs/common';
+import { UserLogInterceptor } from 'src/shared/user-logs/user-log-interceptor';
 
 @Controller('users')
 @ApiTags('users')
@@ -24,6 +25,7 @@ export class UsersController {
 
   @Post('register')
   @ApiOkResponse({ type: UserLoginResponseDto })
+  @UseInterceptors(UserLogInterceptor)
   register(@Body() createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
     return this.usersService.create(createUserDto);
   }
@@ -46,6 +48,7 @@ export class UsersController {
   @ApiOkResponse({ type: Boolean })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(UserLogInterceptor)
   changePassword(@CurrentUser() user: User, @Body('password') password: string): Promise<boolean> {
     return this.usersService.changePassword(user, password);
   }
@@ -54,6 +57,7 @@ export class UsersController {
   @ApiOkResponse({ type: UserLoginResponseDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(UserLogInterceptor)
   update(@CurrentUser() user: User, @Body() updateUserDto: UpdateUserDto): Promise<UserLoginResponseDto> {
     return this.usersService.update(user.id, updateUserDto);
   }
@@ -73,6 +77,7 @@ export class UsersController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin)
+  @UseInterceptors(UserLogInterceptor)
   async delete(@Body() ids: string[]): Promise<void> {
     this.logger.debug(`Going to remove User: ${ids}`);
     for (const id of ids) {
