@@ -14,7 +14,7 @@ import { Roles } from '../shared/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { Logger } from '@nestjs/common';
-import { UserLogInterceptor } from 'src/shared/user-logs/user-log-interceptor';
+import { UserLogInterceptor } from '../shared/user-logs/user-log-interceptor';
 
 @Controller('users')
 @ApiTags('users')

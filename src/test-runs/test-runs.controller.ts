@@ -39,7 +39,7 @@ import { UpdateTestRunDto } from './dto/update-test.dto';
 import { CurrentUser } from '../shared/current-user.decorator';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
-import { UserLogInterceptor } from 'src/shared/user-logs/user-log-interceptor';
+import { UserLogInterceptor } from '../shared/user-logs/user-log-interceptor';
 
 @ApiTags('test-runs')
 @Controller('test-runs')

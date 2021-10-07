@@ -3,7 +3,7 @@ import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersController } from './users.controller';
 import { AuthModule } from '../auth/auth.module';
-import { VRTUserLogService } from 'src/shared/user-logs/user-log.service';
+import { VRTUserLogService } from '../shared/user-logs/user-log.service';
 
 @Module({
   imports: [AuthModule, HttpModule],

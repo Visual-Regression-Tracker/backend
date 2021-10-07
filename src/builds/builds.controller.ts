@@ -28,7 +28,7 @@ import { ModifyBuildDto } from './dto/build-modify.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
-import { UserLogInterceptor } from 'src/shared/user-logs/user-log-interceptor';
+import { UserLogInterceptor } from '../shared/user-logs/user-log-interceptor';
 
 @Controller('builds')
 @ApiTags('builds')

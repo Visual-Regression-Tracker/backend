@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { VRTUserLogService } from '../shared/user-logs/user-log.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
@@ -12,6 +13,7 @@ describe('Users Controller', () => {
       providers: [
         { provide: UsersService, useValue: {} },
         { provide: PrismaService, useValue: {} },
+        { provide: VRTUserLogService, useValue: {} },
       ],
     }).compile();
 

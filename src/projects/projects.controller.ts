@@ -8,7 +8,7 @@ import { ProjectDto } from './dto/project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
-import { UserLogInterceptor } from 'src/shared/user-logs/user-log-interceptor';
+import { UserLogInterceptor } from '../shared/user-logs/user-log-interceptor';
 
 @Controller('projects')
 @ApiTags('projects')

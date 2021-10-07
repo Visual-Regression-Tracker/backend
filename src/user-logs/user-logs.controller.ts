@@ -3,7 +3,7 @@ import { ApiOkResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { Logger } from '@nestjs/common';
 import { UserLogDto } from './dto/user-log.dto';
-import { VRTUserLogService } from 'src/shared/user-logs/user-log.service';
+import { VRTUserLogService } from '../shared/user-logs/user-log.service';
 
 @Controller('logs')
 export class UserLogsController {

@@ -1,7 +1,7 @@
 import { HttpService, Injectable, Logger } from "@nestjs/common";
 import { map } from "rxjs/operators";
-import { PrismaService } from "src/prisma/prisma.service";
-import { UserLogDto } from "src/user-logs/dto/user-log.dto";
+import { PrismaService } from "../../prisma/prisma.service";
+import { UserLogDto } from "../../user-logs/dto/user-log.dto";
 
 enum LOG_NAMES {
     PROFILE_UPDATED = 'profile_updated',

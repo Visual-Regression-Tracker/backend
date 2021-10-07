@@ -3,6 +3,7 @@ import { TestRunsController } from './test-runs.controller';
 import { TestRunsService } from './test-runs.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { VRTUserLogService } from '../shared/user-logs/user-log.service';
 
 describe('TestRuns Controller', () => {
   let controller: TestRunsController;
@@ -14,6 +15,7 @@ describe('TestRuns Controller', () => {
         { provide: TestRunsService, useValue: {} },
         { provide: TestVariationsService, useValue: {} },
         { provide: PrismaService, useValue: {} },
+        { provide: VRTUserLogService, useValue: {} },
       ],
     }).compile();
 

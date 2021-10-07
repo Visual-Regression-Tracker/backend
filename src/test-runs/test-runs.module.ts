@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsController } from './test-runs.controller';
 import { TestVariationsModule } from '../test-variations/test-variations.module';
 import { CompareModule } from '../compare/compare.module';
-import { VRTUserLogService } from 'src/shared/user-logs/user-log.service';
+import { VRTUserLogService } from '../shared/user-logs/user-log.service';
 
 @Module({
   imports: [SharedModule, forwardRef(() => TestVariationsModule), CompareModule, HttpModule],

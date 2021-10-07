@@ -10,6 +10,7 @@ import { Build } from '.prisma/client';
 import { BuildDto } from './dto/build.dto';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { EventsGateway } from '../shared/events/events.gateway';
+import { VRTUserLogService } from '../shared/user-logs/user-log.service';
 
 const initController = async ({
   projectFindOneMock = jest.fn(),
@@ -37,6 +38,7 @@ const initController = async ({
       },
       { provide: EventsGateway, useValue: { buildCreated: eventBuildCreatedMock } },
       { provide: PrismaService, useValue: {} },
+      { provide: VRTUserLogService, useValue: {} },
       { provide: ApiGuard, useValue: {} },
       { provide: JwtAuthGuard, useValue: {} },
     ],
