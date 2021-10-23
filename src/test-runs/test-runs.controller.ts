@@ -55,6 +55,14 @@ export class TestRunsController {
     return this.testRunsService.findMany(buildId);
   }
 
+  @Get(':id')
+  @ApiOkResponse({ type: TestRunDto })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRunDto> {
+    return this.testRunsService.findOne(id);
+  }
+
   @Post('approve')
   @ApiQuery({ name: 'merge', required: false })
   @ApiBearerAuth()
