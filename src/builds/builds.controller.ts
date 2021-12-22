@@ -75,7 +75,7 @@ export class BuildsController {
     await this.buildsService.deleteOldBuilds(project.id, project.maxBuildAllowed);
     const build = await this.buildsService.findOrCreate({
       projectId: project.id,
-      branchName: createBuildDto.branchName,
+      branchName: (createBuildDto.branchName && createBuildDto.branchName.trim().length > 0) ? createBuildDto.branchName : project.mainBranchName,
       ciBuildId: createBuildDto.ciBuildId,
     });
     return new BuildDto(build);
