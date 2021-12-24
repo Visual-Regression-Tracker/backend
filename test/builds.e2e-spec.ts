@@ -94,6 +94,23 @@ describe('Builds (e2e)', () => {
         });
     });
 
+    it('201 with no branchname and no ciBuildId', () => {
+      const createBuildDto: CreateBuildDto = {
+        project: project.id,
+      };
+      return requestWithApiKey(app, 'post', '/builds', user.apiKey)
+        .send(createBuildDto)
+        .expect(201)
+        .expect((res) => {
+          expect(res.body.projectId).toBe(project.id);
+          expect(res.body.branchName).toBe(TEST_PROJECT.mainBranchName);
+          expect(res.body.failedCount).toBe(0);
+          expect(res.body.passedCount).toBe(0);
+          expect(res.body.unresolvedCount).toBe(0);
+          expect(res.body.isRunning).toBe(true);
+        });
+    });
+
     it('201 by name', () => {
       const createBuildDto: CreateBuildDto = {
         branchName: 'branchName',
