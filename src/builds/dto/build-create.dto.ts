@@ -8,9 +8,11 @@ export class CreateBuildDto {
   @IsNotEmpty()
   readonly ciBuildId?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  readonly branchName: string;
+  @IsNotEmpty()
+  readonly branchName?: string;
 
   @ApiProperty()
   @IsString()
