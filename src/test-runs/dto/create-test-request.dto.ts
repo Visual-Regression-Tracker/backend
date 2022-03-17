@@ -17,14 +17,14 @@ export class CreateTestRequestDto extends BaselineDataDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
-  @Transform((it) => parseFloat(it))
+  @Transform(({value}) => parseFloat(value))
   diffTollerancePercent?: number;
 
   @ApiPropertyOptional()
   @IsBoolean()
   @IsOptional()
-  @Transform((it) => {
-    switch (it) {
+  @Transform(({value}) => {
+    switch (value) {
       case 'true':
         return true;
       case 'false':
@@ -37,11 +37,11 @@ export class CreateTestRequestDto extends BaselineDataDto {
 
   @ApiPropertyOptional({ type: [IgnoreAreaDto] })
   @IsOptional()
-  @Transform((it) => {
-    if (isArray(it)) {
+  @Transform(({value}) => {
+    if (isArray(value)) {
       return it;
     }
-    return JSON.parse(it);
+    return JSON.parse(value);
   })
   ignoreAreas?: IgnoreAreaDto[];
 }
