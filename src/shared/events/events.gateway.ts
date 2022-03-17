@@ -5,12 +5,12 @@ import { BuildDto } from '../../builds/dto/build.dto';
 import { debounce } from 'lodash';
 import { PrismaService } from '../../prisma/prisma.service';
 
-@WebSocketGateway()
+@WebSocketGateway({ cors: true })
 export class EventsGateway {
   @WebSocketServer()
   server: Server;
 
-  constructor(private prismaService: PrismaService) { }
+  constructor(private prismaService: PrismaService) {}
 
   private debounceTimeout = 1500;
   private maxWait = 3000;
