@@ -12,7 +12,7 @@ import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { BuildsController } from '../src/builds/builds.controller';
 import { TEST_PROJECT } from '../src/_data_';
 
-jest.useFakeTimers();
+jest.useFakeTimers('legacy');
 
 describe('Builds (e2e)', () => {
   let app: INestApplication;

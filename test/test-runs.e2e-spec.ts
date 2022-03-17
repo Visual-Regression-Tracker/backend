@@ -11,7 +11,7 @@ import { BuildsService } from '../src/builds/builds.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
 import { TEST_PROJECT } from '../src/_data_';
 
-jest.useFakeTimers();
+jest.useFakeTimers('legacy');
 
 describe('TestRuns (e2e)', () => {
   let app: INestApplication;
