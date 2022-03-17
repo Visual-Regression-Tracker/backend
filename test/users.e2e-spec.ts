@@ -4,11 +4,9 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import uuidAPIKey from 'uuid-apikey';
 import { UsersService } from '../src/users/users.service';
-import { CreateUserDto } from '../src/users/dto/user-create.dto';
 import { UserLoginRequestDto } from '../src/users/dto/user-login-request.dto';
 import { compareSync } from 'bcryptjs';
 import { requestWithAuth, generateUser } from './preconditions';
-import { UserLoginResponseDto } from 'src/users/dto/user-login-response.dto';
 import { User } from '@prisma/client';
 
 describe('Users (e2e)', () => {
