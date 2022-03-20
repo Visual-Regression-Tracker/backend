@@ -202,7 +202,7 @@ export class TestVariationsService {
           ...getTestVariationUniqueData(sourceBranchTestVariation),
         });
 
-        if (destintionBranchTestVariation.branchName !== toBranch) {
+        if (destintionBranchTestVariation?.branchName !== toBranch) {
           destintionBranchTestVariation = await this.create({ createTestRequestDto });
         }
 
