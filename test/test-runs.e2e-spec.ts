@@ -218,6 +218,7 @@ describe('TestRuns (e2e)', () => {
         .field('diffTollerancePercent', '0.12')
         .field('merge', 'false')
         .field('ignoreAreas', '[]')
+        .field('comment', 'Comment')
         .attach('image', image_v1)
         .expect(201);
     });
