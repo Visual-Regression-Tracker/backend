@@ -34,9 +34,7 @@ export class TestRunsService {
     return list.map((item) => new TestRunDto(item));
   }
 
-  async findOne(
-    id: string
-  ): Promise<
+  async findOne(id: string): Promise<
     TestRun & {
       testVariation?: TestVariation;
     }
@@ -233,7 +231,7 @@ export class TestRunsService {
         baselineBranchName: testVariation.branchName,
         ignoreAreas: testVariation.ignoreAreas,
         tempIgnoreAreas: JSON.stringify(createTestRequestDto.ignoreAreas),
-        comment: testVariation.comment,
+        comment: createTestRequestDto.comment || testVariation.comment,
         diffTollerancePercent: createTestRequestDto.diffTollerancePercent,
         branchName: createTestRequestDto.branchName,
         merge: createTestRequestDto.merge,

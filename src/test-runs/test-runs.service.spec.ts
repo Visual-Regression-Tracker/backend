@@ -504,6 +504,7 @@ describe('TestRunsService', () => {
       device: 'device',
       branchName: 'develop',
       customTags: 'customTags',
+      comment: 'new comment',
     };
     const testVariation: TestVariation = {
       id: '123',
