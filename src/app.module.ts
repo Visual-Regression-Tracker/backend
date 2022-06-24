@@ -11,6 +11,8 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { HttpExceptionFilter } from './http-exception.filter';
 import { CompareModule } from './compare/compare.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { TerminusModule } from '@nestjs/terminus';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
@@ -23,6 +25,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ProjectsModule,
     TestRunsModule,
     TestVariationsModule,
+    TerminusModule,
     CompareModule,
   ],
   providers: [
@@ -36,5 +39,6 @@ import { ScheduleModule } from '@nestjs/schedule';
       useClass: CacheInterceptor,
     },
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}
