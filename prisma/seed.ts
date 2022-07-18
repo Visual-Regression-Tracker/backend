@@ -1,5 +1,4 @@
 import { PrismaClient, Role } from '@prisma/client';
-import uuidAPIKey from 'uuid-apikey';
 import { genSalt, hash } from 'bcryptjs';
 
 const prisma = new PrismaClient({
@@ -38,7 +37,7 @@ async function createDefaultUser() {
         firstName: 'fname',
         lastName: 'lname',
         role: Role.admin,
-        apiKey: uuidAPIKey.create({ noDashes: true }).apiKey,
+        apiKey: 'DEFAULTUSERAPIKEYTOBECHANGED',
         password: await hash(defaultPassword, salt),
       },
     })
