@@ -23,6 +23,7 @@ export class TasksService {
 
       const testVariations = await this.prismaService.testVariation.findMany({
         where: {
+          projectId: project.id,
           updatedAt: { lte: dateRemoveAfter },
           branchName: { not: project.mainBranchName },
         },
