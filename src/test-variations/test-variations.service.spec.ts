@@ -111,167 +111,98 @@ describe('TestVariationsService', () => {
   });
 
   describe('find', () => {
-    it('can find by main branch', async () => {
-      const createRequest: CreateTestRequestDto = {
-        buildId: 'buildId',
-        projectId: projectMock.id,
-        name: 'Test name',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        branchName: 'develop',
-      };
+    const createRequest: CreateTestRequestDto = {
+      buildId: 'buildId',
+      projectId: projectMock.id,
+      name: 'Test name',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: '',
+      branchName: 'develop',
+    };
 
-      const variationMock: TestVariation = {
-        id: '123',
-        projectId: projectMock.id,
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        ignoreAreas: '[]',
-        comment: 'some comment',
-        branchName: 'develop',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+    const variationMock: TestVariation = {
+      id: '123',
+      projectId: projectMock.id,
+      name: 'Test name',
+      baselineName: 'baselineName',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: '',
+      ignoreAreas: '[]',
+      comment: 'some comment',
+      branchName: 'develop',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const findRequestTemplate = {
+      name: createRequest.name,
+      projectId: createRequest.projectId,
+      os: createRequest.os,
+      browser: createRequest.browser,
+      viewport: createRequest.viewport,
+      device: createRequest.device,
+      customTags: createRequest.customTags,
+    };
+
+    it('can find by main branch', async () => {
+      // .Arrange
       const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
       service = await initModule({ projectFindUniqueMock });
       service.findUnique = jest.fn().mockResolvedValueOnce(variationMock).mockResolvedValueOnce(undefined);
 
+      // .Act
       const result = await service.find(createRequest);
 
+      // .Assert - use variation from main branch if no variation for feature branch
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(service.findUnique).toHaveBeenNthCalledWith(1, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
+        ...findRequestTemplate,
         branchName: projectMock.mainBranchName,
       });
       expect(service.findUnique).toHaveBeenNthCalledWith(2, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
+        ...findRequestTemplate,
         branchName: createRequest.branchName,
       });
       expect(result).toBe(variationMock);
     });
 
     it('can find by current branch', async () => {
-      const createRequest: CreateTestRequestDto = {
-        buildId: 'buildId',
-        projectId: projectMock.id,
-        name: 'Test name',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        branchName: 'develop',
-      };
-
-      const variationMock: TestVariation = {
-        id: '123',
-        projectId: projectMock.id,
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        ignoreAreas: '[]',
-        comment: 'some comment',
-        branchName: 'develop',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      // .Arrange
       const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
       service = await initModule({ projectFindUniqueMock });
       service.findUnique = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(variationMock);
 
+      // .Act
       const result = await service.find(createRequest);
 
+      // .Assert - use variation from feature branch if exists
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(service.findUnique).toHaveBeenNthCalledWith(1, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
+        ...findRequestTemplate,
         branchName: projectMock.mainBranchName,
       });
       expect(service.findUnique).toHaveBeenNthCalledWith(2, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
+        ...findRequestTemplate,
         branchName: createRequest.branchName,
       });
       expect(result).toBe(variationMock);
     });
 
     it('can find by current branch but main branch is more relevant', async () => {
-      const createRequest: CreateTestRequestDto = {
-        buildId: 'buildId',
-        projectId: projectMock.id,
-        name: 'Test name',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        branchName: 'develop',
-      };
-
+      // .Arrange
       const variationMainMock: TestVariation = {
-        id: '123',
-        projectId: projectMock.id,
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        ignoreAreas: '[]',
-        comment: 'some comment',
+        ...variationMock,
         branchName: 'master',
-        createdAt: new Date(),
-        updatedAt: new Date(),
       };
       const variationFeatureMock: TestVariation = {
-        id: '123',
-        projectId: projectMock.id,
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        ignoreAreas: '[]',
-        comment: 'some comment',
+        ...variationMock,
         branchName: 'develop',
-        createdAt: new Date(),
         updatedAt: new Date(variationMainMock.updatedAt.getDate() - 1),
       };
       const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
@@ -281,30 +212,54 @@ describe('TestVariationsService', () => {
         .mockResolvedValueOnce(variationMainMock)
         .mockResolvedValueOnce(variationFeatureMock);
 
+      // .Act
       const result = await service.find(createRequest);
 
+      // .Assert - use variation from main branch if it updated later
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(service.findUnique).toHaveBeenNthCalledWith(1, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
+        ...findRequestTemplate,
         branchName: projectMock.mainBranchName,
       });
       expect(service.findUnique).toHaveBeenNthCalledWith(2, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
+        ...findRequestTemplate,
         branchName: createRequest.branchName,
       });
       expect(result).toBe(variationMainMock);
+    });
+
+    it('can find by specified baseline branch', async () => {
+      // .Arrange
+      const createRequestWithBaseline = {
+        ...createRequest,
+        baselineBranchName: 'baseline-branch',
+      };
+      const variationBaselineMock: TestVariation = {
+        ...variationMock,
+        branchName: 'baseline-branch',
+      };
+      const variationFeatureMock: TestVariation = {
+        ...variationMock,
+        branchName: 'develop',
+      };
+      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
+      service = await initModule({ projectFindUniqueMock });
+      service.findUnique = jest.fn().mockResolvedValueOnce(variationBaselineMock).mockResolvedValueOnce(undefined);
+
+      // .Act
+      const result = await service.find(createRequestWithBaseline);
+
+      // .Assert - use variation from main branch if it updated later
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
+        ...findRequestTemplate,
+        branchName: createRequestWithBaseline.baselineBranchName,
+      });
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
+        ...findRequestTemplate,
+        branchName: createRequest.branchName,
+      });
+      expect(result).toBe(variationBaselineMock);
     });
   });
 
