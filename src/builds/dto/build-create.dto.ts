@@ -14,6 +14,11 @@ export class CreateBuildDto {
   @IsNotEmpty()
   readonly branchName?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  readonly baselineBranchName?: string;
+
   @ApiProperty()
   @IsString()
   readonly project: string;

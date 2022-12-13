@@ -16,6 +16,11 @@ export class CreateTestRequestDto extends BaselineDataDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  baselineBranchName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
   @Transform(({ value }) => parseFloat(value))
   diffTollerancePercent?: number;
