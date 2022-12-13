@@ -282,6 +282,7 @@ describe('TestVariationsService', () => {
         .mockResolvedValueOnce(variationFeatureMock);
 
       const result = await service.find(createRequest);
+      console.log('sdf');
 
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(service.findUnique).toHaveBeenNthCalledWith(1, {
