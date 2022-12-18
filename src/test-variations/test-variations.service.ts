@@ -42,7 +42,7 @@ export class TestVariationsService {
   }
 
   async findUnique(
-    data: Prisma.ProjectIdNameBrowserDeviceOsViewportCustomTagsBranchNameCompoundUniqueInput
+    data: Prisma.TestVariationProjectIdNameBrowserDeviceOsViewportCustomTagsBranchNameCompoundUniqueInput
   ): Promise<TestVariation | null> {
     return this.prismaService.testVariation.findUnique({
       where: {
