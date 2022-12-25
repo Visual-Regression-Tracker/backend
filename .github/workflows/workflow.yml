@@ -47,7 +47,7 @@ jobs:
         run: npx ts-node ./prisma/manual_migrations.ts
 
       - name: Apply DB migrations
-        run: npx prisma migrate deploy
+        run: npx prisma migrate up -c --experimental
 
       - name: Seed DB data
         run: npx ts-node ./prisma/seed.ts
