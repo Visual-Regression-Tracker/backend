@@ -493,7 +493,7 @@ describe('TestRunsService', () => {
     expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
   });
 
-  it('postTestRun', async () => {
+  describe('postTestRun', () => {
     const createTestRequestDto: CreateTestRequestDto = {
       buildId: 'buildId',
       projectId: 'projectId',
@@ -522,43 +522,97 @@ describe('TestRunsService', () => {
       updatedAt: new Date(),
       branchName: 'master',
     };
-    const testRun: TestRun = generateTestRun();
-    const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
-    const testVariationFindMock = jest.fn().mockResolvedValueOnce(testVariation);
-    const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
-    const deleteMock = jest.fn();
-    const createMock = jest.fn().mockResolvedValueOnce(testRun);
-    const service = await initService({
-      projectFindUniqueMock,
-      testVariationFindMock,
-      testRunFindManyMock,
-    });
-    service.delete = deleteMock;
-    service.create = createMock;
-    service.calculateDiff = jest.fn().mockResolvedValueOnce(testRun);
-    service['tryAutoApproveByPastBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
-    service['tryAutoApproveByNewBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
-    const baselineData: BaselineDataDto = {
-      ...getTestVariationUniqueData(createTestRequestDto),
-      branchName: createTestRequestDto.branchName,
-    };
 
-    await service.postTestRun({ createTestRequestDto, imageBuffer });
+    it('default', async () => {
+      const testRun: TestRun = generateTestRun();
+      const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
+      const testVariationFindMock = jest.fn().mockResolvedValueOnce(testVariation);
+      const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
+      const deleteMock = jest.fn();
+      const createMock = jest.fn().mockResolvedValueOnce(testRun);
+      const service = await initService({
+        projectFindUniqueMock,
+        testVariationFindMock,
+        testRunFindManyMock,
+      });
+      service.delete = deleteMock;
+      service.create = createMock;
+      service.calculateDiff = jest.fn().mockResolvedValueOnce(testRun);
+      service['tryAutoApproveByPastBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
+      service['tryAutoApproveByNewBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
+      const baselineData: BaselineDataDto = {
+        ...getTestVariationUniqueData(createTestRequestDto),
+        branchName: createTestRequestDto.branchName,
+      };
 
-    expect(testVariationFindMock).toHaveBeenCalledWith(createTestRequestDto);
-    expect(testRunFindManyMock).toHaveBeenCalledWith({
-      where: {
-        buildId: createTestRequestDto.buildId,
-        ...baselineData,
-        NOT: { OR: [{ status: TestStatus.approved }, { status: TestStatus.autoApproved }] },
-      },
+      await service.postTestRun({ createTestRequestDto, imageBuffer });
+
+      expect(testVariationFindMock).toHaveBeenCalledWith(createTestRequestDto);
+      expect(testRunFindManyMock).toHaveBeenCalledWith({
+        where: {
+          buildId: createTestRequestDto.buildId,
+          ...baselineData,
+          NOT: { OR: [{ status: TestStatus.approved }, { status: TestStatus.autoApproved }] },
+        },
+      });
+      expect(deleteMock).toHaveBeenCalledWith(testRun.id);
+      expect(createMock).toHaveBeenCalledWith({ testVariation, createTestRequestDto, imageBuffer });
+      expect(service.calculateDiff).toHaveBeenCalledWith(createTestRequestDto.projectId, testRun);
+      expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
+      expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
+      expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
     });
-    expect(deleteMock).toHaveBeenCalledWith(testRun.id);
-    expect(createMock).toHaveBeenCalledWith({ testVariation, createTestRequestDto, imageBuffer });
-    expect(service.calculateDiff).toHaveBeenCalledWith(createTestRequestDto.projectId, testRun);
-    expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
-    expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
-    expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
+
+    it('with baseLineName', async () => {
+      const testRun: TestRun = generateTestRun();
+      const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
+      const testVariationFindMock = jest.fn().mockResolvedValueOnce(testVariation);
+      const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
+      const deleteMock = jest.fn();
+      const createMock = jest.fn().mockResolvedValueOnce(testRun);
+      const service = await initService({
+        projectFindUniqueMock,
+        testVariationFindMock,
+        testRunFindManyMock,
+      });
+      service.delete = deleteMock;
+      service.create = createMock;
+      service.calculateDiff = jest.fn().mockResolvedValueOnce(testRun);
+      service['tryAutoApproveByPastBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
+      service['tryAutoApproveByNewBaselines'] = jest.fn().mockResolvedValueOnce(testRun);
+      const baselineData: BaselineDataDto = {
+        ...getTestVariationUniqueData(createTestRequestDto),
+        branchName: createTestRequestDto.branchName,
+      };
+      const createTestRunWithBaselineDto: CreateTestRequestDto = {
+        ...createTestRequestDto,
+        baselineBranchName: 'baseline-branch',
+      };
+
+      await service.postTestRun({ createTestRequestDto: createTestRunWithBaselineDto, imageBuffer });
+
+      expect(testVariationFindMock).toHaveBeenCalledWith({
+        ...createTestRunWithBaselineDto,
+        sourceBranch: createTestRunWithBaselineDto.baselineBranchName,
+      });
+      expect(testRunFindManyMock).toHaveBeenCalledWith({
+        where: {
+          buildId: createTestRequestDto.buildId,
+          ...baselineData,
+          NOT: { OR: [{ status: TestStatus.approved }, { status: TestStatus.autoApproved }] },
+        },
+      });
+      expect(deleteMock).toHaveBeenCalledWith(testRun.id);
+      expect(createMock).toHaveBeenCalledWith({
+        testVariation,
+        createTestRequestDto: createTestRunWithBaselineDto,
+        imageBuffer,
+      });
+      expect(service.calculateDiff).toHaveBeenCalledWith(createTestRequestDto.projectId, testRun);
+      expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
+      expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
+      expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
+    });
   });
 
   describe('tryAutoApproveByNewBaselines', () => {
