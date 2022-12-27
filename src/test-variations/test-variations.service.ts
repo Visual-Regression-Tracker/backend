@@ -80,10 +80,10 @@ export class TestVariationsService {
    * @returns
    */
   async find(
-    createTestRequestDto: BaselineDataDto & { projectId: string; baselineBranchName?: string }
+    createTestRequestDto: BaselineDataDto & { projectId: string; sourceBranch?: string }
   ): Promise<TestVariation | null> {
     const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
-    const baselineBranchName = createTestRequestDto.baselineBranchName ?? project.mainBranchName;
+    const baselineBranchName = createTestRequestDto.sourceBranch ?? project.mainBranchName;
 
     const [baselineBranchTestVariation, currentBranchTestVariation] = await Promise.all([
       // search main branch variation
