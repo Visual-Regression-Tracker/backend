@@ -56,7 +56,10 @@ export class TestRunsService {
   }): Promise<TestRunResultDto> {
     const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
 
-    let testVariation = await this.testVariationService.find(createTestRequestDto);
+    let testVariation = await this.testVariationService.find({
+      ...createTestRequestDto,
+      sourceBranch: createTestRequestDto.baselineBranchName,
+    });
     // creates variatioin if does not exist
     if (!testVariation) {
       testVariation = await this.testVariationService.create({

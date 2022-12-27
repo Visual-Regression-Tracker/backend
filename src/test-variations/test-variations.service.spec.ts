@@ -232,7 +232,7 @@ describe('TestVariationsService', () => {
       // .Arrange
       const createRequestWithBaseline = {
         ...createRequest,
-        baselineBranchName: 'baseline-branch',
+        sourceBranch: 'baseline-branch',
       };
       const variationBaselineMock: TestVariation = {
         ...variationMock,
@@ -253,7 +253,7 @@ describe('TestVariationsService', () => {
       expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
       expect(service.findUnique).toHaveBeenNthCalledWith(1, {
         ...findRequestTemplate,
-        branchName: createRequestWithBaseline.baselineBranchName,
+        branchName: createRequestWithBaseline.sourceBranch,
       });
       expect(service.findUnique).toHaveBeenNthCalledWith(2, {
         ...findRequestTemplate,
