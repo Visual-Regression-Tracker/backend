@@ -4,6 +4,7 @@ module.exports = async () => {
     name: 'e2e',
     displayName: 'E2E Tests',
     roots: ['./'],
+    testTimeout: 30000,
     testRegex: '.e2e-spec.ts$',
     moduleFileExtensions: ['js', 'json', 'ts'],
     transform: {
