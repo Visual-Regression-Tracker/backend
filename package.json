@@ -37,7 +37,7 @@
     "bcryptjs": "^2.4.3",
     "cache-manager": "^3.6.0",
     "class-transformer": "^0.5.1",
-    "class-validator": "^0.13.2",
+    "class-validator": "^0.14.0",
     "fs-extra": "^10.0.1",
     "looks-same": "^7.3.0",
     "odiff-bin": "^2.5.0",
