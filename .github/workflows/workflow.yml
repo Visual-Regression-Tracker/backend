@@ -23,7 +23,7 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Unit tests
+      - name: Run prisma generate
         run: npx prisma generate
 
       - name: Unit tests
