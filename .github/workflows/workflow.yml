@@ -24,6 +24,9 @@ jobs:
         run: npm ci
 
       - name: Unit tests
+        run: npx prisma generate
+
+      - name: Unit tests
         run: npm run test:cov
 
       - name: Codacy Coverage Reporter
