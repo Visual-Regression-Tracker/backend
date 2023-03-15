@@ -30,7 +30,7 @@ export class CreateTestRequestDto extends BaselineDataDto {
       case 'false':
         return false;
       default:
-        return it;
+        return value;
     }
   })
   merge?: boolean;
@@ -39,7 +39,7 @@ export class CreateTestRequestDto extends BaselineDataDto {
   @IsOptional()
   @Transform(({ value }) => {
     if (isArray(value)) {
-      return it;
+      return value;
     }
     return JSON.parse(value);
   })
