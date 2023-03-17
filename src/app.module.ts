@@ -1,4 +1,5 @@
 import { CacheInterceptor, CacheModule, Module } from '@nestjs/common';
+import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { BuildsModule } from './builds/builds.module';
@@ -29,6 +30,7 @@ import { HealthController } from './health/health.controller';
     CompareModule,
   ],
   providers: [
+    AppService,
     PrismaService,
     {
       provide: APP_FILTER,
