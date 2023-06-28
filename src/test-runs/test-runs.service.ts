@@ -56,6 +56,7 @@ export class TestRunsService {
   }): Promise<TestRunResultDto> {
     const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
 
+    //createTestRequestDto.branchName===createTestRequestDto.baselineBranchName
     let testVariation = await this.testVariationService.find({
       ...createTestRequestDto,
       sourceBranch: createTestRequestDto.baselineBranchName,
@@ -104,12 +105,14 @@ export class TestRunsService {
     if (!testVariation) {
       throw new Error('No test variation found. Re-create test run');
     }
+    const isManualApprove = !autoApprove;
+    const isLocalBaseline = testRun.baselineBranchName === testRun.branchName;
 
     // save new baseline
     const baseline = this.staticService.getImage(testRun.imageName);
     const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
-    if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
+    if (!merge && isManualApprove && !isLocalBaseline) {
       // replace main branch with feature branch test variation
       const featureBranchTestVariation = await this.testVariationService.findUnique({
         ...testRun,
@@ -140,7 +143,7 @@ export class TestRunsService {
       );
     }
 
-    if (!autoApprove || (autoApprove && testRun.baselineBranchName === testRun.branchName)) {
+    if (isManualApprove || isLocalBaseline) {
       // add baseline
       await this.testVariationService.addBaseline({
         id: testVariation.id,
