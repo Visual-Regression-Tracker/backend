@@ -55,20 +55,58 @@ export class TestRunsService {
     imageBuffer: Buffer;
   }): Promise<TestRunResultDto> {
     const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
+    if (createTestRequestDto.baselineBranchName === project.mainBranchName) {
+      // Capability branch can not be equal to main branch
+      createTestRequestDto.baselineBranchName = undefined;
+    }
 
-    //createTestRequestDto.branchName===createTestRequestDto.baselineBranchName
     let testVariation = await this.testVariationService.find({
       ...createTestRequestDto,
       sourceBranch: createTestRequestDto.baselineBranchName,
     });
-    // creates variatioin if does not exist
+
+    // Creates variation if does not exist
     if (!testVariation) {
-      testVariation = await this.testVariationService.create({
-        createTestRequestDto,
-      });
+      // TODO: Rename baselineBranchName to capabilityBranchName
+      if (createTestRequestDto.baselineBranchName) {
+        // This is either capability branch or feature branch based on capability branch.
+        // If test variation does not exist in these branches,
+        // then try to find it in the main branch and copy it to capability branch.
+        // If testVariation still not found, then it is actually a new screenshot.
+        testVariation = await this.testVariationService.findAndClone(
+          createTestRequestDto,
+          project.mainBranchName,
+          createTestRequestDto.baselineBranchName
+        );
+      }
+      if (!testVariation) {
+        testVariation = await this.testVariationService.create({
+          createTestRequestDto,
+        });
+      }
     }
 
-    // delete previous test run if exists
+    // Delete previous test run in the build if exists
+    await this.deletePreviousTestRun(createTestRequestDto);
+
+    // Create test run result
+    const testRun = await this.create({ testVariation, createTestRequestDto, imageBuffer });
+
+    // Calculate diff
+    let testRunWithResult = await this.calculateDiff(createTestRequestDto.projectId, testRun);
+
+    // Try auto approve
+    if (project.autoApproveFeature) {
+      this.tryAutoApprove(testVariation, testRunWithResult);
+    }
+    return new TestRunResultDto(testRunWithResult, testVariation);
+  }
+
+  //===============================================================================================
+  // If the build already contains test run for the screenshot and it is NOT approved/autoapproved,
+  // then delete it.
+  //===============================================================================================
+  private async deletePreviousTestRun(createTestRequestDto: CreateTestRequestDto) {
     const [previousTestRun] = await this.prismaService.testRun.findMany({
       where: {
         buildId: createTestRequestDto.buildId,
@@ -80,19 +118,6 @@ export class TestRunsService {
     if (!!previousTestRun) {
       await this.delete(previousTestRun.id);
     }
-
-    // create test run result
-    const testRun = await this.create({ testVariation, createTestRequestDto, imageBuffer });
-
-    // calculate diff
-    let testRunWithResult = await this.calculateDiff(createTestRequestDto.projectId, testRun);
-
-    // try auto approve
-    if (project.autoApproveFeature) {
-      testRunWithResult = await this.tryAutoApproveByPastBaselines({ testVariation, testRun: testRunWithResult });
-      testRunWithResult = await this.tryAutoApproveByNewBaselines({ testVariation, testRun: testRunWithResult });
-    }
-    return new TestRunResultDto(testRunWithResult, testVariation);
   }
 
   /**
@@ -194,7 +219,7 @@ export class TestRunsService {
       data: {
         image: testRun.imageName,
         baseline: testRun.baselineName,
-        ignoreAreas: this.getAllIgnoteAreas(testRun),
+        ignoreAreas: this.getAllIgnoreAreas(testRun),
         diffTollerancePercent: testRun.diffTollerancePercent,
         saveDiffAsFile: true,
       },
@@ -301,14 +326,23 @@ export class TestRunsService {
       });
   }
 
-  private getAllIgnoteAreas(testRun: TestRun): IgnoreAreaDto[] {
+  private getAllIgnoreAreas(testRun: TestRun): IgnoreAreaDto[] {
     const ignoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas) ?? [];
     const tempIgnoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.tempIgnoreAreas) ?? [];
     return ignoreAreas.concat(tempIgnoreAreas);
   }
 
+  //===============================================================================================
+  // Try to auto approve test run using different auto-approval techniques
+  //===============================================================================================
+  private async tryAutoApprove(testVariation: TestVariation, testRunWithResult: TestRun): Promise<TestRun> {
+    testRunWithResult = await this.tryAutoApproveByPastBaselines({ testVariation, testRun: testRunWithResult });
+    testRunWithResult = await this.tryAutoApproveByNewBaselines({ testVariation, testRun: testRunWithResult });
+    return testRunWithResult;
+  }
+
   /**
-   * Reason: not rebased code from feature branch is compared agains new main branch baseline thus diff is expected
+   * Reason: not rebased code from feature branch is compared against new main branch baseline thus diff is expected
    * Tries to find past baseline in main branch and autoApprove in case matched
    * @param testVariation
    * @param testRun
@@ -381,7 +415,7 @@ export class TestRunsService {
       data: {
         image: testRun.imageName,
         baseline: baseline.baselineName,
-        ignoreAreas: this.getAllIgnoteAreas(testRun),
+        ignoreAreas: this.getAllIgnoreAreas(testRun),
         diffTollerancePercent: testRun.diffTollerancePercent,
         saveDiffAsFile: false,
       },

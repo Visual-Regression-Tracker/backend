@@ -1,6 +1,6 @@
 import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation, Baseline, Prisma, Build } from '@prisma/client';
+import { TestVariation, Baseline, Prisma, Build, Project } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
@@ -83,7 +83,9 @@ export class TestVariationsService {
     createTestRequestDto: BaselineDataDto & { projectId: string; sourceBranch?: string }
   ): Promise<TestVariation | null> {
     const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
-    const baselineBranchName = createTestRequestDto.sourceBranch ?? project.mainBranchName;
+    const baselineBranchName = createTestRequestDto.sourceBranch
+      ? createTestRequestDto.sourceBranch
+      : project.mainBranchName;
 
     const [baselineBranchTestVariation, currentBranchTestVariation] = await Promise.all([
       // search main branch variation
@@ -246,6 +248,31 @@ export class TestVariationsService {
     this.staticService.deleteImage(baseline.baselineName);
     return this.prismaService.baseline.delete({
       where: { id: baseline.id },
+    });
+  }
+
+  async findAndClone(
+    createTestRequestDto: CreateTestRequestDto,
+    sourceBranch: string,
+    targetBranch: string
+  ): Promise<TestVariation> {
+    const testVariation = await this.findUnique({
+      projectId: createTestRequestDto.projectId,
+      branchName: sourceBranch,
+      ...getTestVariationUniqueData(createTestRequestDto),
+    });
+    if (testVariation) {
+      return this.cloneToBranch(testVariation, targetBranch);
+    }
+  }
+
+  async cloneToBranch(testVariation: TestVariation, branchName: string): Promise<TestVariation> {
+    return this.prismaService.testVariation.create({
+      data: {
+        ...testVariation,
+        branchName: branchName,
+        project: { connect: { id: testVariation.projectId } },
+      },
     });
   }
 }
