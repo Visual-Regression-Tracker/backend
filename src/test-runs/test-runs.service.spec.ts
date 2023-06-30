@@ -1,4 +1,3 @@
-import { mocked } from 'ts-jest/utils';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -320,7 +319,7 @@ describe('TestRunsService', () => {
       data: {
         image: testRun.imageName,
         baseline: testRun.baselineName,
-        ignoreAreas: service['getAllIgnoteAreas'](testRun),
+        ignoreAreas: service['getAllIgnoreAreas'](testRun),
         diffTollerancePercent: testRun.diffTollerancePercent,
         saveDiffAsFile: true,
       },
@@ -560,7 +559,7 @@ describe('TestRunsService', () => {
       expect(service.calculateDiff).toHaveBeenCalledWith(createTestRequestDto.projectId, testRun);
       expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
       expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
-      expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
+      expect(jest.mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
     });
 
     it('with baseLineName', async () => {
@@ -611,7 +610,7 @@ describe('TestRunsService', () => {
       expect(service.calculateDiff).toHaveBeenCalledWith(createTestRequestDto.projectId, testRun);
       expect(service['tryAutoApproveByPastBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
       expect(service['tryAutoApproveByNewBaselines']).toHaveBeenCalledWith({ testVariation, testRun });
-      expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
+      expect(jest.mocked(TestRunResultDto)).toHaveBeenCalledWith(testRun, testVariation);
     });
   });
 

@@ -2,7 +2,6 @@ import { TestingModule, Test } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
-import { mocked } from 'ts-jest/utils';
 import { StaticService } from '../../../shared/static/static.service';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
@@ -123,7 +122,7 @@ describe('getDiff', () => {
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
     const diffName = 'diff name';
     const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
-    mocked(Pixelmatch).mockReturnValueOnce(5);
+    jest.mocked(Pixelmatch).mockReturnValueOnce(5);
     service = await initService({ saveImageMock, getImageMock });
 
     const result = await service.getDiff(
@@ -141,7 +140,7 @@ describe('getDiff', () => {
       }
     );
 
-    expect(mocked(Pixelmatch)).toHaveBeenCalledWith(
+    expect(jest.mocked(Pixelmatch)).toHaveBeenCalledWith(
       new PNG({
         width: 2,
         height: 5,
@@ -185,7 +184,7 @@ describe('getDiff', () => {
     const saveImageMock = jest.fn();
     service = await initService({ saveImageMock, getImageMock });
     const pixelMisMatchCount = 150;
-    mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
+    jest.mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
 
     const result = await service.getDiff(
       {
@@ -220,7 +219,7 @@ describe('getDiff', () => {
     });
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
     const pixelMisMatchCount = 200;
-    mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
+    jest.mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
     const diffName = 'diff name';
     const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
     service = await initService({
