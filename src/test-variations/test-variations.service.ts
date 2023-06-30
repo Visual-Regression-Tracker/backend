@@ -269,8 +269,11 @@ export class TestVariationsService {
   async cloneToBranch(testVariation: TestVariation, branchName: string): Promise<TestVariation> {
     return this.prismaService.testVariation.create({
       data: {
-        ...testVariation,
+        ...getTestVariationUniqueData(testVariation),
         branchName: branchName,
+        baselineName: testVariation.baselineName,
+        ignoreAreas: testVariation.ignoreAreas,
+        comment: testVariation.comment,
         project: { connect: { id: testVariation.projectId } },
       },
     });

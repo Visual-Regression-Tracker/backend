@@ -97,7 +97,7 @@ export class TestRunsService {
 
     // Try auto approve
     if (project.autoApproveFeature) {
-      this.tryAutoApprove(testVariation, testRunWithResult);
+      testRunWithResult = await this.tryAutoApprove(testVariation, testRunWithResult);
     }
     return new TestRunResultDto(testRunWithResult, testVariation);
   }
