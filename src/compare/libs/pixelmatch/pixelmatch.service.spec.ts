@@ -2,7 +2,7 @@ import { TestingModule, Test } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
-import { mocked } from 'ts-jest/utils';
+import { mocked } from 'jest-mock';
 import { StaticService } from '../../../shared/static/static.service';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';

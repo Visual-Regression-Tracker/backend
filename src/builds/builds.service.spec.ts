@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { Build, TestRun, TestStatus } from '@prisma/client';
-import { mocked } from 'ts-jest/utils';
+import { mocked } from 'jest-mock';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { generateTestRun } from '../_data_';
