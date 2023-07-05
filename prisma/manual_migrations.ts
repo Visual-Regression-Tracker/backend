@@ -21,7 +21,7 @@ async function shouldSkipMigration(migrationKey: string): Promise<boolean> {
   SELECT revision, status from "public"."_Migration" 
   WHERE "name" like ${`%${migrationKey}%`}
   AND "status" = 'MigrationSuccess'
-  LIMIT 1`.then((migration) => migration?.length > 0);
+  LIMIT 1`.then((migration) => (migration as any)?.length > 0);
 }
 
 //https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/243
