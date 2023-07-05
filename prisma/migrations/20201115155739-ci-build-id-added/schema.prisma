@@ -5,7 +5,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url = "***"
+  url      = "***"
 }
 
 model Build {
@@ -92,7 +92,7 @@ model Baseline {
   baselineName    String
   testVariationId String
   testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
-  testRunId       String?
+  testRunId       String?       @unique
   testRun         TestRun?      @relation(fields: [testRunId], references: [id])
   updatedAt       DateTime      @updatedAt
   createdAt       DateTime      @default(now())

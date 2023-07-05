@@ -4,11 +4,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url = "***"
+  url      = "***"
 }
 
 model Build {
-  id         String    @default(uuid()) @id
+  id         String    @id @default(uuid())
   number     Int?
   branchName String?
   status     String?
@@ -23,7 +23,7 @@ model Build {
 }
 
 model Project {
-  id             String          @default(uuid()) @id
+  id             String          @id @default(uuid())
   name           String
   mainBranchName String          @default("master")
   builds         Build[]
@@ -35,7 +35,7 @@ model Project {
 }
 
 model TestRun {
-  id                    String        @default(uuid()) @id
+  id                    String        @id @default(uuid())
   imageName             String
   diffName              String?
   diffPercent           Float?
@@ -64,7 +64,7 @@ model TestRun {
 }
 
 model TestVariation {
-  id           String     @default(uuid()) @id
+  id           String     @id @default(uuid())
   name         String
   branchName   String     @default("master")
   browser      String?
@@ -85,18 +85,18 @@ model TestVariation {
 }
 
 model Baseline {
-  id              String        @default(uuid()) @id
+  id              String        @id @default(uuid())
   baselineName    String
   testVariationId String
   testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
-  testRunId       String?
+  testRunId       String?       @unique
   testRun         TestRun?      @relation(fields: [testRunId], references: [id])
   updatedAt       DateTime      @updatedAt
   createdAt       DateTime      @default(now())
 }
 
 model User {
-  id        String   @default(uuid()) @id
+  id        String   @id @default(uuid())
   email     String   @unique
   password  String
   firstName String?
