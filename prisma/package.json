@@ -7,12 +7,12 @@
   "license": "UNLICENSED",
   "scripts": {},
   "dependencies": {
-    "@prisma/client": "2.12.1",
+    "@prisma/client": "^3.15.2",
     "bcryptjs": "^2.4.3"
   },
   "devDependencies": {
-    "@prisma/cli": "2.12.1",
     "@types/bcryptjs": "^2.4.2",
+    "prisma": "^3.15.2",
     "ts-node": "^8.10.2",
     "typescript": "^3.9.7"
   }
