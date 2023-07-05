@@ -13,36 +13,33 @@ model Build {
   number     Int?
   branchName String?
   status     String?
-  testRuns   TestRun[]
   projectId  String
-  project    Project   @relation(fields: [projectId], references: [id])
   updatedAt  DateTime  @updatedAt
   createdAt  DateTime  @default(now())
-  user       User?     @relation(fields: [userId], references: [id])
   userId     String?
   isRunning  Boolean?
+  project    Project   @relation(fields: [projectId], references: [id])
+  user       User?     @relation(fields: [userId], references: [id])
+  testRuns   TestRun[]
 
   @@unique([projectId, ciBuildId])
 }
 
 model Project {
   id                    String          @id @default(uuid())
-  name                  String
+  name                  String          @unique
   mainBranchName        String          @default("master")
-  builds                Build[]
   buildsCounter         Int             @default(0)
   maxBuildAllowed       Int             @default(100)
   maxBranchLifetime     Int             @default(30)
-  testVariations        TestVariation[]
   updatedAt             DateTime        @updatedAt
   createdAt             DateTime        @default(now())
-  // config
   autoApproveFeature    Boolean         @default(false)
   imageComparison       ImageComparison @default(pixelmatch)
   imageComparisonConfig String          @default("{ \"threshold\": 0.1, \"ignoreAntialiasing\": true, \"allowDiffDimensions\": false }")
-
-  TestRun TestRun[]
-  @@unique([name])
+  builds                Build[]
+  TestRun               TestRun[]
+  testVariations        TestVariation[]
 }
 
 model TestRun {
@@ -54,15 +51,11 @@ model TestRun {
   pixelMisMatchCount    Int?
   status                TestStatus
   buildId               String
-  build                 Build          @relation(fields: [buildId], references: [id])
   testVariationId       String?
-  testVariation         TestVariation? @relation(fields: [testVariationId], references: [id])
   projectId             String?
-  project               Project?       @relation(fields: [projectId], references: [id])
   merge                 Boolean        @default(false)
   updatedAt             DateTime       @updatedAt
   createdAt             DateTime       @default(now())
-  // Test variation data
   name                  String         @default("")
   browser               String?
   device                String?
@@ -71,11 +64,14 @@ model TestRun {
   customTags            String?        @default("")
   baselineName          String?
   comment               String?
-  baseline              Baseline?
   branchName            String         @default("master")
   baselineBranchName    String?
   ignoreAreas           String         @default("[]")
   tempIgnoreAreas       String         @default("[]")
+  build                 Build          @relation(fields: [buildId], references: [id])
+  project               Project?       @relation(fields: [projectId], references: [id])
+  testVariation         TestVariation? @relation(fields: [testVariationId], references: [id])
+  baseline              Baseline?
 }
 
 model TestVariation {
@@ -90,12 +86,12 @@ model TestVariation {
   baselineName String?
   ignoreAreas  String     @default("[]")
   projectId    String
-  project      Project    @relation(fields: [projectId], references: [id])
-  testRuns     TestRun[]
-  baselines    Baseline[]
   comment      String?
   updatedAt    DateTime   @updatedAt
   createdAt    DateTime   @default(now())
+  project      Project    @relation(fields: [projectId], references: [id])
+  baselines    Baseline[]
+  testRuns     TestRun[]
 
   @@unique([projectId, name, browser, device, os, viewport, customTags, branchName])
 }
@@ -104,13 +100,13 @@ model Baseline {
   id              String        @id @default(uuid())
   baselineName    String
   testVariationId String
-  testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
   testRunId       String?       @unique
-  testRun         TestRun?      @relation(fields: [testRunId], references: [id])
   userId          String?
-  user            User?         @relation(fields: [userId], references: [id])
   updatedAt       DateTime      @updatedAt
   createdAt       DateTime      @default(now())
+  testRun         TestRun?      @relation(fields: [testRunId], references: [id])
+  testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
+  user            User?         @relation(fields: [userId], references: [id])
 }
 
 model User {
@@ -121,11 +117,11 @@ model User {
   lastName  String?
   apiKey    String     @unique
   isActive  Boolean    @default(true)
-  builds    Build[]
-  baselines Baseline[]
   role      Role       @default(guest)
   updatedAt DateTime   @updatedAt
   createdAt DateTime   @default(now())
+  baselines Baseline[]
+  builds    Build[]
 }
 
 enum TestStatus {
