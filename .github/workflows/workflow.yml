@@ -10,15 +10,15 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v1.4.4
+        uses: actions/setup-node@v3
         with:
-          node-version: '14.16.1'
+          node-version: 16
 
       - name: Install npm dependencies
         run: npm ci
@@ -27,19 +27,20 @@ jobs:
         run: npm run test:cov
 
       - name: Codacy Coverage Reporter
-        uses: codacy/codacy-coverage-reporter-action@0.2.0
+        uses: codacy/codacy-coverage-reporter-action@v1
         with:
           project-token: ${{ secrets.CODACY_TOKEN }}
 
       - name: Setup PostgreSQL
-        uses: Harmon758/postgresql-action@v1.0.0
+        uses: Harmon758/postgresql-action@v1
         with:
           postgresql db: vrt_db_dev
           postgresql user: postgres
           postgresql password: postgres
 
+      # FIXME: This action is unmaintained.
       - name: Wait untill DB started (workaround of https://github.com/Harmon758/postgresql-action/issues/7)
-        uses: jakejarvis/wait-action@v0.1.0
+        uses: jakejarvis/wait-action@v0.1.1
         with:
           time: '5s'
 
