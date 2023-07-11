@@ -1,4 +1,5 @@
-FROM node:12.18.4-alpine
+# Using LTS version https://github.com/nodejs/release#release-schedule
+FROM node:lts-alpine
 
 RUN apk add --no-cache bash
 
