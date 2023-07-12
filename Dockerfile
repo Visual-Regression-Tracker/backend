@@ -10,7 +10,7 @@ COPY ./prisma/schema.prisma ./
 COPY package*.json ./
 
 # Install app dependencies
-RUN npm install
+RUN npm ci
 
 COPY tsconfig*.json ./
 COPY src ./src
