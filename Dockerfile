@@ -4,8 +4,6 @@ FROM node:14-alpine3.17 AS builder
 # Create app directory
 WORKDIR /app
 
-RUN npm install -g @prisma/cli@2.12.1 --unsafe-perm
-
 COPY ./prisma/schema.prisma ./
 
 # A wildcard is used to ensure both package.json AND package-lock.json are copied
