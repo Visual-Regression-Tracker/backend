@@ -9,7 +9,8 @@ echo Start applying migrations...
 npx ts-node manual_migrations.ts
 
 # apply migration
-npx prisma migrate up -c --auto-approve --experimental
+npx prisma db push
+npx prisma migrate dev
 
 echo Seeding data...
 

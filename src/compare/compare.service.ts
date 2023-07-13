@@ -1,4 +1,4 @@
-import { ImageComparison, Project } from '.prisma/client';
+import { ImageComparison, Project } from '@prisma/client';
 import { Injectable } from '@nestjs/common';
 import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
 import { ImageComparator } from './libs/image-comparator.interface';
