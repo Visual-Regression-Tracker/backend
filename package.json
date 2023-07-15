@@ -13,12 +13,14 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "prisma:generate": "prisma generate",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest --projects src",
     "test:watch": "jest --projects src --watch",
     "test:cov": "jest --projects src --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --projects src --runInBand",
-    "test:e2e": "jest --projects test"
+    "test:e2e": "jest --projects test",
+    "test:acceptance": "jest --projects test_acceptance"
   },
   "dependencies": {
     "@nestjs/common": "^8.4.1",
