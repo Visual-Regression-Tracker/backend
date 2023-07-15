@@ -1,7 +1,11 @@
 /** @returns {Promise<import('jest').Config>} */
 module.exports = async () => {
   return {
-    projects: ['./test/jest.config.ts', './src/jest.config.ts'],
+    projects: [
+      './src/jest.config.ts', 
+      './test/jest.config.ts', 
+      './test_acceptance/jest.config.ts'
+    ],
     roots: ['./'],
     testTimeout: 30000,
   };

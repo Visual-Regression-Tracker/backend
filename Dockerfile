@@ -1,5 +1,5 @@
-# Using LTS version https://github.com/nodejs/release#release-schedule
-FROM node:lts-alpine AS builder
+# https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/137
+FROM node:14-alpine3.17 AS builder
 
 # Create app directory
 WORKDIR /app
@@ -19,7 +19,8 @@ COPY src ./src
 
 RUN npm run build
 
-FROM node:lts-alpine
+# https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/137
+FROM node:14-alpine3.17
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist

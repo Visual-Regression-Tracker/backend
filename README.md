@@ -5,6 +5,7 @@
 
 ## Local setup
 
+- Install Node `14`
 - clone repo
 - Update `.env` and `prisma/.env`
 - Make sure Postgres is up and running

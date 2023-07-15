@@ -1,5 +1,5 @@
-# Using LTS version https://github.com/nodejs/release#release-schedule
-FROM node:lts-alpine
+# https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/137
+FROM node:14-alpine3.17
 
 RUN apk add --no-cache bash
 

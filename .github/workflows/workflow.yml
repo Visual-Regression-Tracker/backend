@@ -1,56 +1,49 @@
-# This is a basic workflow to help you get started with Actions
-
 name: CI
 
-on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+on: [push]
 
 jobs:
   build:
+    # https://github.com/actions/runner-images#available-images
     runs-on: ubuntu-20.04
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v1.4.4
+        uses: actions/setup-node@v3
         with:
           node-version: '14.16.1'
 
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Prisma generate
+        run: npm run prisma:generate
+
       - name: Unit tests
         run: npm run test:cov
 
-      - name: Codacy Coverage Reporter
-        uses: codacy/codacy-coverage-reporter-action@0.2.0
+      - name: Build and run containers
+        run: docker-compose up --build -d
+
+      # FIXME: This action is unmaintained.
+      - name: Wait untill service started (replace with health status check)
+        uses: jakejarvis/wait-action@v0.1.1
         with:
-          project-token: ${{ secrets.CODACY_TOKEN }}
+          time: '10s'
 
-      - name: Setup PostgreSQL
-        uses: Harmon758/postgresql-action@v1.0.0
-        with:
-          postgresql db: vrt_db_dev
-          postgresql user: postgres
-          postgresql password: postgres
-
-      - name: Wait untill DB started (workaround of https://github.com/Harmon758/postgresql-action/issues/7)
-        uses: jakejarvis/wait-action@v0.1.0
-        with:
-          time: '5s'
-
-      - name: Apply Manual DB migrations
-        run: npx ts-node ./prisma/manual_migrations.ts
-
-      - name: Apply DB migrations
-        run: npx prisma migrate up -c --experimental
-
-      - name: Seed DB data
-        run: npx ts-node ./prisma/seed.ts
+      - name: Run acceptance tests
+        run: npm run test:acceptance
 
       - name: Run e2e tests
         run: npm run test:e2e
+
+      - name: Stop containers
+        if: always()
+        run: docker-compose down
+
+      - name: Codacy Coverage Reporter
+        uses: codacy/codacy-coverage-reporter-action@v1
+        with:
+          project-token: ${{ secrets.CODACY_TOKEN }}
