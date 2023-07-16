@@ -7,7 +7,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN npm ci 
+RUN npm ci
 
 RUN chmod +x /app/wait-for-it.sh
 RUN chmod +x /app/entrypoint.sh
