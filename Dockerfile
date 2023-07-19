@@ -1,5 +1,5 @@
 # https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/137
-FROM node:14-alpine3.17 AS builder
+FROM node:18-alpine3.18 AS builder
 
 # Create app directory
 WORKDIR /app
@@ -10,7 +10,7 @@ COPY ./prisma/schema.prisma ./
 COPY package*.json ./
 
 # Install app dependencies
-RUN npm ci
+RUN npm ci --verbose
 
 COPY tsconfig*.json ./
 COPY src ./src
@@ -18,7 +18,7 @@ COPY src ./src
 RUN npm run build
 
 # https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/137
-FROM node:14-alpine3.17
+FROM node:18-alpine3.18
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
