@@ -10,7 +10,7 @@ npx ts-node manual_migrations.ts
 
 # apply migration
 npx prisma db push
-npx prisma migrate dev
+npx prisma migrate deploy
 
 echo Seeding data...
 

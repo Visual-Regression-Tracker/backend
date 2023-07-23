@@ -12,7 +12,7 @@
 - `npm i`
 - `npm run test`
 - Create DB structure `npx prisma db push`
-- Apply migrations`npx prisma migrate dev`
+- Apply migrations `npx prisma migrate deploy`
 - `npm run test:e2e`
 - Seed initial data `npx prisma db seed`
 - `npm run start:debug`
