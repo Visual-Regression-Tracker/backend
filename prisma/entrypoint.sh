@@ -5,9 +5,6 @@ set -e
 
 echo Start applying migrations...
 
-# apply manual migration
-npx ts-node manual_migrations.ts
-
 # apply migration
 npx prisma db push
 npx prisma migrate deploy

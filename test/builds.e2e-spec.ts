@@ -11,8 +11,7 @@ import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { BuildsController } from '../src/builds/builds.controller';
 import { TEST_PROJECT } from '../src/_data_';
-
-jest.useFakeTimers('legacy');
+import uuidAPIKey from 'uuid-apikey';
 
 describe('Builds (e2e)', () => {
   let app: INestApplication;
@@ -43,7 +42,7 @@ describe('Builds (e2e)', () => {
     user = await haveUserLogged(usersService);
     project = await projecstService.create({
       ...TEST_PROJECT,
-      name: 'Builds E2E test',
+      name: `Builds E2E test${uuidAPIKey.create().uuid}`,
     });
   });
 
@@ -53,7 +52,6 @@ describe('Builds (e2e)', () => {
   });
 
   afterAll(async () => {
-    jest.runOnlyPendingTimers();
     await app.close();
   });
 
