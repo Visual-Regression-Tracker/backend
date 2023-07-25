@@ -44,12 +44,16 @@ services:
   # Available at http://localhost:5050
   pgadmin:
     container_name: pgadmin4
+    # https://hub.docker.com/r/dpage/pgadmin4
     # https://www.pgadmin.org/docs/pgadmin4/latest/release_notes_7_4.html
     image: dpage/pgadmin4:7.4
     restart: always
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: root
+    volumes:
+      - ${PWD}/pgadmin-servers.json:/pgadmin4/servers.json
+      - ${PWD}/pgadmin-vrt.pgpassfile:/pgadmin4/pgadmin-vrt.pgpassfile
     ports:
       - "5050:80"
     depends_on:
