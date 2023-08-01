@@ -6,7 +6,6 @@ set -e
 echo Start applying migrations...
 
 # apply migration
-npx prisma db push
 npx prisma migrate deploy
 
 echo Seeding data...

@@ -33,7 +33,7 @@ CREATE TABLE "Project" (
     "maxBranchLifetime" INTEGER NOT NULL DEFAULT 30,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "autoApproveFeature" BOOLEAN NOT NULL DEFAULT false,
+    "autoApproveFeature" BOOLEAN NOT NULL DEFAULT true,
     "imageComparison" "ImageComparison" NOT NULL DEFAULT 'pixelmatch',
     "imageComparisonConfig" TEXT NOT NULL DEFAULT '{ "threshold": 0.1, "ignoreAntialiasing": true, "allowDiffDimensions": false }',
 

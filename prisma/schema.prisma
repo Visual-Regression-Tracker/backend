@@ -34,7 +34,7 @@ model Project {
   maxBranchLifetime     Int             @default(30)
   updatedAt             DateTime        @updatedAt
   createdAt             DateTime        @default(now())
-  autoApproveFeature    Boolean         @default(false)
+  autoApproveFeature    Boolean         @default(true)
   imageComparison       ImageComparison @default(pixelmatch)
   imageComparisonConfig String          @default("{ \"threshold\": 0.1, \"ignoreAntialiasing\": true, \"allowDiffDimensions\": false }")
   builds                Build[]

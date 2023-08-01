@@ -28,7 +28,7 @@ services:
       - postgres
   postgres:
     container_name: postgres
-    image: postgres:14-alpine3.18
+    image: postgres:15.3-alpine3.18
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -51,9 +51,6 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: root
-    volumes:
-      - ${PWD}/pgadmin-servers.json:/pgadmin4/servers.json
-      - ${PWD}/pgadmin-vrt.pgpassfile:/pgadmin4/pgadmin-vrt.pgpassfile
     ports:
       - "5050:80"
     depends_on:
