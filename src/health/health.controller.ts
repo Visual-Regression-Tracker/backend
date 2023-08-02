@@ -13,7 +13,7 @@ export class HealthController {
     @HealthCheck()
     check() {
         return this.health.check([
-        () => this.prismaService.$queryRaw('SELECT 1'),
+        () => this.prismaService.$queryRaw`SELECT 1`,
         ]);
     }
 }

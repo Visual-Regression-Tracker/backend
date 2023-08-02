@@ -10,8 +10,7 @@ import { Project, TestStatus } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
 import { TEST_PROJECT } from '../src/_data_';
-
-jest.useFakeTimers('legacy');
+import uuidAPIKey from 'uuid-apikey';
 
 describe('TestRuns (e2e)', () => {
   let app: INestApplication;
@@ -46,7 +45,7 @@ describe('TestRuns (e2e)', () => {
     user = await haveUserLogged(usersService);
     project = await projecstService.create({
       ...TEST_PROJECT,
-      name: 'TestRun E2E test',
+      name: `TestRun E2E test${uuidAPIKey.create().uuid}`,
     });
   });
 
@@ -56,7 +55,6 @@ describe('TestRuns (e2e)', () => {
   });
 
   afterAll(async () => {
-    jest.runOnlyPendingTimers();
     await app.close();
   });
 

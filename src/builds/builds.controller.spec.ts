@@ -6,7 +6,7 @@ import { ApiGuard } from '../auth/guards/api.guard';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ProjectsService } from '../projects/projects.service';
 import { TEST_BUILD, TEST_PROJECT } from '../_data_';
-import { Build } from '.prisma/client';
+import { Build } from '@prisma/client';
 import { BuildDto } from './dto/build.dto';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { EventsGateway } from '../shared/events/events.gateway';

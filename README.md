@@ -8,12 +8,13 @@
 - Install Node `14`
 - clone repo
 - Update `.env` and `prisma/.env`
-- Make sure Postgres is up and running
+- Make sure Postgres is up and running, using `docker-compose up` in a separate terminal
 - `npm i`
 - `npm run test`
-- Create DB structure and apply migrations `npx prisma migrate up -c --experimental`
+- Create DB structure `npx prisma db push`
+- Apply migrations `npx prisma migrate deploy`
 - `npm run test:e2e`
-- Seed initial data `npx ts-node prisma/seed.ts`
+- Seed initial data `npx prisma db seed`
 - `npm run start:debug`
 
 ## Local HTTPS config

@@ -1,8 +1,12 @@
+/**
+ * @see https://www.prisma.io/docs/guides/migrate/seed-database
+ */
 import { PrismaClient, Role } from '@prisma/client';
 import { genSalt, hash } from 'bcryptjs';
 
 const prisma = new PrismaClient({
-  // log: ['query'],
+  // 'info' | 'query' | 'warn' | 'error'
+  log: ['query'],
 });
 
 async function seed() {
@@ -17,8 +21,15 @@ seed()
   .finally(async () => await prisma.$disconnect());
 
 async function createDefaultUser() {
-  const userList = await prisma.user.findMany();
-  console.log(userList);
+  let userList = [];
+  try {
+    userList = await prisma.user.findMany();
+    console.log(userList);
+  }
+  catch (error) {
+    // Expected to see that "user" table does not exist
+    console.log(error.message);
+  }
 
   const defaultEmail = 'visual-regression-tracker@example.com';
   const defaultPassword = '123456';
@@ -54,8 +65,16 @@ async function createDefaultUser() {
 }
 
 async function createDefaultProject() {
-  const projectList = await prisma.project.findMany();
-  console.log(projectList);
+  let projectList = [];
+  try {
+    projectList = await prisma.project.findMany();
+    console.log(projectList);
+  }
+  catch (error) {
+    // Expected to see that "project" table does not exist
+    console.log(error.message);
+  }
+
   if (projectList.length === 0) {
     await prisma.project
       .create({
