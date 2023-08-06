@@ -25,6 +25,7 @@
     "node": ">=18.12.0"
   },
   "dependencies": {
+    "@nestjs/cache-manager": "^2.1.0",
     "@nestjs/common": "^9.4.3",
     "@nestjs/config": "^2.3.4",
     "@nestjs/core": "^9.4.3",
@@ -59,7 +60,7 @@
     "uuid-apikey": "^1.5.3"
   },
   "devDependencies": {
-    "@darraghor/eslint-plugin-nestjs-typed": "^3.22.6",
+    "@darraghor/eslint-plugin-nestjs-typed": "^4.0.12",
     "@nestjs/cli": "^9.5.0",
     "@nestjs/schematics": "^9.2.0",
     "@nestjs/testing": "^9.4.3",
