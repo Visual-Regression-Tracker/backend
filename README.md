@@ -5,7 +5,7 @@
 
 ## Local setup
 
-- Install Node `14`
+- Install Node `18` (LTS)
 - clone repo
 - Update `.env` and `prisma/.env`
 - Make sure Postgres is up and running, using `docker-compose up` in a separate terminal
