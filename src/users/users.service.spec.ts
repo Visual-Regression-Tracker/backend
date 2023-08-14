@@ -11,11 +11,12 @@ describe('UsersService', () => {
       providers: [
         UsersService,
         {
-          provide: PrismaService, useValue: {
+          provide: PrismaService,
+          useValue: {
             user: {
-              findMany: jest.fn().mockResolvedValueOnce([])
-            }
-          }
+              findMany: jest.fn().mockResolvedValueOnce([]),
+            },
+          },
         },
         { provide: AuthService, useValue: {} },
       ],

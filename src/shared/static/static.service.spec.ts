@@ -10,8 +10,9 @@ describe('StaticService', () => {
       providers: [
         StaticService,
         {
-          provide: ConfigService, useValue: {}
-        }
+          provide: ConfigService,
+          useValue: {},
+        },
       ],
     }).compile();
 

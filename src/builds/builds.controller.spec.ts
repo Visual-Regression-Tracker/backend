@@ -58,7 +58,7 @@ describe('Builds Controller', () => {
     number: 12,
   };
 
-  beforeEach(async () => { });
+  beforeEach(async () => {});
 
   it('should be defined', async () => {
     controller = await initController({});

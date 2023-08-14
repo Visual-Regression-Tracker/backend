@@ -12,7 +12,10 @@ import { MergeParams } from './types';
 @ApiTags('test-variations')
 @Controller('test-variations')
 export class TestVariationsController {
-  constructor(private testVariations: TestVariationsService, private prismaService: PrismaService) {}
+  constructor(
+    private testVariations: TestVariationsService,
+    private prismaService: PrismaService
+  ) {}
 
   @Get()
   @ApiQuery({ name: 'projectId', required: true })

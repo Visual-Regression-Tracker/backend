@@ -41,9 +41,7 @@ export class TestVariationsService {
     });
   }
 
-  async findUnique(
-    data: BaselineDataDto & { projectId: string }
-  ): Promise<TestVariation | null> {
+  async findUnique(data: BaselineDataDto & { projectId: string }): Promise<TestVariation | null> {
     return this.prismaService.testVariation.findUnique({
       where: {
         projectId_name_browser_device_os_viewport_customTags_branchName: {

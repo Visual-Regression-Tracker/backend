@@ -20,7 +20,10 @@ import { Logger } from '@nestjs/common';
 export class UsersController {
   private readonly logger: Logger = new Logger(UsersController.name);
 
-  constructor(private usersService: UsersService, private prismaService: PrismaService) {}
+  constructor(
+    private usersService: UsersService,
+    private prismaService: PrismaService
+  ) {}
 
   @Post('register')
   @ApiOkResponse({ type: UserLoginResponseDto })

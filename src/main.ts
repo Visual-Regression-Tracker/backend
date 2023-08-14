@@ -37,7 +37,7 @@ async function bootstrap() {
 
   // serve images
   app.useStaticAssets(join(process.cwd(), IMAGE_PATH), {
-    maxAge: 31536000
+    maxAge: 31536000,
   });
 
   await app.listen(process.env.APP_PORT || 3000);

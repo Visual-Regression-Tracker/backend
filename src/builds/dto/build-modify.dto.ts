@@ -1,4 +1,4 @@
 export interface ModifyBuildDto {
-    ciBuildId?: string;
-    isRunning?: boolean;
+  ciBuildId?: string;
+  isRunning?: boolean;
 }

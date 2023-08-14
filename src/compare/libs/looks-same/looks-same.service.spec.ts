@@ -160,7 +160,7 @@ describe('getDiff', () => {
       DEFAULT_CONFIG
     );
 
-    expect(service.compare).toHaveBeenCalledWith(image, anotherImage, DEFAULT_CONFIG)
+    expect(service.compare).toHaveBeenCalledWith(image, anotherImage, DEFAULT_CONFIG);
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName: null,
@@ -187,8 +187,8 @@ describe('getDiff', () => {
       DEFAULT_CONFIG
     );
 
-    expect(service.compare).toHaveBeenCalledWith(image, anotherImage, DEFAULT_CONFIG)
-    expect(service.createDiff).toHaveBeenCalledWith(image, anotherImage, DEFAULT_CONFIG)
+    expect(service.compare).toHaveBeenCalledWith(image, anotherImage, DEFAULT_CONFIG);
+    expect(service.createDiff).toHaveBeenCalledWith(image, anotherImage, DEFAULT_CONFIG);
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName: 'diff name',
