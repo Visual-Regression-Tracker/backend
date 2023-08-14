@@ -7,12 +7,12 @@
   "license": "Apache-2.0",
   "scripts": {},
   "dependencies": {
-    "@prisma/client": "^5.0.0",
+    "@prisma/client": "^5.1.1",
     "bcryptjs": "^2.4.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",
-    "prisma": "^5.0.0",
+    "prisma": "^5.1.1",
     "ts-node": "^10.7.0",
     "typescript": "^4.9.2"
   }
