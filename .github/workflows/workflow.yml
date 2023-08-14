@@ -40,6 +40,12 @@ jobs:
         if: always()
         run: docker-compose down
 
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
+
       - name: Codacy Coverage Reporter
         uses: codacy/codacy-coverage-reporter-action@v1
         with:
