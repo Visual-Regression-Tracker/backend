@@ -71,7 +71,7 @@ export class BuildsService {
 
     await Promise.all(build.testRuns.map((testRun) => this.testRunsService.delete(testRun.id)));
 
-    let promise = this.prismaService.build
+    const promise = this.prismaService.build
       .delete({
         where: { id },
       })

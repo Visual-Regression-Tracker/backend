@@ -28,7 +28,7 @@ export class OdiffService implements ImageComparator {
   }
 
   async getDiff(data: ImageCompareInput, config: OdiffConfig): Promise<DiffResult> {
-    let result: DiffResult = {
+    const result: DiffResult = {
       ...NO_BASELINE_RESULT,
     };
 

@@ -28,7 +28,7 @@ export class LookSameService implements ImageComparator {
   }
 
   async getDiff(data: ImageCompareInput, config: LooksSameConfig): Promise<DiffResult> {
-    let result: DiffResult = {
+    const result: DiffResult = {
       ...NO_BASELINE_RESULT,
     };
 
