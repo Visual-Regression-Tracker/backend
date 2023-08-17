@@ -4,7 +4,10 @@ import { JwtAuthGuard } from './auth.guard';
 
 @Injectable()
 export class MixedGuard implements CanActivate {
-  constructor(private readonly apiGuard: ApiGuard, private readonly authGuard: JwtAuthGuard) {}
+  constructor(
+    private readonly apiGuard: ApiGuard,
+    private readonly authGuard: JwtAuthGuard
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     let jwtAuth = false;

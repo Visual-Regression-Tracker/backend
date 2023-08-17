@@ -19,7 +19,9 @@ export class AppService implements OnApplicationBootstrap {
     this.logger.log(`server.timeout is ${server.timeout}`);
     server.headersTimeout = parseInt(this.configService.get('SERVER_HEADERS_TIMEOUT', headersTimeout.toString()));
     this.logger.log(`server.headersTimeout is ${server.headersTimeout}`);
-    server.keepAliveTimeout = parseInt(this.configService.get('SERVER_KEEP_ALIVE_TIMEOUT', keepAliveTimeout.toString()));
+    server.keepAliveTimeout = parseInt(
+      this.configService.get('SERVER_KEEP_ALIVE_TIMEOUT', keepAliveTimeout.toString())
+    );
     this.logger.log(`server.keepAliveTimeout is ${server.keepAliveTimeout}`);
   }
 }

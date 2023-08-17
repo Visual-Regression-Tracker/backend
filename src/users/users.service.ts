@@ -14,7 +14,10 @@ import { Logger } from '@nestjs/common';
 export class UsersService {
   private readonly logger: Logger = new Logger(UsersService.name);
 
-  constructor(private prismaService: PrismaService, private authService: AuthService) {}
+  constructor(
+    private prismaService: PrismaService,
+    private authService: AuthService
+  ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
     const user = {

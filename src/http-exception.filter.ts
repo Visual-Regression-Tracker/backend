@@ -16,7 +16,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     } catch {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
     }
-    const message = (isUniqueConstaintException || isForbiddenException) ? this.getCustomMessageForException(exception) : exception.message;
+    const message =
+      isUniqueConstaintException || isForbiddenException
+        ? this.getCustomMessageForException(exception)
+        : exception.message;
 
     Logger.error(exception, exception.stack);
 
@@ -30,20 +33,24 @@ export class HttpExceptionFilter implements ExceptionFilter {
   }
 
   isForbiddenException(exception: HttpException): boolean {
-    return exception.message.includes("Forbidden resource");
+    return exception.message.includes('Forbidden resource');
   }
 
   isUniqueConstraintException(exception: HttpException): boolean {
-    return exception.message.includes("Unique constraint failed on the fields");
+    return exception.message.includes('Unique constraint failed on the fields');
   }
 
   getCustomMessageForException(exception: HttpException): string {
     let message = exception.message;
-    message = (message.includes("build.update()")) ? "There is already a build with this ci build id."
-      : (message.includes("project.create()")) ? "Project exists with this name."
-        : (message.includes("user.create()")) ? "This user already exists."
-          : (message.includes("Forbidden resource")) ? "You do not have permission to perform this operation." : message;
+    message = message.includes('build.update()')
+      ? 'There is already a build with this ci build id.'
+      : message.includes('project.create()')
+      ? 'Project exists with this name.'
+      : message.includes('user.create()')
+      ? 'This user already exists.'
+      : message.includes('Forbidden resource')
+      ? 'You do not have permission to perform this operation.'
+      : message;
     return message;
   }
-
 }

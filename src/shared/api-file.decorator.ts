@@ -1,9 +1,8 @@
-import { ApiPropertyOptions, ApiProperty } from "@nestjs/swagger";
+import { ApiPropertyOptions, ApiProperty } from '@nestjs/swagger';
 
-export const ApiFile = (options?: ApiPropertyOptions): PropertyDecorator => (
-    target: Object,
-    propertyKey: string | symbol,
-  ) => {
+export const ApiFile =
+  (options?: ApiPropertyOptions): PropertyDecorator =>
+  (target: Object, propertyKey: string | symbol) => {
     if (options?.isArray) {
       ApiProperty({
         type: 'array',

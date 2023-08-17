@@ -6,7 +6,10 @@ import { Reflector } from '@nestjs/core';
 
 @Injectable()
 export class RoleGuard implements CanActivate {
-  constructor(private readonly prismaService: PrismaService, private reflector: Reflector) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private reflector: Reflector
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const roles = this.reflector.get<Role[]>('roles', context.getHandler());
