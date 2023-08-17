@@ -98,9 +98,9 @@ export const generateTestRun = (testRun?: Partial<TestRun>): TestRun => {
 
 export const generatePng = (width: number, height: number): PNG => {
   const png = new PNG({ width, height });
-  for (var y = 0; y < png.height; y++) {
-    for (var x = 0; x < png.width; x++) {
-      var idx = (png.width * y + x) << 2;
+  for (let y = 0; y < png.height; y++) {
+    for (let x = 0; x < png.width; x++) {
+      const idx = (png.width * y + x) << 2;
       png.data[idx] = 255; // red
       png.data[idx + 1] = 255; // green
       png.data[idx + 2] = 255; // blue
