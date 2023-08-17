@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { Build, TestRun, TestStatus } from '@prisma/client';
-import { mocked } from 'jest-mock';
+import { mocked, MockedObject } from 'jest-mock';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { generateTestRun } from '../_data_';
@@ -115,7 +115,7 @@ describe('BuildsService', () => {
   it('findOne', async () => {
     const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
     const testRunFindManyMock = jest.fn().mockResolvedValueOnce(build.testRuns);
-    mocked(BuildDto).mockReturnValueOnce(buildDto);
+    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
     service = await initService({ buildFindUniqueMock, testRunFindManyMock });
 
     const result = await service.findOne('someId');
@@ -128,7 +128,7 @@ describe('BuildsService', () => {
     const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
     const buildCountMock = jest.fn().mockResolvedValueOnce(33);
     const projectId = 'someId';
-    mocked(BuildDto).mockReturnValueOnce(buildDto);
+    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
     service = await initService({ buildFindManyMock, buildCountMock });
 
     const result = await service.findMany(projectId, 10, 20);
@@ -183,7 +183,7 @@ describe('BuildsService', () => {
     const id = 'some id';
     const buildUpdateMock = jest.fn();
     const eventsBuildUpdatedMock = jest.fn();
-    mocked(BuildDto).mockReturnValueOnce(buildDto);
+    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
     service = await initService({ buildUpdateMock, eventsBuildUpdatedMock });
 
     const result = await service.update(id, { isRunning: false });
