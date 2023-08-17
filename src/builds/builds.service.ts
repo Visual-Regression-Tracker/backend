@@ -123,7 +123,7 @@ export class BuildsService {
     projectId: string;
     branchName: string;
     ciBuildId?: string;
-  }) {
+  }): Promise<Build> {
     const where: Prisma.BuildWhereUniqueInput = ciBuildId
       ? {
           projectId_ciBuildId: {

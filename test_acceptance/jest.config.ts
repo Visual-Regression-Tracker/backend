@@ -1,7 +1,6 @@
 /** @returns {Promise<import('jest').Config>} */
 module.exports = async () => {
   return {
-    name: 'Acceptance',
     displayName: 'Acceptance',
     roots: ['./'],
     testTimeout: 30000,

@@ -1,7 +1,6 @@
 /** @returns {Promise<import('jest').Config>} */
 module.exports = async () => {
   return {
-    name: 'e2e',
     displayName: 'E2E Tests',
     roots: ['./'],
     testTimeout: 30000,
