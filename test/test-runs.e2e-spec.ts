@@ -264,7 +264,7 @@ describe('TestRuns (e2e)', () => {
         project.mainBranchName,
         image_v1
       );
-      const mainBranchResult = await testRunsService.approve(testRun1.id);
+      await testRunsService.approve(testRun1.id);
       const { testRun: testRun2 } = await haveTestRunCreated(
         buildsService,
         testRunsService,

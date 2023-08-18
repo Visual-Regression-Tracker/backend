@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Put, Delete, Param, ParseUUIDPipe, Patch } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Put, Delete, Patch } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { ApiOkResponse, ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';

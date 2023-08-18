@@ -562,7 +562,7 @@ describe('TestVariationsService', () => {
           id: 'baseline id 1',
           baselineName: 'image name 1',
           testVariationId: testVariationId,
-          testRunId: 'test run id 1',
+          testRunId: testRunId,
           userId: 'userId',
           createdAt: new Date(),
           updatedAt: new Date(),
