@@ -10,6 +10,8 @@ export class CreateTestRequestMultipartDto extends OmitType(CreateTestRequestDto
   'merge',
   'diffTollerancePercent',
 ]) {
+
+  /* eslint-disable @darraghor/nestjs-typed/all-properties-are-whitelisted, @darraghor/nestjs-typed/all-properties-have-explicit-defined */
   @ApiFile()
   image: Express.Multer.File;
 
@@ -25,6 +27,7 @@ export class CreateTestRequestMultipartDto extends OmitType(CreateTestRequestDto
   @Transform(({ value }) => value == 'true')
   merge?: boolean;
 
+  /* eslint-disable @darraghor/nestjs-typed/api-property-returning-array-should-set-array */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @Type(() => String)
