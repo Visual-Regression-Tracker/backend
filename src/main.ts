@@ -2,7 +2,6 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger';
 import { Logger, ValidationPipe } from '@nestjs/common';
-import * as express from 'express';
 import { join } from 'path';
 import * as bodyParser from 'body-parser';
 import { readFileSync, existsSync } from 'fs';

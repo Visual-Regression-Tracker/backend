@@ -1,9 +1,8 @@
 import { TestingModule, Test } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
-import { PNG } from 'pngjs';
 import { IgnoreAreaDto } from 'src/test-runs/dto/ignore-area.dto';
 import { StaticService } from '../../../shared/static/static.service';
-import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
+import { DIFF_DIMENSION_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { OdiffService, DEFAULT_CONFIG, ignoreAreaToRegionMapper } from './odiff.service';
 import { OdiffConfig, OdiffIgnoreRegions } from './odiff.types';
 import { compare } from 'odiff-bin';
@@ -61,15 +60,6 @@ describe('parseConfig', () => {
 });
 
 describe('getDiff', () => {
-  const image = new PNG({
-    width: 20,
-    height: 20,
-  });
-  const anotherImage = new PNG({
-    width: 20,
-    height: 20,
-  });
-  anotherImage.data[0] = 1; // alterate pixel to have it different from 0
 
   it('no baseline', async () => {
     service = await initService({});

@@ -117,7 +117,6 @@ describe('TestRunsService', () => {
   let service: TestRunsService;
   const imageBuffer = Buffer.from('Image');
   const ignoreAreas = [{ x: 1, y: 2, width: 10, height: 20 }];
-  const tempIgnoreAreas = [{ x: 3, y: 4, width: 30, height: 40 }];
 
   it('findOne', async () => {
     const id = 'some id';
@@ -298,8 +297,6 @@ describe('TestRunsService', () => {
   it('calculateDiff', async () => {
     const testRun: TestRun = generateTestRun();
     const testRunUpdateMock = jest.fn();
-    const baselineMock = 'baseline image';
-    const imageeMock = 'image';
     const deleteImageMock = jest.fn();
     const diffResult = {
       id: 'test',
