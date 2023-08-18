@@ -6,6 +6,7 @@ export const ApiFile =
     if (options?.isArray) {
       ApiProperty({
         type: 'array',
+        isArray: true,
         items: {
           type: 'file',
           properties: {
