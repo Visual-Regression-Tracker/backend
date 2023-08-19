@@ -197,11 +197,12 @@ describe('TestRuns (e2e)', () => {
     });
   });
 
-  describe('POST /multipart', async () => {
+  describe('POST /multipart', () => {
     const url = '/test-runs/multipart';
-    const build = await buildsService.findOrCreate({ projectId: project.id, branchName: project.mainBranchName });
 
     it('should post multipart all fields', async () => {
+      const build = await buildsService.findOrCreate({ projectId: project.id, branchName: project.mainBranchName });
+
       await requestWithApiKey(app, 'post', url, user.apiKey)
         .set('Content-type', 'multipart/form-data')
         .field('name', 'Multipart image')
@@ -221,6 +222,8 @@ describe('TestRuns (e2e)', () => {
     });
 
     it('should post multipart required fields', async () => {
+      const build = await buildsService.findOrCreate({ projectId: project.id, branchName: project.mainBranchName });
+
       await requestWithApiKey(app, 'post', url, user.apiKey)
         .set('Content-type', 'multipart/form-data')
         .field('name', 'Multipart image')
