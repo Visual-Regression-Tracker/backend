@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TestRun, TestStatus } from '@prisma/client';
 
 export class TestRunDto {
@@ -36,7 +36,7 @@ export class TestRunDto {
   ignoreAreas: string;
   @ApiProperty()
   tempIgnoreAreas: string;
-  @ApiProperty()
+  @ApiPropertyOptional()
   comment?: string;
   @ApiProperty()
   branchName: string;

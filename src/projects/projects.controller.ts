@@ -17,7 +17,7 @@ export class ProjectsController {
   @Get()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @ApiOkResponse({ type: [ProjectDto] })
+  @ApiOkResponse({ type: ProjectDto, isArray: true })
   getAll(): Promise<Project[]> {
     return this.projectsService.findAll();
   }

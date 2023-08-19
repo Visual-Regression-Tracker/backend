@@ -24,7 +24,7 @@ export class TestVariationsService {
     private buildsService: BuildsService
   ) {}
 
-  async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
+  async getDetails(id: string) {
     return this.prismaService.testVariation.findUnique({
       where: { id },
       include: {

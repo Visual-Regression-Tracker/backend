@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsString, IsNumber, IsBoolean, IsEnum, IsJSON } from 'class-validator';
+import { IsUUID, IsString, IsNumber, IsBoolean, IsEnum, IsJSON, IsDate } from 'class-validator';
 import { ImageComparison, Project } from '@prisma/client';
+import { Type } from 'class-transformer';
 
 export class ProjectDto implements Project {
   @ApiProperty()
@@ -20,9 +21,13 @@ export class ProjectDto implements Project {
   readonly mainBranchName: string;
 
   @ApiProperty()
+  @IsDate()
+  @Type(() => Date)
   readonly createdAt: Date;
 
   @ApiProperty()
+  @IsDate()
+  @Type(() => Date)
   readonly updatedAt: Date;
 
   @ApiProperty()

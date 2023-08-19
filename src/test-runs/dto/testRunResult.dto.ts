@@ -1,9 +1,9 @@
 import { TestRun, TestVariation } from '@prisma/client';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TestRunDto } from './testRun.dto';
 
 export class TestRunResultDto extends TestRunDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
   pixelMisMatchCount?: number;
   @ApiProperty()
   url: string;

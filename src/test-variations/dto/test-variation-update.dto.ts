@@ -1,5 +1,8 @@
-export class TestVariationUpdateDto {
-  baselineName?: string;
-  ignoreAreas?: string;
-  comment?: string;
-}
+import { PickType } from '@nestjs/swagger';
+import { BaseTestVariationDto } from './base-test-variation.dto';
+
+export class TestVariationUpdateDto extends PickType(BaseTestVariationDto, [
+  'baselineName',
+  'ignoreAreas',
+  'comment',
+] as const) {}
