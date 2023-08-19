@@ -197,12 +197,11 @@ describe('TestRuns (e2e)', () => {
     });
   });
 
-  describe('POST /multipart', () => {
+  describe('POST /multipart', async () => {
     const url = '/test-runs/multipart';
+    const build = await buildsService.findOrCreate({ projectId: project.id, branchName: project.mainBranchName });
 
-    it('should post multipart', async () => {
-      const build = await buildsService.findOrCreate({ projectId: project.id, branchName: project.mainBranchName });
-
+    it('should post multipart all fields', async () => {
       await requestWithApiKey(app, 'post', url, user.apiKey)
         .set('Content-type', 'multipart/form-data')
         .field('name', 'Multipart image')
@@ -214,9 +213,20 @@ describe('TestRuns (e2e)', () => {
         .field('buildId', build.id)
         .field('projectId', project.id)
         .field('diffTollerancePercent', '0.12')
-        .field('merge', 'false')
-        .field('ignoreAreas', '[]')
+        .field('merge', 'true')
+        .field('ignoreAreas', '[{"id":"1692476944110","x":182,"y":28,"width":38,"height":30}]')
         .field('comment', 'Comment')
+        .attach('image', image_v1)
+        .expect(201);
+    });
+
+    it('should post multipart required fields', async () => {
+      await requestWithApiKey(app, 'post', url, user.apiKey)
+        .set('Content-type', 'multipart/form-data')
+        .field('name', 'Multipart image')
+        .field('branchName', project.mainBranchName)
+        .field('buildId', build.id)
+        .field('projectId', project.id)
         .attach('image', image_v1)
         .expect(201);
     });

@@ -3,7 +3,7 @@ import { ApiFile } from '../../shared/api-file.decorator';
 import { CreateTestRequestDto } from './create-test-request.dto';
 import { Transform, Type } from 'class-transformer';
 import { IgnoreAreaDto } from './ignore-area.dto';
-import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional } from 'class-validator';
 
 export class CreateTestRequestMultipartDto extends OmitType(CreateTestRequestDto, ['ignoreAreas', 'merge', 'diffTollerancePercent']) {
   @ApiFile()
@@ -30,7 +30,6 @@ export class CreateTestRequestMultipartDto extends OmitType(CreateTestRequestDto
    
   @ApiPropertyOptional({ type: String })
   @IsOptional()
-  @IsString()
   @Type(() => String)
   @Transform(({ value }) => value ? JSON.parse(value) : [])
   ignoreAreas?: IgnoreAreaDto[];
