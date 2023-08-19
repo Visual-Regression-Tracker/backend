@@ -5,7 +5,11 @@ import { Transform, Type } from 'class-transformer';
 import { IgnoreAreaDto } from './ignore-area.dto';
 import { IsBoolean, IsNumber, IsOptional } from 'class-validator';
 
-export class CreateTestRequestMultipartDto extends OmitType(CreateTestRequestDto, ['ignoreAreas', 'merge', 'diffTollerancePercent']) {
+export class CreateTestRequestMultipartDto extends OmitType(CreateTestRequestDto, [
+  'ignoreAreas',
+  'merge',
+  'diffTollerancePercent',
+]) {
   @ApiFile()
   image: Express.Multer.File;
 
@@ -14,24 +18,16 @@ export class CreateTestRequestMultipartDto extends OmitType(CreateTestRequestDto
   @IsNumber()
   @Transform(({ value }) => parseFloat(value) || 0)
   diffTollerancePercent?: number;
- 
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
-  @Transform(({ value }) => {
-    switch (value) {
-      case 'true':
-        return true;
-      default:
-        return false;
-    }
-  })
+  @Transform(({ value }) => value == 'true')
   merge?: boolean;
-   
+
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @Type(() => String)
-  @Transform(({ value }) => value ? JSON.parse(value) : [])
+  @Transform(({ value }) => (value ? JSON.parse(value) : []))
   ignoreAreas?: IgnoreAreaDto[];
-
 }
