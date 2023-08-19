@@ -1,6 +1,6 @@
 import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation, Baseline, Build } from '@prisma/client';
+import { TestVariation, Baseline, Build, TestRun, User } from '@prisma/client';
 import { StaticService } from '../shared/static/static.service';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
@@ -24,7 +24,9 @@ export class TestVariationsService {
     private buildsService: BuildsService
   ) {}
 
-  async getDetails(id: string): Promise<TestVariation & { baselines: Baseline[] }> {
+  async getDetails(
+    id: string
+  ): Promise<TestVariation & { baselines: (Baseline & { testRun: TestRun; user: User })[] }> {
     return this.prismaService.testVariation.findUnique({
       where: { id },
       include: {

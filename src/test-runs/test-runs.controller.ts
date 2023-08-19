@@ -48,7 +48,7 @@ export class TestRunsController {
   constructor(private testRunsService: TestRunsService) {}
 
   @Get()
-  @ApiOkResponse({ type: [TestRunDto] })
+  @ApiOkResponse({ type: TestRunDto, isArray: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   get(@Query('buildId', new ParseUUIDPipe()) buildId: string): Promise<TestRunDto[]> {
@@ -65,6 +65,7 @@ export class TestRunsController {
 
   @Post('approve')
   @ApiQuery({ name: 'merge', required: false })
+  @ApiOkResponse({ type: undefined })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
@@ -80,6 +81,7 @@ export class TestRunsController {
   }
 
   @Post('reject')
+  @ApiOkResponse({ type: undefined })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
@@ -91,6 +93,7 @@ export class TestRunsController {
   }
 
   @Post('delete')
+  @ApiOkResponse({ type: undefined })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
@@ -102,6 +105,7 @@ export class TestRunsController {
   }
 
   @Post('ignoreAreas/update')
+  @ApiOkResponse({ type: undefined })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
@@ -113,6 +117,7 @@ export class TestRunsController {
   }
 
   @Post('ignoreAreas/add')
+  @ApiOkResponse({ type: undefined })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
@@ -125,6 +130,7 @@ export class TestRunsController {
 
   @Patch('update/:testRunId')
   @ApiParam({ name: 'testRunId', required: true })
+  @ApiOkResponse({ type: TestRunDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
@@ -154,7 +160,7 @@ export class TestRunsController {
   @UseGuards(ApiGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   @UseInterceptors(FileInterceptor('image'), FileToBodyInterceptor)
-  @UsePipes(new ValidationPipe({ transform: true }))
+  @UsePipes(new ValidationPipe({ transform: true, forbidUnknownValues: true }))
   postTestRunMultipart(@Body() createTestRequestDto: CreateTestRequestMultipartDto): Promise<TestRunResultDto> {
     const imageBuffer = createTestRequestDto.image.buffer;
     return this.testRunsService.postTestRun({ createTestRequestDto, imageBuffer });

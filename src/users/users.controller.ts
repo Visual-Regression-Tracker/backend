@@ -62,7 +62,7 @@ export class UsersController {
   }
 
   @Get('all')
-  @ApiOkResponse({ type: [UserDto] })
+  @ApiOkResponse({ type: UserDto, isArray: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin)

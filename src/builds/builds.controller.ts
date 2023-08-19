@@ -58,6 +58,7 @@ export class BuildsController {
   }
 
   @Delete(':id')
+  @ApiOkResponse({ type: BuildDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
