@@ -27,12 +27,6 @@ jobs:
       - name: Build and run containers
         run: docker-compose up --build -d
 
-      # FIXME: This action is unmaintained.
-      - name: Wait untill service started (replace with health status check)
-        uses: jakejarvis/wait-action@v0.1.1
-        with:
-          time: '10s'
-
       - name: Run acceptance tests
         run: npm run test:acceptance
 
@@ -48,8 +42,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
-
-      - name: Codacy Coverage Reporter
-        uses: codacy/codacy-coverage-reporter-action@v1
-        with:
-          project-token: ${{ secrets.CODACY_TOKEN }}
