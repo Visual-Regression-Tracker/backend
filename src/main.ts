@@ -38,7 +38,7 @@ async function bootstrap() {
   app.useStaticAssets(join(process.cwd(), IMAGE_PATH), {
     maxAge: 31536000,
     // allow cors
-    setHeaders: (res, path, stat) => {
+    setHeaders: (res) => {
       res.set('Access-Control-Allow-Origin', '*');
     },
   });
