@@ -5,7 +5,7 @@
       "removeComments": true,
       "emitDecoratorMetadata": true,
       "experimentalDecorators": true,
-      "target": "es2018",
+      "target": "ES2021",
       "sourceMap": true,
       "baseUrl": "./",
       "incremental": true,
