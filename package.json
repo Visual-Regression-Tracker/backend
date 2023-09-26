@@ -71,7 +71,7 @@
     "@types/jest": "^29.5.5",
     "@types/lodash": "^4.14.198",
     "@types/multer": "^1.4.7",
-    "@types/node": "^18.17.17",
+    "@types/node": "^20.7.0",
     "@types/passport-jwt": "^3.0.9",
     "@types/passport-local": "^1.0.35",
     "@types/pixelmatch": "^5.2.4",
