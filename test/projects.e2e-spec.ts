@@ -1,15 +1,25 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { requestWithAuth, haveUserLogged } from './preconditions';
 import { ProjectsService } from '../src/projects/projects.service';
 import uuidAPIKey from 'uuid-apikey';
 import { UserLoginResponseDto } from 'src/users/dto/user-login-response.dto';
+import { ProjectDto } from 'src/projects/dto/project.dto';
 
-const project = {
+const project: ProjectDto = {
   id: uuidAPIKey.create().uuid,
   name: 'Test project',
+  buildsCounter: 0,
+  mainBranchName: 'master',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  autoApproveFeature: true,
+  imageComparison: 'pixelmatch',
+  maxBuildAllowed: 0,
+  maxBranchLifetime: 0,
+  imageComparisonConfig: '{}'
 };
 
 const projectServiceMock = {
@@ -33,6 +43,7 @@ describe('Projects (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe());
     usersService = moduleFixture.get<UsersService>(UsersService);
 
     await app.init();
@@ -81,7 +92,11 @@ describe('Projects (e2e)', () => {
     it('can delete', async () => {
       const res = await requestWithAuth(app, 'delete', `/projects/${project.id}`, loggedUser.token).send().expect(200);
 
-      expect(res.body).toStrictEqual(projectServiceMock.remove());
+      expect(res.body).toStrictEqual({
+        ...projectServiceMock.remove(),
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+      });
     });
 
     it('not valid UUID', async () => {
@@ -97,7 +112,11 @@ describe('Projects (e2e)', () => {
     it('can edit', async () => {
       const res = await requestWithAuth(app, 'put', `/projects`, loggedUser.token).send(project).expect(200);
 
-      expect(res.body).toStrictEqual(projectServiceMock.update());
+      expect(res.body).toStrictEqual({
+        ...projectServiceMock.update(),
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+      });
     });
 
     it('not valid token', async () => {
