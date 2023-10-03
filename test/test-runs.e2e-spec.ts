@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
@@ -11,6 +11,7 @@ import { BuildsService } from '../src/builds/builds.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
 import { TEST_PROJECT } from '../src/_data_';
 import uuidAPIKey from 'uuid-apikey';
+import { UpdateIgnoreAreasDto } from 'src/test-runs/dto/update-ignore-area.dto';
 
 describe('TestRuns (e2e)', () => {
   let app: INestApplication;
@@ -32,6 +33,7 @@ describe('TestRuns (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe());
     testRunsService = moduleFixture.get<TestRunsService>(TestRunsService);
     usersService = moduleFixture.get<UsersService>(UsersService);
     projecstService = moduleFixture.get<ProjectsService>(ProjectsService);
@@ -442,6 +444,44 @@ describe('TestRuns (e2e)', () => {
       );
 
       await requestWithAuth(app, 'post', `/test-runs/reject`, user.token).send([testRun1.id, testRun2.id]).expect(201);
+    });
+  });
+
+  describe('POST /ignoreAreas/update', () => {
+    it('200', async () => {
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
+
+      const request: UpdateIgnoreAreasDto = {
+        ids: [testRun.id],
+        ignoreAreas: [
+          {
+            x: 182,
+            y: 28,
+            width: 38,
+            height: 30,
+          },
+        ],
+      };
+      await requestWithAuth(app, 'post', `/test-runs/ignoreAreas/update`, user.token).send(request).expect(201);
+    });
+  });
+
+  describe('POST /ignoreAreas/add', () => {
+    it('200', async () => {
+      const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
+
+      const request: UpdateIgnoreAreasDto = {
+        ids: [testRun.id],
+        ignoreAreas: [
+          {
+            x: 182,
+            y: 28,
+            width: 38,
+            height: 30,
+          },
+        ],
+      };
+      await requestWithAuth(app, 'post', `/test-runs/ignoreAreas/add`, user.token).send(request).expect(201);
     });
   });
 });

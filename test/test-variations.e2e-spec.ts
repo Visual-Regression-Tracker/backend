@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { haveTestRunCreated, haveUserLogged } from './preconditions';
@@ -28,6 +28,7 @@ describe('TestVariations (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe());
     testRunsService = moduleFixture.get<TestRunsService>(TestRunsService);
     usersService = moduleFixture.get<UsersService>(UsersService);
     projecstService = moduleFixture.get<ProjectsService>(ProjectsService);

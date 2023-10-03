@@ -1,8 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import uuidAPIKey from 'uuid-apikey';
 import { UsersService } from '../src/users/users.service';
 import { UserLoginRequestDto } from '../src/users/dto/user-login-request.dto';
 import { compareSync } from 'bcryptjs';
@@ -20,6 +19,7 @@ describe('Users (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe());
     usersService = moduleFixture.get<UsersService>(UsersService);
     await app.init();
   });
@@ -33,12 +33,7 @@ describe('Users (e2e)', () => {
   });
 
   it('POST /register', () => {
-    user = {
-      email: `${uuidAPIKey.create().uuid}@example.com'`,
-      password: '123456',
-      firstName: 'fName',
-      lastName: 'lName',
-    };
+    user = generateUser("123456");
     return request(app.getHttpServer())
       .post('/users/register')
       .send(user)
@@ -108,7 +103,7 @@ describe('Users (e2e)', () => {
     const password = '123456';
     user = await usersService.create(generateUser(password));
     const editedUser = {
-      email: `${uuidAPIKey.create().uuid}@example.com'`,
+      email: 'edited' + user.email,
       firstName: 'EDITEDfName',
       lastName: 'EDITEDlName',
     };

@@ -21,7 +21,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? this.getCustomMessageForException(exception)
         : exception.message;
 
-    Logger.error(exception, exception.stack);
+    Logger.error(exception, exception.stack, exception.getResponse?.());
 
     response.status(status).json({
       path: request.url,

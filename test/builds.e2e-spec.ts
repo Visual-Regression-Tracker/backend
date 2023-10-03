@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
@@ -29,6 +29,7 @@ describe('Builds (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe());
     buildsService = moduleFixture.get<BuildsService>(BuildsService);
     buildsController = moduleFixture.get<BuildsController>(BuildsController);
     usersService = moduleFixture.get<UsersService>(UsersService);
