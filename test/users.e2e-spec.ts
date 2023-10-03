@@ -2,13 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import uuidAPIKey from 'uuid-apikey';
 import { UsersService } from '../src/users/users.service';
 import { UserLoginRequestDto } from '../src/users/dto/user-login-request.dto';
 import { compareSync } from 'bcryptjs';
 import { requestWithAuth, generateUser } from './preconditions';
 import { User } from '@prisma/client';
-import { UserDto } from 'src/users/dto/user.dto';
 
 describe('Users (e2e)', () => {
   let app: INestApplication;
