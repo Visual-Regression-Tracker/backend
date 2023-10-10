@@ -151,6 +151,24 @@ describe('Builds (e2e)', () => {
         });
     });
 
+    it('201 cuncurrent', async () => {
+      const createBuildDto: CreateBuildDto = {
+        ciBuildId: 'ciBuildId',
+        branchName: 'branchName',
+        project: project.name,
+      };
+
+      const builds = await Promise.all([
+        buildsController.create(createBuildDto),
+        buildsController.create(createBuildDto),
+        buildsController.create(createBuildDto),
+        buildsController.create(createBuildDto),
+        buildsController.create(createBuildDto),
+      ]);
+
+      expect(new Set(builds.map((build) => build.id)).size).toBe(1);
+    });
+
     it('404', () => {
       const createBuildDto: CreateBuildDto = {
         branchName: 'branchName',
