@@ -8,6 +8,7 @@ import { mocked, MockedObject } from 'jest-mock';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { generateTestRun } from '../_data_';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 jest.mock('./dto/build.dto');
 
@@ -220,5 +221,107 @@ describe('BuildsService', () => {
       },
     });
     expect(testRunApproveMock).toHaveBeenCalledWith(build.testRuns[0].id, true);
+  });
+
+  describe('findOsCreate', () => {
+    it('create without ciBuildId', async () => {
+      const buildUpsertMock = jest.fn().mockResolvedValueOnce(build);
+
+      service = await initService({ buildUpsertMock });
+      service.incrementBuildNumber = jest.fn().mockResolvedValueOnce(build);
+
+      await service.findOrCreate({
+        projectId: '111',
+        branchName: 'develop',
+      });
+
+      expect(buildUpsertMock).toHaveBeenCalledWith({
+        where: {
+          id: '111',
+        },
+        create: {
+          branchName: 'develop',
+          isRunning: true,
+          project: {
+            connect: {
+              id: '111',
+            },
+          },
+        },
+        update: {
+          isRunning: true,
+        },
+      });
+    });
+
+    it('create with ciBuildId', async () => {
+      const buildUpsertMock = jest.fn().mockResolvedValueOnce(build);
+      service = await initService({ buildUpsertMock });
+      service.incrementBuildNumber = jest.fn().mockResolvedValueOnce(build);
+
+      await service.findOrCreate({
+        projectId: '111',
+        branchName: 'develop',
+        ciBuildId: '222',
+      });
+
+      expect(buildUpsertMock).toHaveBeenCalledWith({
+        where: {
+          projectId_ciBuildId: {
+            projectId: '111',
+            ciBuildId: '222',
+          },
+        },
+        create: {
+          branchName: 'develop',
+          ciBuildId: '222',
+          isRunning: true,
+          project: {
+            connect: {
+              id: '111',
+            },
+          },
+        },
+        update: {
+          isRunning: true,
+        },
+      });
+    });
+
+    it('create with retry', async () => {
+      const buildUpsertMock = jest
+        .fn()
+        .mockRejectedValueOnce(new PrismaClientKnownRequestError('mock error', { code: 'P2002', clientVersion: '5' }));
+      const buildUpdateMock = jest.fn().mockResolvedValueOnce(build);
+      service = await initService({ buildUpsertMock, buildUpdateMock });
+      service.incrementBuildNumber = jest.fn().mockResolvedValueOnce(build);
+
+      const result = await service.findOrCreate({
+        projectId: '111',
+        branchName: 'develop',
+      });
+
+      expect(result).toEqual(build);
+    });
+
+    it('update already created', async () => {
+      const buildUpsertMock = jest.fn().mockResolvedValueOnce({
+        ...build,
+        number: 100,
+      });
+      service = await initService({ buildUpsertMock });
+      service.incrementBuildNumber = jest.fn();
+
+      const result = await service.findOrCreate({
+        projectId: '111',
+        branchName: 'develop',
+      });
+
+      expect(service.incrementBuildNumber).toHaveBeenCalledTimes(0);
+      expect(result).toEqual({
+        ...build,
+        number: 100,
+      });
+    });
   });
 });
