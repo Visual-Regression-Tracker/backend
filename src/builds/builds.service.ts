@@ -133,22 +133,37 @@ export class BuildsService {
         }
       : { id: projectId };
 
-    let build = await this.prismaService.build.upsert({
-      where,
-      create: {
-        ciBuildId,
-        branchName,
-        isRunning: true,
-        project: {
-          connect: {
-            id: projectId,
+    let build: Build;
+    try {
+      build = await this.prismaService.build.upsert({
+        where,
+        create: {
+          ciBuildId,
+          branchName,
+          isRunning: true,
+          project: {
+            connect: {
+              id: projectId,
+            },
           },
         },
-      },
-      update: {
-        isRunning: true,
-      },
-    });
+        update: {
+          isRunning: true,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === 'P2002') {
+          // cuncurent upsert workaround https://www.prisma.io/docs/reference/api-reference/prisma-client-reference#unique-key-constraint-errors-on-upserts
+          build = await this.prismaService.build.update({
+            where,
+            data: {
+              isRunning: true,
+            },
+          });
+        }
+      }
+    }
 
     // assigne build number
     if (!build.number) {
