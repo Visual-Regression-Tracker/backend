@@ -425,6 +425,26 @@ describe('TestRunsService', () => {
     expect(eventTestRunDeletedMock).toHaveBeenCalledWith(testRun);
   });
 
+  it('delete not found', async () => {
+    const id = 'some id';
+    const findOneMock = jest.fn().mockResolvedValueOnce(undefined);
+    const deleteImageMock = jest.fn();
+    const testRunDeleteMock = jest.fn();
+    const eventTestRunDeletedMock = jest.fn();
+    service = await initService({
+      deleteImageMock,
+      testRunDeleteMock,
+      eventTestRunDeletedMock,
+    });
+    service.findOne = findOneMock;
+
+    const result = await service.delete(id);
+
+    expect(deleteImageMock).not.toHaveBeenCalled();
+    expect(testRunDeleteMock).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+  });
+
   it('updateIgnoreAreas', async () => {
     const testRun = {
       id: 'testRunId',

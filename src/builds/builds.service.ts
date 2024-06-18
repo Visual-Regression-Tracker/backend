@@ -69,22 +69,28 @@ export class BuildsService {
       },
     });
 
+    if (!build) {
+      this.logger.warn(`Build not found ${id}`);
+      return;
+    }
+
     await Promise.all(build.testRuns.map((testRun) => this.testRunsService.delete(testRun.id)));
 
-    const promise = this.prismaService.build
-      .delete({
-        where: { id },
-      })
-      .then((build) => {
-        this.logger.log('Deleted build:' + JSON.stringify(build.id));
-        this.eventsGateway.buildDeleted(
-          new BuildDto({
-            ...build,
-          })
-        );
-        return build;
-      });
-    return promise;
+    try {
+      await this.prismaService.build.delete({ where: { id } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        // workaround https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/435
+        if (e.code === 'P2025') {
+          this.logger.warn(`Build already deleted ${id}`);
+          return;
+        }
+      }
+    }
+
+    this.logger.log(`Build deleted ${id}`);
+    this.eventsGateway.buildDeleted(new BuildDto({ ...build }));
+    return build;
   }
 
   async deleteOldBuilds(projectId: string, keepBuilds: number) {
