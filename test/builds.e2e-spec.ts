@@ -157,6 +157,22 @@ describe('Builds (e2e)', () => {
         branchName: 'branchName',
         project: project.name,
       };
+      await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        './test/image.png',
+        false
+      );
+      await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        './test/image.png',
+        false
+      );
 
       const builds = await Promise.all([
         buildsController.create(createBuildDto),

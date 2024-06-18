@@ -4,7 +4,7 @@ import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../shared/static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { Baseline, TestRun, TestStatus, TestVariation } from '@prisma/client';
+import { Baseline, Prisma, TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
@@ -244,16 +244,32 @@ export class TestRunsService {
   }
 
   async delete(id: string): Promise<TestRun> {
+    this.logger.debug(`Going to remove TestRun ${id}`);
     const testRun = await this.findOne(id);
+
+    if (!testRun) {
+      this.logger.warn(`TestRun not found ${id}`);
+      return;
+    }
 
     await Promise.all([
       this.staticService.deleteImage(testRun.diffName),
       this.staticService.deleteImage(testRun.imageName),
-      this.prismaService.testRun.delete({
-        where: { id },
-      }),
     ]);
 
+    try {
+      await this.prismaService.testRun.delete({ where: { id } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        // workaround https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/435
+        if (e.code === 'P2025') {
+          this.logger.warn(`TestRun already deleted ${id}`);
+          return;
+        }
+      }
+    }
+
+    this.logger.log(`TestRun deleted ${id}`);
     this.eventsGateway.testRunDeleted(testRun);
     return testRun;
   }

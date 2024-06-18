@@ -46,6 +46,8 @@ export class ProjectsService {
         autoApproveFeature: projectDto.autoApproveFeature,
         imageComparison: projectDto.imageComparison,
         imageComparisonConfig: projectDto.imageComparisonConfig,
+        maxBuildAllowed: projectDto.maxBuildAllowed,
+        maxBranchLifetime: projectDto.maxBranchLifetime,
       },
     });
   }

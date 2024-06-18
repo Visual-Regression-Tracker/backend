@@ -68,6 +68,12 @@ describe('Projects (e2e)', () => {
         .expect(201)
         .expect((res) => {
           expect(res.body.name).toBe(project.name);
+          expect(res.body.mainBranchName).toBe(project.mainBranchName);
+          expect(res.body.autoApproveFeature).toBe(project.autoApproveFeature);
+          expect(res.body.imageComparison).toBe(project.imageComparison);
+          expect(res.body.imageComparisonConfig).toBe(project.imageComparisonConfig);
+          expect(res.body.maxBuildAllowed).toBe(project.maxBuildAllowed);
+          expect(res.body.maxBranchLifetime).toBe(project.maxBranchLifetime);
         });
     });
 
