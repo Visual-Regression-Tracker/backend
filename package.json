@@ -77,7 +77,6 @@
     "@types/pixelmatch": "^5.2.4",
     "@types/pngjs": "^6.0.1",
     "@types/supertest": "^2.0.12",
-    "@types/uuid-apikey": "^1.5.0",
     "@typescript-eslint/eslint-plugin": "^6.4.1",
     "@typescript-eslint/parser": "^6.4.1",
     "axios": "^1.5.0",
