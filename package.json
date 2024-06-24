@@ -78,7 +78,7 @@
     "@types/pngjs": "^6.0.1",
     "@types/supertest": "^2.0.12",
     "@typescript-eslint/eslint-plugin": "^6.4.1",
-    "@typescript-eslint/parser": "^6.4.1",
+    "@typescript-eslint/parser": "^6.21.0",
     "axios": "^1.7.2",
     "eslint": "^8.47.0",
     "eslint-config-prettier": "^9.0.0",
