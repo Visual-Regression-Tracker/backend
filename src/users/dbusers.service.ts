@@ -9,10 +9,11 @@ import { AuthService } from '../auth/auth.service';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { Logger } from '@nestjs/common';
+import { UsersService } from './users.service';
 
 @Injectable()
-export class UsersService {
-  private readonly logger: Logger = new Logger(UsersService.name);
+export class DbUsersService implements UsersService {
+  private readonly logger: Logger = new Logger(DbUsersService.name);
 
   constructor(
     private prismaService: PrismaService,
