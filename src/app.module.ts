@@ -22,7 +22,7 @@ import { HealthController } from './health/health.controller';
     CacheModule.register(),
     ScheduleModule.forRoot(),
     AuthModule,
-    UsersModule,
+    UsersModule.register(),
     BuildsModule,
     ProjectsModule,
     TestRunsModule,

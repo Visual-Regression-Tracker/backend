@@ -9,7 +9,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ProjectsModule } from '../projects/projects.module';
 
 @Module({
-  imports: [SharedModule, UsersModule, forwardRef(() => TestRunsModule), AuthModule, forwardRef(() => ProjectsModule)],
+  imports: [SharedModule, UsersModule.register(), forwardRef(() => TestRunsModule), AuthModule, forwardRef(() => ProjectsModule)],
   providers: [BuildsService, PrismaService],
   controllers: [BuildsController],
   exports: [BuildsService],
