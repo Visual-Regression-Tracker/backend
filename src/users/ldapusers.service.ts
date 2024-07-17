@@ -98,11 +98,7 @@ export class LdapUsersService implements UsersService {
   }
 
   async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
-    // lookup user in LDAP
-    const ldapEntry = await this.findUserInLdap(createUserDto.email);
-    const userData = await this.createUserFromLdapEntry(ldapEntry);
-
-    return new UserLoginResponseDto(userData, null);
+    throw new HttpException('User creation is disabled. Use your LDAP-Credentials to login.', HttpStatus.BAD_REQUEST);
   }
 
   async findOne(id: string): Promise<User> {
