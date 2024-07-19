@@ -1,15 +1,13 @@
 /**
  * @see https://www.prisma.io/docs/guides/migrate/seed-database
  */
-import { PrismaClient, Role } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { genSalt, hash } from 'bcryptjs';
 
-const prisma = new PrismaClient({
-  // 'info' | 'query' | 'warn' | 'error'
-  log: ['query'],
-});
+import prisma from './client';
 
-async function seed() {
+export async function seed() {
   await prisma.$connect();
   console.log('Seeding default data...');
   await Promise.all([createDefaultUser(), createDefaultProject()]);
@@ -21,12 +19,11 @@ seed()
   .finally(async () => await prisma.$disconnect());
 
 async function createDefaultUser() {
-  let userList = [];
+  let userList: Prisma.UserGetPayload<undefined>[] = [];
   try {
     userList = await prisma.user.findMany();
     console.log(userList);
-  }
-  catch (error) {
+  } catch (error) {
     // Expected to see that "user" table does not exist
     console.log(error.message);
   }
@@ -65,12 +62,11 @@ async function createDefaultUser() {
 }
 
 async function createDefaultProject() {
-  let projectList = [];
+  let projectList: Prisma.ProjectGetPayload<undefined>[] = [];
   try {
     projectList = await prisma.project.findMany();
     console.log(projectList);
-  }
-  catch (error) {
+  } catch (error) {
     // Expected to see that "project" table does not exist
     console.log(error.message);
   }
