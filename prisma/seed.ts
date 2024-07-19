@@ -32,33 +32,36 @@ async function createDefaultUser() {
   const defaultPassword = '123456';
   const salt = await genSalt(10);
 
-  await prisma.user
-    .upsert({
-      where: {
-        email: defaultEmail,
-      },
-      update: {
-        role: Role.admin,
-      },
-      create: {
-        email: defaultEmail,
-        firstName: 'fname',
-        lastName: 'lname',
-        role: Role.admin,
-        apiKey: 'DEFAULTUSERAPIKEYTOBECHANGED',
-        password: await hash(defaultPassword, salt),
-      },
-    })
-    .then((user) => {
-      console.log('###########################');
-      console.log('####### DEFAULT USER ######');
-      console.log('###########################');
-      console.log('');
-      console.log(
-        `The user with the email "${defaultEmail}" and password "${defaultPassword}" was created (if not changed before)`
-      );
-      console.log(`The Api key is: ${user.apiKey}`);
-    });
+  // Only create default user if the db has no admin user
+  if (userList.some(({ role, isActive }) => role === 'admin' && isActive === true) === false) {
+    await prisma.user
+      .upsert({
+        where: {
+          email: defaultEmail,
+        },
+        update: {
+          role: Role.admin,
+        },
+        create: {
+          email: defaultEmail,
+          firstName: 'fname',
+          lastName: 'lname',
+          role: Role.admin,
+          apiKey: 'DEFAULTUSERAPIKEYTOBECHANGED',
+          password: await hash(defaultPassword, salt),
+        },
+      })
+      .then((user) => {
+        console.log('###########################');
+        console.log('####### DEFAULT USER ######');
+        console.log('###########################');
+        console.log('');
+        console.log(
+          `The user with the email "${defaultEmail}" and password "${defaultPassword}" was created (if not changed before)`
+        );
+        console.log(`The Api key is: ${user.apiKey}`);
+      });
+  }
 }
 
 async function createDefaultProject() {
