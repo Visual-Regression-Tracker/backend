@@ -21,6 +21,9 @@ jobs:
       - name: Static analysis
         run: npm run lint
 
+      - name: Check formatting
+        run: npm run format:check
+
       - name: Unit tests
         run: npm run test:cov
 
