@@ -1,7 +1,6 @@
 import { Baseline, Build, ImageComparison, Project, TestRun, TestVariation } from '@prisma/client';
 import { PNG } from 'pngjs';
 
-
 export const TEST_PROJECT: Project = {
   id: '1',
   name: 'Test Project',
@@ -44,7 +43,7 @@ export const generateBaseline = (baseline?: Partial<Baseline>): Baseline => {
 
 type TestVariationWithBaselines = TestVariation & {
   baselines: Baseline[];
-}
+};
 
 export const generateTestVariation = (
   testVariation?: Partial<TestVariation>,
