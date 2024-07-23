@@ -6,7 +6,7 @@
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
-    "test": "jest --silent"
+    "test": "jest"
   },
   "dependencies": {
     "@prisma/client": "^5.3.1",

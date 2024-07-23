@@ -33,7 +33,7 @@ async function createDefaultUser() {
   const salt = await genSalt(10);
 
   // Only create default user if the db has no admin user
-  if (userList.some(({ role, isActive }) => role === 'admin' && isActive === true) === false) {
+  if (!userList.some(({ role, isActive }) => role === Role.admin && isActive)) {
     await prisma.user
       .upsert({
         where: {
