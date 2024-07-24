@@ -13,5 +13,6 @@
     "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist"],
+  "include": ["node_modules/@types", "src/**/*.ts", "node_modules/.prisma/client/index.d.ts"]
 }
