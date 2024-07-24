@@ -6,10 +6,13 @@ import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
-  constructor(private health: HealthCheckService, private readonly prismaService: PrismaService) {}
+  constructor(
+    private health: HealthCheckService,
+    private readonly prismaService: PrismaService
+  ) {}
 
   @Get()
-  @ApiOkResponse({type: Object})
+  @ApiOkResponse({ type: Object })
   @HealthCheck()
   check() {
     return this.health.check([() => this.prismaService.$queryRaw`SELECT 1`]);

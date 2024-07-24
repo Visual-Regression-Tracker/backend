@@ -10,7 +10,6 @@ export class CreateTestRequestMultipartDto extends OmitType(CreateTestRequestDto
   'merge',
   'diffTollerancePercent',
 ]) {
-
   /* eslint-disable @darraghor/nestjs-typed/all-properties-are-whitelisted, @darraghor/nestjs-typed/all-properties-have-explicit-defined */
   @ApiFile()
   image: Express.Multer.File;

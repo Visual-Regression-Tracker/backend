@@ -4,8 +4,8 @@ import { Type } from 'class-transformer';
 import { ValidateNested, IsString } from 'class-validator';
 
 export class UpdateIgnoreAreasDto {
-  @ApiProperty({type: String, isArray: true })
-  @IsString({each: true})
+  @ApiProperty({ type: String, isArray: true })
+  @IsString({ each: true })
   readonly ids: string[];
 
   @ApiProperty({ type: IgnoreAreaDto, isArray: true })

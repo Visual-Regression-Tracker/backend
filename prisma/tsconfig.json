@@ -1,17 +1,18 @@
 {
-    "compilerOptions": {
-      "module": "commonjs",
-      "declaration": true,
-      "removeComments": true,
-      "emitDecoratorMetadata": true,
-      "experimentalDecorators": true,
-      "target": "ES2021",
-      "sourceMap": true,
-      "baseUrl": "./",
-      "incremental": true,
-      "skipLibCheck": true,
-      "esModuleInterop": true
-    },
-    "exclude": ["node_modules"]
-  }
-  
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "target": "ES2021",
+    "sourceMap": true,
+    "baseUrl": "./",
+    "incremental": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    // See: https://github.com/prisma/prisma/issues/10203
+    "strictNullChecks": true
+  },
+  "exclude": ["node_modules"]
+}
