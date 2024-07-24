@@ -64,7 +64,7 @@
     "@darraghor/eslint-plugin-nestjs-typed": "^4.0.16",
     "@nestjs/cli": "^10.1.17",
     "@nestjs/schematics": "^10.1.2",
-    "@nestjs/testing": "^10.2.5",
+    "@nestjs/testing": "^10.3.10",
     "@types/bcryptjs": "^2.4.4",
     "@types/cache-manager": "^3.4.3",
     "@types/cron": "^2.4.0",
