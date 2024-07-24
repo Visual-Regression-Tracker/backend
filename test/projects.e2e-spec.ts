@@ -19,7 +19,7 @@ const project: ProjectDto = {
   imageComparison: 'pixelmatch',
   maxBuildAllowed: 0,
   maxBranchLifetime: 0,
-  imageComparisonConfig: '{}'
+  imageComparisonConfig: '{}',
 };
 
 const projectServiceMock = {

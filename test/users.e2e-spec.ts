@@ -33,7 +33,7 @@ describe('Users (e2e)', () => {
   });
 
   it('POST /register', () => {
-    user = generateUser("123456");
+    user = generateUser('123456');
     return request(app.getHttpServer())
       .post('/users/register')
       .send(user)

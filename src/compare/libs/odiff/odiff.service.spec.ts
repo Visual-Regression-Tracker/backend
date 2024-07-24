@@ -60,7 +60,6 @@ describe('parseConfig', () => {
 });
 
 describe('getDiff', () => {
-
   it('no baseline', async () => {
     service = await initService({});
 
