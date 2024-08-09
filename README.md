@@ -8,7 +8,7 @@
 - Install Node `18` (LTS)
 - clone repo
 - Update `.env` and `prisma/.env`
-- Make sure Postgres is up and running, using `docker-compose up` in a separate terminal
+- Make sure Postgres is up and running, using `docker compose up` in a separate terminal
 - `npm i`
 - `npm run test`
 - Create DB structure `npx prisma db push`

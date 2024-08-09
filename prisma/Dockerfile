@@ -1,7 +1,6 @@
-# https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/137
-FROM node:18-alpine3.18
-
-RUN apk add --no-cache bash
+FROM node:18-bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt install -y libssl3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

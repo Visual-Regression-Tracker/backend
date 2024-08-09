@@ -28,7 +28,7 @@ jobs:
         run: npm run test:cov
 
       - name: Build and run containers
-        run: docker-compose up --build -d
+        run: docker compose up --build -d
 
       - name: Run acceptance tests
         run: npm run test:acceptance
@@ -38,7 +38,7 @@ jobs:
 
       - name: Stop containers
         if: always()
-        run: docker-compose down
+        run: docker compose down
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master

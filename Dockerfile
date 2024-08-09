@@ -1,6 +1,4 @@
-# https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/137
-FROM node:18-alpine3.18 AS builder
-
+FROM node:18-bookworm-slim AS builder
 # Create app directory
 WORKDIR /app
 
@@ -17,8 +15,9 @@ COPY src ./src
 
 RUN npm run build
 
-# https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/137
-FROM node:18-alpine3.18
+FROM node:18-bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt install -y libssl3 && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
