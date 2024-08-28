@@ -1,0 +1,28 @@
+version: "3.7"
+services:
+  api:
+    environment:
+      LDAP_ENABLED: 'true'
+      LDAP_TLS_NO_VERIFY: 'true'
+      LDAP_URL: 'ldaps://ldapmock:636/'
+      LDAP_BIND_USER: 'cn=admin,dc=ldapmock,dc=local'
+      LDAP_BIND_PASSWORD: 'adminpass'
+      LDAP_SEARCH_DN: 'ou=people,dc=ldapmock,dc=local'
+      LDAP_USERS_SEARCH_FILTER: '(&(objectClass=person)(mail={{email}}))'
+      LDAP_ATTRIBUTE_LAST_NAME: 'sn'
+      LDAP_ATTRIBUTE_FIRST_NAME: 'givenName'
+      LDAP_ATTRIBUTE_MAIL: 'mail'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ldapmock:
+        condition: service_started
+  ldapmock:
+    container_name: ldapmock
+    # See https://github.com/docker-ThoTeam/slapd-server-mock/tree/main
+    # Default users in LDAP: https://github.com/docker-ThoTeam/slapd-server-mock/blob/main/bootstrap/data.ldif.TEMPLATE
+    # e.g.: developer.one@ldapmock.local:password
+    image: thoteam/slapd-server-mock:latest
+    restart: always
+    ports:
+      - "636:636"

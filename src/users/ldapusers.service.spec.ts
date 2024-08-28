@@ -1,15 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UsersService } from './users.service';
+import { LdapUsersService } from './ldapusers.service';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { UserLoginResponseDto } from './dto/user-login-response.dto';
 
-describe('UsersService', () => {
-  let service: UsersService;
+describe('LdapUsersService', () => {
+  let service: LdapUsersService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        UsersService,
+        LdapUsersService,
         {
           provide: PrismaService,
           useValue: {
@@ -22,10 +23,17 @@ describe('UsersService', () => {
       ],
     }).compile();
 
-    service = module.get<UsersService>(UsersService);
+    service = module.get<LdapUsersService>(LdapUsersService);
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  xit('login using ldap', async () => {
+    // Act
+    const result = await service.login({ email: 'test@example.com', password: 'example' });
+    // Assert
+    expect(result).toEqual(expect.any(UserLoginResponseDto));
   });
 });
