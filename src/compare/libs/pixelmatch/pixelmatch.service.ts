@@ -27,8 +27,8 @@ export class PixelmatchService implements ImageComparator {
       ...NO_BASELINE_RESULT,
     };
 
-    const baseline = this.staticService.getImage(data.baseline);
-    const image = this.staticService.getImage(data.image);
+    const baseline = await this.staticService.getImage(data.baseline);
+    const image = await this.staticService.getImage(data.image);
 
     if (!baseline) {
       return NO_BASELINE_RESULT;
@@ -68,7 +68,7 @@ export class PixelmatchService implements ImageComparator {
     if (result.diffPercent > data.diffTollerancePercent) {
       // save diff
       if (data.saveDiffAsFile) {
-        result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
+        result.diffName = await this.staticService.saveImage('diff', PNG.sync.write(diff));
       }
       result.status = TestStatus.unresolved;
     } else {

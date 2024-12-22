@@ -103,8 +103,8 @@ export class TestRunsService {
     }
 
     // save new baseline
-    const baseline = this.staticService.getImage(testRun.imageName);
-    const baselineName = this.staticService.saveImage('baseline', PNG.sync.write(baseline));
+    const baseline = await this.staticService.getImage(testRun.imageName);
+    const baselineName = await this.staticService.saveImage('baseline', PNG.sync.write(baseline));
 
     if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
       // replace main branch with feature branch test variation
@@ -206,7 +206,7 @@ export class TestRunsService {
     imageBuffer: Buffer;
   }): Promise<TestRun> {
     // save image
-    const imageName = this.staticService.saveImage('screenshot', imageBuffer);
+    const imageName = await this.staticService.saveImage('screenshot', imageBuffer);
 
     const testRun = await this.prismaService.testRun.create({
       data: {

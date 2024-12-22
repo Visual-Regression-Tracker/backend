@@ -5,11 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsController } from './test-runs.controller';
 import { TestVariationsModule } from '../test-variations/test-variations.module';
 import { CompareModule } from '../compare/compare.module';
+import { StaticController } from 'src/shared/static/static.controller';
 
 @Module({
   imports: [SharedModule, forwardRef(() => TestVariationsModule), CompareModule],
   providers: [TestRunsService, PrismaService],
-  controllers: [TestRunsController],
+  controllers: [TestRunsController, StaticController],
   exports: [TestRunsService],
 })
 export class TestRunsModule {}

@@ -32,8 +32,8 @@ export class LookSameService implements ImageComparator {
       ...NO_BASELINE_RESULT,
     };
 
-    const baseline = this.staticService.getImage(data.baseline);
-    const image = this.staticService.getImage(data.image);
+    const baseline = await this.staticService.getImage(data.baseline);
+    const image = await this.staticService.getImage(data.image);
 
     if (!baseline) {
       return NO_BASELINE_RESULT;

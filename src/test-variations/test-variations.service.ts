@@ -183,7 +183,7 @@ export class TestVariationsService {
 
     // compare source to destination branch variations
     for (const sourceBranchTestVariation of testVariations) {
-      const baseline = this.staticService.getImage(sourceBranchTestVariation.baselineName);
+      const baseline = await this.staticService.getImage(sourceBranchTestVariation.baselineName);
       if (baseline) {
         // get destination branch request
         const createTestRequestDto: CreateTestRequestDto = {
@@ -209,7 +209,7 @@ export class TestVariationsService {
         const testRun = await this.testRunsService.create({
           testVariation: destintionBranchTestVariation,
           createTestRequestDto,
-          imageBuffer: PNG.sync.write(baseline),
+          imageBuffer: PNG.sync.write(await baseline),
         });
 
         await this.testRunsService.calculateDiff(projectId, testRun);
