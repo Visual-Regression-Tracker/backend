@@ -1,14 +1,14 @@
-import { Controller, Get, Logger, Param, Res } from '@nestjs/common';
+import { Controller, Get, Inject, Logger, Param, Res } from '@nestjs/common';
 import { Response } from 'express';
-import { StaticService } from './static.service';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { STATIC_SERVICE, StaticService } from './static-service.interface';
 
 @ApiTags('images')
 @Controller('images')
 export class StaticController {
   private readonly logger: Logger = new Logger(StaticController.name);
 
-  constructor(private staticService: StaticService) {}
+  constructor(@Inject(STATIC_SERVICE) private readonly staticService: StaticService) {}
 
   @Get('/:fileName')
   @ApiOkResponse()
@@ -17,14 +17,14 @@ export class StaticController {
       if (!fileName.endsWith('.png')) {
         return res.status(400).send('Invalid file type. Only PNG files are allowed.');
       }
-      if (this.staticService.doesFileExist(fileName)) {
+      if (this.staticService.doesFileExistLocally(fileName)) {
         res.redirect('/' + fileName);
       } else {
-        const localFileStream = await this.staticService.saveFileToServerFromS3(fileName);
+        const localFileStream = await this.staticService.saveFileFromCloud(fileName);
         localFileStream.on('finish', () => {
-          this.staticService.scheduleFileDeletion(fileName);
-          this.staticService.checkDiskUsageAndClean();
-          // After saving the file from S3, just redirect to the local file.
+          this.staticService.scheduleLocalFileDeletion(fileName);
+          this.staticService.checkLocalDiskUsageAndClean();
+          // After saving the file from the cloud, just redirect to the local file.
           res.redirect('/' + fileName);
         });
         localFileStream.on('error', (error) => {

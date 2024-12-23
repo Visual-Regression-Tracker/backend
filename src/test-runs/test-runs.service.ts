@@ -2,7 +2,7 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { PNG } from 'pngjs';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
-import { StaticService } from '../shared/static/static.service';
+import { STATIC_SERVICE, StaticService } from '../shared/static/static-service.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { Baseline, Prisma, TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
@@ -22,6 +22,7 @@ export class TestRunsService {
     @Inject(forwardRef(() => TestVariationsService))
     private testVariationService: TestVariationsService,
     private prismaService: PrismaService,
+    @Inject(STATIC_SERVICE)
     private staticService: StaticService,
     private compareService: CompareService,
     private eventsGateway: EventsGateway

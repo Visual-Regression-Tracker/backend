@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
-import { StaticService } from '../../../shared/static/static.service';
+import { STATIC_SERVICE, StaticService } from '../../../shared/static/static-service.interface';
 import { DiffResult } from '../../../test-runs/diffResult';
 import { scaleImageToSize, applyIgnoreAreas, parseConfig } from '../../utils';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
@@ -16,7 +16,7 @@ export const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialia
 export class PixelmatchService implements ImageComparator {
   private readonly logger: Logger = new Logger(PixelmatchService.name);
 
-  constructor(private staticService: StaticService) {}
+  constructor(@Inject(STATIC_SERVICE) private staticService: StaticService) {}
 
   parseConfig(configJson: string): PixelmatchConfig {
     return parseConfig(configJson, DEFAULT_CONFIG, this.logger);

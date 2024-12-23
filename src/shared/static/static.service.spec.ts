@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { StaticService } from './static.service';
+import { StaticService } from './static-service.interface';
 import { ConfigService } from '@nestjs/config';
+import { HardDiskService } from './hard-disk.service';
 
 describe('StaticService', () => {
   let service: StaticService;
@@ -8,7 +9,7 @@ describe('StaticService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        StaticService,
+        HardDiskService,
         {
           provide: ConfigService,
           useValue: {},
@@ -16,7 +17,7 @@ describe('StaticService', () => {
       ],
     }).compile();
 
-    service = module.get<StaticService>(StaticService);
+    service = module.get<StaticService>(HardDiskService);
   });
 
   it('should be defined', () => {

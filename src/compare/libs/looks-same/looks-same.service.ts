@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import { PNG } from 'pngjs';
-import { StaticService } from '../../../shared/static/static.service';
+import { STATIC_SERVICE, StaticService } from '../../../shared/static/static-service.interface';
 import { DiffResult } from '../../../test-runs/diffResult';
 import { applyIgnoreAreas, parseConfig } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
@@ -21,7 +21,7 @@ export const DEFAULT_CONFIG: LooksSameConfig = {
 export class LookSameService implements ImageComparator {
   private readonly logger: Logger = new Logger(LookSameService.name);
 
-  constructor(private staticService: StaticService) {}
+  constructor(@Inject(STATIC_SERVICE) private staticService: StaticService) {}
 
   parseConfig(configJson: string): LooksSameConfig {
     return parseConfig(configJson, DEFAULT_CONFIG, this.logger);

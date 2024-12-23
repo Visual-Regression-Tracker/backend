@@ -6,8 +6,8 @@ import { join } from 'path';
 import * as bodyParser from 'body-parser';
 import { readFileSync, existsSync } from 'fs';
 import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
-import { IMAGE_PATH } from './shared/static/static.service';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { IMAGE_PATH } from './shared/static/common-file-service';
 
 function getHttpsOptions(): HttpsOptions | null {
   const keyPath = './secrets/ssl.key';
