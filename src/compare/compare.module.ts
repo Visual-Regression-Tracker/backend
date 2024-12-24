@@ -3,9 +3,9 @@ import { CompareService } from './compare.service';
 import { LookSameService } from './libs/looks-same/looks-same.service';
 import { OdiffService } from './libs/odiff/odiff.service';
 import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
-import { AWSS3Service } from 'src/shared/static/aws-s3.servce.';
-import { HardDiskService } from 'src/shared/static/hard-disk.service';
-import { STATIC_SERVICE, StaticService } from 'src/shared/static/static-service.interface';
+import { AWSS3Service } from '../shared/static/aws-s3.servce.';
+import { HardDiskService } from '../shared/static/hard-disk.service';
+import { STATIC_SERVICE, StaticService } from '../shared/static/static-service.interface';
 
 @Module({
   providers: [

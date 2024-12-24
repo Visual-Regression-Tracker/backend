@@ -2,13 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
-import { StaticService } from '../shared/static/static.service';
 import { TestVariation, Baseline, Project, Build } from '@prisma/client';
 import { PNG } from 'pngjs';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { TEST_PROJECT } from '../_data_';
 import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
+import { STATIC_SERVICE } from '../shared/static/static-service.interface';
+import { HardDiskService } from '../shared/static/hard-disk.service';
 
 const initModule = async ({
   imageDeleteMock = jest.fn(),
@@ -32,7 +33,8 @@ const initModule = async ({
     providers: [
       TestVariationsService,
       {
-        provide: StaticService,
+        provide: STATIC_SERVICE,
+        useClass: HardDiskService,
         useValue: {
           getImage: getImageMock,
           deleteImage: imageDeleteMock,

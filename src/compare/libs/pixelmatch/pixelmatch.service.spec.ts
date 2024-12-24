@@ -3,10 +3,11 @@ import { TestStatus } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { mocked } from 'jest-mock';
-import { StaticService } from '../../../shared/static/static.service';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
 import { PixelmatchConfig } from './pixelmatch.types';
+import { HardDiskService } from '../../../shared/static/hard-disk.service';
+import { STATIC_SERVICE } from '../../../shared/static/static-service.interface';
 
 jest.mock('pixelmatch');
 
@@ -15,7 +16,8 @@ const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn()
     providers: [
       PixelmatchService,
       {
-        provide: StaticService,
+        provide: STATIC_SERVICE,
+        useClass: HardDiskService,
         useValue: {
           getImage: getImageMock,
           saveImage: saveImageMock,
