@@ -1,7 +1,7 @@
 import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation, Baseline, Build, TestRun, User } from '@prisma/client';
-import { StaticService } from '../shared/static/static.service';
+import { StaticService } from '../static/static.service';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { PNG } from 'pngjs';
@@ -183,7 +183,7 @@ export class TestVariationsService {
 
     // compare source to destination branch variations
     for (const sourceBranchTestVariation of testVariations) {
-      const baseline = this.staticService.getImage(sourceBranchTestVariation.baselineName);
+      const baseline = await this.staticService.getImage(sourceBranchTestVariation.baselineName);
       if (baseline) {
         // get destination branch request
         const createTestRequestDto: CreateTestRequestDto = {

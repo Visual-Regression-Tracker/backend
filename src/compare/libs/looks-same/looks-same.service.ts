@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import { PNG } from 'pngjs';
-import { StaticService } from '../../../shared/static/static.service';
+import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
 import { applyIgnoreAreas, parseConfig } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
@@ -32,8 +32,8 @@ export class LookSameService implements ImageComparator {
       ...NO_BASELINE_RESULT,
     };
 
-    const baseline = this.staticService.getImage(data.baseline);
-    const image = this.staticService.getImage(data.image);
+    const baseline = await this.staticService.getImage(data.baseline);
+    const image = await this.staticService.getImage(data.image);
 
     if (!baseline) {
       return NO_BASELINE_RESULT;

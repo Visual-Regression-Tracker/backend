@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
-import { StaticService } from '../../../shared/static/static.service';
+import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
 import { scaleImageToSize, applyIgnoreAreas, parseConfig } from '../../utils';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
@@ -27,8 +27,8 @@ export class PixelmatchService implements ImageComparator {
       ...NO_BASELINE_RESULT,
     };
 
-    const baseline = this.staticService.getImage(data.baseline);
-    const image = this.staticService.getImage(data.image);
+    const baseline = await this.staticService.getImage(data.baseline);
+    const image = await this.staticService.getImage(data.image);
 
     if (!baseline) {
       return NO_BASELINE_RESULT;
@@ -68,7 +68,7 @@ export class PixelmatchService implements ImageComparator {
     if (result.diffPercent > data.diffTollerancePercent) {
       // save diff
       if (data.saveDiffAsFile) {
-        result.diffName = this.staticService.saveImage('diff', PNG.sync.write(diff));
+        result.diffName = await this.staticService.saveImage('diff', PNG.sync.write(diff));
       }
       result.status = TestStatus.unresolved;
     } else {

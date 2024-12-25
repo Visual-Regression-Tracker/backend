@@ -2,7 +2,7 @@ import { mocked } from 'jest-mock';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { StaticService } from '../shared/static/static.service';
+import { StaticService } from '../static/static.service';
 import { TestStatus, TestRun, TestVariation } from '@prisma/client';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';

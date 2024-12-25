@@ -1,13 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import path from 'path';
 import { writeFileSync, readFileSync, unlink, mkdirSync, existsSync } from 'fs';
 import { PNG, PNGWithMetadata } from 'pngjs';
+import { Static } from '../static.interface';
+import { HDD_IMAGE_PATH } from './constants';
 
-export const IMAGE_PATH = 'imageUploads/';
-
-@Injectable()
-export class StaticService {
-  private readonly logger: Logger = new Logger(StaticService.name);
+export class HddService implements Static {
+  private readonly logger: Logger = new Logger(HddService.name);
 
   generateNewImage(type: 'screenshot' | 'diff' | 'baseline'): { imageName: string; imagePath: string } {
     const imageName = `${Date.now()}.${type}.png`;
@@ -18,11 +17,11 @@ export class StaticService {
   }
 
   getImagePath(imageName: string): string {
-    this.ensureDirectoryExistence(IMAGE_PATH);
-    return path.resolve(IMAGE_PATH, imageName);
+    this.ensureDirectoryExistence(HDD_IMAGE_PATH);
+    return path.resolve(HDD_IMAGE_PATH, imageName);
   }
 
-  saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): string {
+  async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
     try {
       new PNG().parse(imageBuffer);
     } catch (ex) {
@@ -34,7 +33,7 @@ export class StaticService {
     return imageName;
   }
 
-  getImage(imageName: string): PNGWithMetadata {
+  async getImage(imageName: string): Promise<PNGWithMetadata> {
     if (!imageName) return;
     try {
       return PNG.sync.read(readFileSync(this.getImagePath(imageName)));
