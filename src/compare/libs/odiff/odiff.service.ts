@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
-import { StaticService } from '../../../shared/static/static.service';
+import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
 import { parseConfig } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
@@ -9,6 +9,8 @@ import { DIFF_DIMENSION_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { compare } from 'odiff-bin';
 import { IgnoreAreaDto } from 'src/test-runs/dto/ignore-area.dto';
 import { OdiffConfig, OdiffIgnoreRegions, OdiffResult } from './odiff.types';
+import { HddService } from 'src/static/hdd/hdd.service';
+import { isHddStaticServiceConfigured } from '../../../static/utils';
 
 export const DEFAULT_CONFIG: OdiffConfig = {
   outputDiffMask: true,
@@ -20,8 +22,14 @@ export const DEFAULT_CONFIG: OdiffConfig = {
 @Injectable()
 export class OdiffService implements ImageComparator {
   private readonly logger: Logger = new Logger(OdiffService.name);
+  private readonly hddService: HddService;
 
-  constructor(private staticService: StaticService) {}
+  constructor(private staticService: StaticService) {
+    if (!isHddStaticServiceConfigured()) {
+      throw new Error('OdiffService can only be used with HddService');
+    }
+    this.hddService = this.staticService as unknown as HddService;
+  }
 
   parseConfig(configJson: string): OdiffConfig {
     return parseConfig(configJson, DEFAULT_CONFIG, this.logger);
@@ -37,10 +45,10 @@ export class OdiffService implements ImageComparator {
     }
 
     // compare
-    const diff = this.staticService.generateNewImage('diff');
+    const diff = this.hddService.generateNewImage('diff');
     const compareResult = (await compare(
-      this.staticService.getImagePath(data.baseline),
-      this.staticService.getImagePath(data.image),
+      this.hddService.getImagePath(data.baseline),
+      this.hddService.getImagePath(data.image),
       diff.imagePath,
       {
         ...config,

@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
-import { StaticService } from '../shared/static/static.service';
+import { StaticService } from '../static/static.service';
 import { TestVariation, Baseline, Project, Build } from '@prisma/client';
 import { PNG } from 'pngjs';
 import { BuildsService } from '../builds/builds.service';

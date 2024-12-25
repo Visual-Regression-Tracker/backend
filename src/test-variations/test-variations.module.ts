@@ -4,9 +4,10 @@ import { TestVariationsController } from './test-variations.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsModule } from '../test-runs/test-runs.module';
 import { BuildsModule } from '../builds/builds.module';
+import { StaticModule } from '../static/static.module';
 
 @Module({
-  imports: [forwardRef(() => TestRunsModule), forwardRef(() => BuildsModule)],
+  imports: [forwardRef(() => TestRunsModule), forwardRef(() => BuildsModule), StaticModule],
   providers: [TestVariationsService, PrismaService],
   controllers: [TestVariationsController],
   exports: [TestVariationsService],

@@ -1,7 +1,7 @@
 import { TestingModule, Test } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
 import { IgnoreAreaDto } from 'src/test-runs/dto/ignore-area.dto';
-import { StaticService } from '../../../shared/static/static.service';
+import { StaticService } from '../../../static/static.service';
 import { DIFF_DIMENSION_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { OdiffService, DEFAULT_CONFIG, ignoreAreaToRegionMapper } from './odiff.service';
 import { OdiffConfig, OdiffIgnoreRegions } from './odiff.types';
