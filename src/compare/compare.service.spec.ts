@@ -4,25 +4,15 @@ import { CompareService } from './compare.service';
 import { LookSameService } from './libs/looks-same/looks-same.service';
 import { OdiffService } from './libs/odiff/odiff.service';
 import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
-import { HardDiskService } from '../shared/static/hard-disk.service';
-import { STATIC_SERVICE } from '../shared/static/static-service.interface';
+import { StaticModule } from '../static/static.module';
 
 describe('CompareService', () => {
   let service: CompareService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        {
-          provide: STATIC_SERVICE,
-          useClass: HardDiskService,
-        },
-        CompareService,
-        OdiffService,
-        PixelmatchService,
-        LookSameService,
-        PrismaService,
-      ],
+      providers: [CompareService, OdiffService, PixelmatchService, LookSameService, PrismaService],
+      imports: [StaticModule],
     }).compile();
 
     service = module.get<CompareService>(CompareService);

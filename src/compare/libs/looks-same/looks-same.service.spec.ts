@@ -1,19 +1,17 @@
 import { TestingModule, Test } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
 import { PNG } from 'pngjs';
+import { StaticService } from '../../../static/static.service';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, LookSameService } from './looks-same.service';
 import { LooksSameConfig } from './looks-same.types';
-import { HardDiskService } from '../../../shared/static/hard-disk.service';
-import { STATIC_SERVICE } from '../../../shared/static/static-service.interface';
 
 const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn(), deleteImageMock = jest.fn() }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       LookSameService,
       {
-        provide: STATIC_SERVICE,
-        useClass: HardDiskService,
+        provide: StaticService,
         useValue: {
           getImage: getImageMock,
           saveImage: saveImageMock,

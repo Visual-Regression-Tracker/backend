@@ -2,6 +2,7 @@ import { mocked } from 'jest-mock';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { StaticService } from '../static/static.service';
 import { TestStatus, TestRun, TestVariation } from '@prisma/client';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
@@ -15,8 +16,6 @@ import { getTestVariationUniqueData } from '../utils';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import { CompareService } from '../compare/compare.service';
 import { UpdateTestRunDto } from './dto/update-test.dto';
-import { HardDiskService } from '../shared/static/hard-disk.service';
-import { STATIC_SERVICE } from '../shared/static/static-service.interface';
 
 jest.mock('pixelmatch');
 jest.mock('./dto/testRunResult.dto');
@@ -31,12 +30,6 @@ const initService = async ({
   getImageMock = jest.fn(),
   saveImageMock = jest.fn(),
   deleteImageMock = jest.fn(),
-  doesFileExistLocallyMock = jest.fn(),
-  saveFileFromCloudMock = jest.fn(),
-  scheduleLocalFileDeletionMock = jest.fn(),
-  checkLocalDiskUsageAndCleanMock = jest.fn(),
-  getImagePathMock = jest.fn(),
-  generateNewImageMock = jest.fn(),
   eventTestRunUpdatedMock = jest.fn(),
   eventTestRunCreatedMock = jest.fn(),
   eventTestRunDeletedMock = jest.fn(),
@@ -80,18 +73,11 @@ const initService = async ({
         },
       },
       {
-        provide: STATIC_SERVICE,
-        useClass: HardDiskService,
+        provide: StaticService,
         useValue: {
           getImage: getImageMock,
           saveImage: saveImageMock,
           deleteImage: deleteImageMock,
-          doesFileExistLocally: doesFileExistLocallyMock,
-          saveFileFromCloud: saveFileFromCloudMock,
-          scheduleLocalFileDeletion: scheduleLocalFileDeletionMock,
-          checkLocalDiskUsageAndClean: checkLocalDiskUsageAndCleanMock,
-          getImagePath: getImagePathMock,
-          generateNewImage: generateNewImageMock,
         },
       },
       {

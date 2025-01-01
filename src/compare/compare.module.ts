@@ -3,24 +3,11 @@ import { CompareService } from './compare.service';
 import { LookSameService } from './libs/looks-same/looks-same.service';
 import { OdiffService } from './libs/odiff/odiff.service';
 import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
-import { AWSS3Service } from '../shared/static/aws-s3.servce.';
-import { HardDiskService } from '../shared/static/hard-disk.service';
-import { STATIC_SERVICE, StaticService } from '../shared/static/static-service.interface';
+import { StaticModule } from '../static/static.module';
 
 @Module({
-  providers: [
-    {
-      provide: STATIC_SERVICE,
-      useFactory: (): StaticService => {
-        const isAWSDefined = process.env.USE_AWS_S3_BUCKET?.trim().toLowerCase() === 'true';
-        return isAWSDefined ? new AWSS3Service() : new HardDiskService();
-      },
-    },
-    CompareService,
-    PixelmatchService,
-    LookSameService,
-    OdiffService,
-  ],
+  providers: [CompareService, PixelmatchService, LookSameService, OdiffService],
+  imports: [StaticModule],
   exports: [CompareService],
 })
 export class CompareModule {}

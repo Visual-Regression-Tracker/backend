@@ -1,7 +1,7 @@
 import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation, Baseline, Build, TestRun, User } from '@prisma/client';
-import { STATIC_SERVICE, StaticService } from '../shared/static/static-service.interface';
+import { StaticService } from '../static/static.service';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { PNG } from 'pngjs';
@@ -17,7 +17,6 @@ export class TestVariationsService {
 
   constructor(
     private prismaService: PrismaService,
-    @Inject(STATIC_SERVICE)
     private staticService: StaticService,
     @Inject(forwardRef(() => TestRunsService))
     private testRunsService: TestRunsService,
@@ -210,7 +209,7 @@ export class TestVariationsService {
         const testRun = await this.testRunsService.create({
           testVariation: destintionBranchTestVariation,
           createTestRequestDto,
-          imageBuffer: PNG.sync.write(await baseline),
+          imageBuffer: PNG.sync.write(baseline),
         });
 
         await this.testRunsService.calculateDiff(projectId, testRun);
