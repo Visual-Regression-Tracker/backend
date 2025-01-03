@@ -8,7 +8,6 @@ import { readFileSync, existsSync } from 'fs';
 import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { HDD_IMAGE_PATH } from './static/hdd/constants';
-import { isHddStaticServiceConfigured } from './static/utils';
 
 function getHttpsOptions(): HttpsOptions | null {
   const keyPath = './secrets/ssl.key';
@@ -35,16 +34,13 @@ async function bootstrap() {
     app.use(bodyParser.json({ limit: process.env.BODY_PARSER_JSON_LIMIT }));
   }
 
-  // serve images only if hdd configuration
-  if (isHddStaticServiceConfigured()) {
-    app.useStaticAssets(join(process.cwd(), HDD_IMAGE_PATH), {
-      maxAge: 31536000,
-      // allow cors
-      setHeaders: (res) => {
-        res.set('Access-Control-Allow-Origin', '*');
-      },
-    });
-  }
+  app.useStaticAssets(join(process.cwd(), HDD_IMAGE_PATH), {
+    maxAge: 31536000,
+    // allow cors
+    setHeaders: (res) => {
+      res.set('Access-Control-Allow-Origin', '*');
+    },
+  });
 
   await app.listen(process.env.APP_PORT || 3000);
 }
