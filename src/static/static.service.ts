@@ -23,4 +23,8 @@ export class StaticService {
   async deleteImage(imageName: string): Promise<boolean> {
     return this.staticService.deleteImage(imageName);
   }
+
+  async getImageUrl(imageName: string): Promise<string> {
+    return this.staticService.getImageUrl(imageName);
+  }
 }

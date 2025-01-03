@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { Static } from '../static.interface';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export class AWSS3Service implements Static {
   private readonly logger: Logger = new Logger(AWSS3Service.name);
@@ -51,6 +52,14 @@ export class AWSS3Service implements Static {
     } catch (ex) {
       this.logger.error(`Error from read : Cannot get image: ${fileName}. ${ex}`);
     }
+  }
+
+  async getImageUrl(imageName: string): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: `${this.AWS_S3_BUCKET_NAME}`,
+      Key: imageName,
+    });
+    return getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
   }
 
   async deleteImage(imageName: string): Promise<boolean> {
