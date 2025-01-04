@@ -26,7 +26,9 @@ export class OdiffService implements ImageComparator {
 
   constructor(private staticService: StaticService) {
     if (!isHddStaticServiceConfigured()) {
-      throw new Error('OdiffService can only be used with HddService');
+      return undefined;
+      // If we throw an exception, the application does not start.
+      // throw new Error('OdiffService can only be used with HddService');
     }
     this.hddService = this.staticService as unknown as HddService;
   }

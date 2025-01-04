@@ -21,6 +21,10 @@ export class HddService implements Static {
     return path.resolve(HDD_IMAGE_PATH, imageName);
   }
 
+  getImageUrl(imageName: string): Promise<string> {
+    return Promise.resolve('/' + imageName);
+  }
+
   async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
     try {
       new PNG().parse(imageBuffer);
