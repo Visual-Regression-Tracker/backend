@@ -1,18 +1,15 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { CreateUserDto } from './dto/user-create.dto';
-import { UserLoginResponseDto } from './dto/user-login-response.dto';
-import { PrismaService } from '../prisma/prisma.service';
+import { HttpException, HttpStatus } from '@nestjs/common';
+import { CreateUserDto } from '../dto/user-create.dto';
+import { UserLoginResponseDto } from '../dto/user-login-response.dto';
+import { PrismaService } from '../../prisma/prisma.service';
 import { User } from '@prisma/client';
-import { UserDto } from './dto/user.dto';
-import { UpdateUserDto } from './dto/user-update.dto';
-import { AuthService } from '../auth/auth.service';
-import { UserLoginRequestDto } from './dto/user-login-request.dto';
-import { AssignRoleDto } from './dto/assign-role.dto';
+import { UpdateUserDto } from '../dto/user-update.dto';
+import { AuthService } from '../../auth/auth.service';
+import { UserLoginRequestDto } from '../dto/user-login-request.dto';
 import { Logger } from '@nestjs/common';
-import { UsersService } from './users.service';
+import { Users } from '../users.interface';
 
-@Injectable()
-export class DbUsersService implements UsersService {
+export class DbUsersService implements Users {
   private readonly logger: Logger = new Logger(DbUsersService.name);
 
   constructor(
@@ -36,31 +33,6 @@ export class DbUsersService implements UsersService {
     return new UserLoginResponseDto(userData, null);
   }
 
-  async findOne(id: string): Promise<User> {
-    return this.prismaService.user.findUnique({ where: { id } });
-  }
-
-  async delete(id: string): Promise<User> {
-    this.logger.debug(`Removing User: ${id}`);
-    return this.prismaService.user.delete({ where: { id } });
-  }
-
-  async get(id: string): Promise<UserDto> {
-    const user = await this.findOne(id);
-    return new UserDto(user);
-  }
-
-  async assignRole(data: AssignRoleDto): Promise<UserDto> {
-    const { id, role } = data;
-    this.logger.debug(`Assigning role ${role} to User: ${id}`);
-
-    const user = await this.prismaService.user.update({
-      where: { id },
-      data: { role },
-    });
-    return new UserDto(user);
-  }
-
   async update(id: string, userDto: UpdateUserDto): Promise<UserLoginResponseDto> {
     const user = await this.prismaService.user.update({
       where: { id },
@@ -72,17 +44,6 @@ export class DbUsersService implements UsersService {
     });
     const token = this.authService.signToken(user);
     return new UserLoginResponseDto(user, token);
-  }
-
-  async generateNewApiKey(user: User): Promise<string> {
-    const newApiKey = this.authService.generateApiKey();
-    await this.prismaService.user.update({
-      where: { id: user.id },
-      data: {
-        apiKey: newApiKey,
-      },
-    });
-    return newApiKey;
   }
 
   async changePassword(user: User, newPassword: string): Promise<boolean> {

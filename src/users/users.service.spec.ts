@@ -1,18 +1,27 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { DbUsersService } from './dbusers.service';
+import { UsersService } from './users.service';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserLoginResponseDto } from './dto/user-login-response.dto';
+import { ConfigService } from '@nestjs/config';
+import { UsersFactoryService } from './users.factory';
 import { Role } from '@prisma/client';
+import { UserLoginResponseDto } from './dto/user-login-response.dto';
 
-describe('DbUsersService', () => {
-  let service: DbUsersService;
+describe('UsersService', () => {
+  let service: UsersService;
   let prismaService: PrismaService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        DbUsersService,
+        UsersService,
+        UsersFactoryService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn(),
+          },
+        },
         {
           provide: PrismaService,
           useValue: {
@@ -25,14 +34,14 @@ describe('DbUsersService', () => {
         {
           provide: AuthService,
           useValue: {
-            generateApiKey: jest.fn((..._: any[]) => 'generatedApiKey'),
-            encryptPassword: jest.fn((..._: any[]) => 'encryptedPassword'),
+            generateApiKey: jest.fn(() => 'generatedApiKey'),
+            encryptPassword: jest.fn(() => 'encryptedPassword'),
           },
         },
       ],
     }).compile();
 
-    service = module.get<DbUsersService>(DbUsersService);
+    service = module.get<UsersService>(UsersService);
     prismaService = module.get<PrismaService>(PrismaService);
   });
 

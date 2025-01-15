@@ -1,49 +1,52 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { CreateUserDto } from './dto/user-create.dto';
-import { UserLoginResponseDto } from './dto/user-login-response.dto';
-import { PrismaService } from '../prisma/prisma.service';
+import { HttpException, HttpStatus } from '@nestjs/common';
+import { CreateUserDto } from '../dto/user-create.dto';
+import { UserLoginResponseDto } from '../dto/user-login-response.dto';
+import { PrismaService } from '../../prisma/prisma.service';
 import { Role, User } from '@prisma/client';
-import { UserDto } from './dto/user.dto';
-import { UpdateUserDto } from './dto/user-update.dto';
-import { AuthService } from '../auth/auth.service';
-import { UserLoginRequestDto } from './dto/user-login-request.dto';
-import { AssignRoleDto } from './dto/assign-role.dto';
+import { UpdateUserDto } from '../dto/user-update.dto';
+import { AuthService } from '../../auth/auth.service';
+import { UserLoginRequestDto } from '../dto/user-login-request.dto';
 import { Logger } from '@nestjs/common';
 import { Entry as LdapEntry, Client as LdapClient } from 'ldapts';
-import { UsersService } from './users.service';
+import { Users } from '../users.interface';
+import { ConfigService } from '@nestjs/config';
 
-@Injectable()
-export class LdapUsersService implements UsersService {
+type LDAPConfig = {
+  url: string;
+  bindUser: string;
+  bindPassword: string;
+  searchDN: string;
+  usersSearchFilter: string;
+  attributeMail: string;
+  attributeFirstName: string;
+  attributeLastName: string;
+  tlsNoVerify: boolean;
+};
+export class LdapUsersService implements Users {
   private readonly ldapClient: LdapClient;
   private readonly logger: Logger = new Logger(LdapUsersService.name);
-  private readonly assertRequiredEnvVarsAreSet = () => {
-    const requiredEnvVars = [
-      'LDAP_URL',
-      'LDAP_BIND_USER',
-      'LDAP_BIND_PASSWORD',
-      'LDAP_SEARCH_DN',
-      'LDAP_USERS_SEARCH_FILTER',
-      'LDAP_ATTRIBUTE_MAIL',
-      'LDAP_ATTRIBUTE_FIRST_NAME',
-      'LDAP_ATTRIBUTE_LAST_NAME',
-    ];
-
-    for (const envVar of requiredEnvVars) {
-      if (!process.env[envVar]) {
-        throw new Error(`${envVar} is required.`);
-      }
-    }
-  };
+  private readonly ldapConfig: LDAPConfig;
 
   constructor(
+    private configService: ConfigService,
     private prismaService: PrismaService,
     private authService: AuthService
   ) {
-    this.assertRequiredEnvVarsAreSet();
+    this.ldapConfig = {
+      url: this.configService.getOrThrow<string>('LDAP_URL'),
+      bindUser: this.configService.getOrThrow<string>('LDAP_BIND_USER'),
+      bindPassword: this.configService.getOrThrow<string>('LDAP_BIND_PASSWORD'),
+      searchDN: this.configService.getOrThrow<string>('LDAP_SEARCH_DN'),
+      usersSearchFilter: this.configService.getOrThrow<string>('LDAP_USERS_SEARCH_FILTER'),
+      attributeMail: this.configService.getOrThrow<string>('LDAP_ATTRIBUTE_MAIL'),
+      attributeFirstName: this.configService.getOrThrow<string>('LDAP_ATTRIBUTE_FIRST_NAME'),
+      attributeLastName: this.configService.getOrThrow<string>('LDAP_ATTRIBUTE_LAST_NAME'),
+      tlsNoVerify: this.configService.get<boolean>('LDAP_TLS_NO_VERIFY', false),
+    };
     this.ldapClient = new LdapClient({
-      url: process.env.LDAP_URL,
+      url: this.ldapConfig.url,
       tlsOptions: {
-        rejectUnauthorized: process.env.LDAP_TLS_NO_VERIFY !== 'true',
+        rejectUnauthorized: !this.ldapConfig.tlsNoVerify,
       },
     });
   }
@@ -53,16 +56,16 @@ export class LdapUsersService implements UsersService {
     email = this.escapeLdap(email.trim());
     this.logger.verbose(`search '${email}' in LDAP`);
     try {
-      await this.ldapClient.bind(process.env.LDAP_BIND_USER, process.env.LDAP_BIND_PASSWORD);
+      await this.ldapClient.bind(this.ldapConfig.bindUser, this.ldapConfig.bindPassword);
       const attributes = [
         'dn',
-        process.env.LDAP_ATTRIBUTE_MAIL,
-        process.env.LDAP_ATTRIBUTE_FIRST_NAME,
-        process.env.LDAP_ATTRIBUTE_LAST_NAME,
+        this.ldapConfig.attributeMail,
+        this.ldapConfig.attributeFirstName,
+        this.ldapConfig.attributeLastName,
       ];
 
-      const { searchEntries } = await this.ldapClient.search(process.env.LDAP_SEARCH_DN, {
-        filter: process.env.LDAP_USERS_SEARCH_FILTER.replaceAll('{{email}}', email),
+      const { searchEntries } = await this.ldapClient.search(this.ldapConfig.searchDN, {
+        filter: this.ldapConfig.usersSearchFilter.replaceAll('{{email}}', email),
         sizeLimit: 1,
         attributes: attributes,
       });
@@ -84,9 +87,9 @@ export class LdapUsersService implements UsersService {
 
   private async createUserFromLdapEntry(ldapEntry: LdapEntry): Promise<User> {
     const userForVRTDb = {
-      email: ldapEntry[process.env.LDAP_ATTRIBUTE_MAIL].toString().trim().toLowerCase(),
-      firstName: ldapEntry[process.env.LDAP_ATTRIBUTE_FIRST_NAME].toString(),
-      lastName: ldapEntry[process.env.LDAP_ATTRIBUTE_LAST_NAME].toString(),
+      email: ldapEntry[this.ldapConfig.attributeMail].toString().trim().toLowerCase(),
+      firstName: ldapEntry[this.ldapConfig.attributeFirstName].toString(),
+      lastName: ldapEntry[this.ldapConfig.attributeLastName].toString(),
       apiKey: this.authService.generateApiKey(),
       password: await this.authService.encryptPassword(Math.random().toString(36).slice(-8)),
       role: Role.editor,
@@ -97,33 +100,9 @@ export class LdapUsersService implements UsersService {
     });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
     throw new HttpException('User creation is disabled. Use your LDAP-Credentials to login.', HttpStatus.BAD_REQUEST);
-  }
-
-  async findOne(id: string): Promise<User> {
-    return this.prismaService.user.findUnique({ where: { id } });
-  }
-
-  async delete(id: string): Promise<User> {
-    this.logger.debug(`Removing User: ${id}`);
-    return this.prismaService.user.delete({ where: { id } });
-  }
-
-  async get(id: string): Promise<UserDto> {
-    const user = await this.findOne(id);
-    return new UserDto(user);
-  }
-
-  async assignRole(data: AssignRoleDto): Promise<UserDto> {
-    const { id, role } = data;
-    this.logger.debug(`Assigning role ${role} to User: ${id}`);
-
-    const user = await this.prismaService.user.update({
-      where: { id },
-      data: { role },
-    });
-    return new UserDto(user);
   }
 
   async update(id: string, userDto: UpdateUserDto): Promise<UserLoginResponseDto> {
@@ -140,17 +119,7 @@ export class LdapUsersService implements UsersService {
     return new UserLoginResponseDto(user, token);
   }
 
-  async generateNewApiKey(user: User): Promise<string> {
-    const newApiKey = this.authService.generateApiKey();
-    await this.prismaService.user.update({
-      where: { id: user.id },
-      data: {
-        apiKey: newApiKey,
-      },
-    });
-    return newApiKey;
-  }
-
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async changePassword(user: User, newPassword: string): Promise<boolean> {
     this.logger.warn(`${user.email} tied to change password - this is not supported for LDAP users`);
     return true;
@@ -171,7 +140,7 @@ export class LdapUsersService implements UsersService {
       await this.ldapClient.unbind();
     }
 
-    const userEmailFromLdap = userFromLdap[process.env.LDAP_ATTRIBUTE_MAIL].toString().trim().toLowerCase();
+    const userEmailFromLdap = userFromLdap[this.ldapConfig.attributeMail].toString().trim().toLowerCase();
 
     let user = await this.prismaService.user.findUnique({
       where: { email: userEmailFromLdap },
