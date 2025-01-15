@@ -40,6 +40,16 @@ jobs:
         if: always()
         run: docker compose down
 
+      - name: Run ldap containers
+        run: docker compose -f docker-compose.yml -f docker-compose.ldap.yml up -d
+
+      - name: Run ldap test
+        run: npm run test:ldap
+
+      - name: Stop ldap containers
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.ldap.yml down
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:

@@ -17,7 +17,7 @@ export class UsersFactoryService {
   ) {}
 
   getUsersService(): Users {
-    const serviceType = this.configService.get<boolean>('LDAP_ENABLED', false);
+    const serviceType = this.configService.get<string>('LDAP_ENABLED', 'false')?.toLowerCase() === 'true';
     switch (serviceType) {
       case true:
         this.logger.debug('users service type: LDAP');

@@ -41,7 +41,7 @@ export class LdapUsersService implements Users {
       attributeMail: this.configService.getOrThrow<string>('LDAP_ATTRIBUTE_MAIL'),
       attributeFirstName: this.configService.getOrThrow<string>('LDAP_ATTRIBUTE_FIRST_NAME'),
       attributeLastName: this.configService.getOrThrow<string>('LDAP_ATTRIBUTE_LAST_NAME'),
-      tlsNoVerify: this.configService.get<boolean>('LDAP_TLS_NO_VERIFY', false),
+      tlsNoVerify: this.configService.get<string>('LDAP_TLS_NO_VERIFY', 'false').toLowerCase() === 'true',
     };
     this.ldapClient = new LdapClient({
       url: this.ldapConfig.url,
