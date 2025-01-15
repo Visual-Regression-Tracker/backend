@@ -10,6 +10,7 @@ import { Logger } from '@nestjs/common';
 import { Entry as LdapEntry, Client as LdapClient } from 'ldapts';
 import { Users } from '../users.interface';
 import { ConfigService } from '@nestjs/config';
+import { genSaltSync } from 'bcryptjs';
 
 type LDAPConfig = {
   url: string;
@@ -91,7 +92,7 @@ export class LdapUsersService implements Users {
       firstName: ldapEntry[this.ldapConfig.attributeFirstName].toString(),
       lastName: ldapEntry[this.ldapConfig.attributeLastName].toString(),
       apiKey: this.authService.generateApiKey(),
-      password: await this.authService.encryptPassword(Math.random().toString(36).slice(-8)),
+      password: await this.authService.encryptPassword(genSaltSync(1).slice(-12)),
       role: Role.editor,
     };
 
