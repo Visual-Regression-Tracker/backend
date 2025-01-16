@@ -36,6 +36,10 @@ jobs:
       - name: Run e2e tests
         run: npm run test:e2e
 
+      - name: Dump docker logs on failure
+        if: failure()
+        uses: jwalton/gh-docker-logs@v2
+
       - name: Stop containers
         if: always()
         run: docker compose down
@@ -45,6 +49,10 @@ jobs:
 
       - name: Run ldap test
         run: npm run test:ldap
+
+      - name: Dump docker logs on failure
+        if: failure()
+        uses: jwalton/gh-docker-logs@v2
 
       - name: Stop ldap containers
         if: always()
