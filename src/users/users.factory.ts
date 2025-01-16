@@ -11,9 +11,9 @@ export class UsersFactoryService {
   private readonly logger: Logger = new Logger(UsersFactoryService.name);
 
   constructor(
-    private configService: ConfigService,
-    private prismaService: PrismaService,
-    private authService: AuthService
+    private readonly configService: ConfigService,
+    private readonly prismaService: PrismaService,
+    private readonly authService: AuthService
   ) {}
 
   getUsersService(): Users {

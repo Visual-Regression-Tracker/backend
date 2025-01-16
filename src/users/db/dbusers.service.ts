@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { CreateUserDto } from '../dto/user-create.dto';
 import { UserLoginResponseDto } from '../dto/user-login-response.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -6,15 +6,14 @@ import { User } from '@prisma/client';
 import { UpdateUserDto } from '../dto/user-update.dto';
 import { AuthService } from '../../auth/auth.service';
 import { UserLoginRequestDto } from '../dto/user-login-request.dto';
-import { Logger } from '@nestjs/common';
 import { Users } from '../users.interface';
 
 export class DbUsersService implements Users {
   private readonly logger: Logger = new Logger(DbUsersService.name);
 
   constructor(
-    private prismaService: PrismaService,
-    private authService: AuthService
+    private readonly prismaService: PrismaService,
+    private readonly authService: AuthService
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {

@@ -18,7 +18,7 @@ export class UsersService {
   private readonly usersService: Users;
 
   constructor(
-    private usersFactoryService: UsersFactoryService,
+    private readonly usersFactoryService: UsersFactoryService,
     private prismaService: PrismaService,
     private authService: AuthService
   ) {

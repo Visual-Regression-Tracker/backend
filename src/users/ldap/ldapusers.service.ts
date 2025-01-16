@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { CreateUserDto } from '../dto/user-create.dto';
 import { UserLoginResponseDto } from '../dto/user-login-response.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -6,7 +6,6 @@ import { Role, User } from '@prisma/client';
 import { UpdateUserDto } from '../dto/user-update.dto';
 import { AuthService } from '../../auth/auth.service';
 import { UserLoginRequestDto } from '../dto/user-login-request.dto';
-import { Logger } from '@nestjs/common';
 import { Entry as LdapEntry, Client as LdapClient } from 'ldapts';
 import { Users } from '../users.interface';
 import { ConfigService } from '@nestjs/config';
@@ -29,9 +28,9 @@ export class LdapUsersService implements Users {
   private readonly ldapConfig: LDAPConfig;
 
   constructor(
-    private configService: ConfigService,
-    private prismaService: PrismaService,
-    private authService: AuthService
+    private readonly configService: ConfigService,
+    private readonly prismaService: PrismaService,
+    private readonly authService: AuthService
   ) {
     this.ldapConfig = {
       url: this.configService.getOrThrow<string>('LDAP_URL'),
