@@ -20,7 +20,8 @@
     "test:cov": "jest --projects src --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --projects src --runInBand",
     "test:e2e": "jest --projects test",
-    "test:acceptance": "jest --projects test_acceptance"
+    "test:acceptance": "jest --projects test_acceptance",
+    "test:ldap": "jest --projects test_ldap"
   },
   "engines": {
     "node": ">=18.12.0"
@@ -47,6 +48,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "fs-extra": "^11.1.1",
+    "ldapts": "^7.1.0",
     "looks-same": "^9.0.0",
     "odiff-bin": "^2.6.1",
     "passport": "^0.6.0",
