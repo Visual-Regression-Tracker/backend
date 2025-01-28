@@ -8,6 +8,7 @@ COPY ./prisma/schema.prisma ./
 COPY package*.json ./
 
 # Install app dependencies
+ENV NODE_TLS_REJECT_UNAUTHORIZED='0'
 RUN npm ci --verbose
 
 COPY tsconfig*.json ./
