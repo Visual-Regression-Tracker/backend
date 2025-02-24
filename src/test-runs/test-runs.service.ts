@@ -85,8 +85,16 @@ export class TestRunsService {
 
     // try auto approve
     if (project.autoApproveFeature) {
-      testRunWithResult = await this.tryAutoApproveByPastBaselines({ testVariation, testRun: testRunWithResult });
-      testRunWithResult = await this.tryAutoApproveByNewBaselines({ testVariation, testRun: testRunWithResult });
+      testRunWithResult = await this.tryAutoApproveByPastBaselines({
+        testVariation,
+        testRun: testRunWithResult,
+        baselineBranchName: createTestRequestDto.baselineBranchName,
+      });
+      testRunWithResult = await this.tryAutoApproveByNewBaselines({
+        testVariation,
+        testRun: testRunWithResult,
+        baselineBranchName: createTestRequestDto.baselineBranchName,
+      });
     }
     return new TestRunResultDto(testRunWithResult, testVariation);
   }
@@ -348,7 +356,11 @@ export class TestRunsService {
    * @param testVariation
    * @param testRun
    */
-  private async tryAutoApproveByNewBaselines({ testVariation, testRun }: AutoApproveProps): Promise<TestRun> {
+  private async tryAutoApproveByNewBaselines({
+    testVariation,
+    testRun,
+    baselineBranchName,
+  }: AutoApproveProps): Promise<TestRun> {
     if (testRun.status === TestStatus.ok) {
       return testRun;
     }
@@ -358,6 +370,7 @@ export class TestRunsService {
       where: {
         ...getTestVariationUniqueData(testVariation),
         baselineName: testVariation.baselineName,
+        baselineBranchName,
         status: TestStatus.approved,
         testVariation: {
           projectId: testVariation.projectId,
@@ -407,4 +420,5 @@ export class TestRunsService {
 interface AutoApproveProps {
   testVariation: TestVariation;
   testRun: TestRun;
+  baselineBranchName?: string;
 }

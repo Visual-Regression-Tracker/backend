@@ -51,7 +51,8 @@ export const haveTestRunCreated = async (
   projectId: string,
   branchName: string,
   imagePath: string,
-  merge?: boolean
+  merge?: boolean,
+  baselineBranchName?: string
 ): Promise<{ testRun: TestRunResultDto; build: Build }> => {
   const build = await buildsService.findOrCreate({ projectId: projectId, branchName });
   const testRun = await testRunsService.postTestRun({
@@ -61,6 +62,7 @@ export const haveTestRunCreated = async (
       buildId: build.id,
       name: 'Image name',
       merge,
+      baselineBranchName,
     },
     imageBuffer: readFileSync(imagePath),
   });
