@@ -8,7 +8,7 @@ module.exports = {
   extends: [
     'plugin:@typescript-eslint/eslint-recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:@darraghor/nestjs-typed/recommended',
+    // 'plugin:@darraghor/nestjs-typed/recommended',
     'prettier',
   ],
   root: true,
