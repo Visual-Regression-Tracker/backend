@@ -20,6 +20,7 @@ const project: ProjectDto = {
   maxBuildAllowed: 0,
   maxBranchLifetime: 0,
   imageComparisonConfig: '{}',
+  protectedBranch: null
 };
 
 const projectServiceMock = {

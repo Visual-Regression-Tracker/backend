@@ -1,6 +1,6 @@
 import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation, Baseline, Build, TestRun, User } from '@prisma/client';
+import { TestVariation, Baseline, Build, TestRun, User, type Project } from '@prisma/client';
 import { StaticService } from '../static/static.service';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
@@ -245,5 +245,15 @@ export class TestVariationsService {
     return this.prismaService.baseline.delete({
       where: { id: baseline.id },
     });
+  }
+
+  async findOldTestVariations(project: Project, dateRemoveAfter: Date) {
+    return await this.prismaService.$queryRaw<Project[]>`
+      SELECT * from public."TestVariation"
+        WHERE "projectId" = ${project.id}
+        AND "updatedAt" <= ${dateRemoveAfter}
+        AND "branchName" NOT LIKE ${project.mainBranchName}
+        AND "branchName" NOT SIMILAR TO ${project.protectedBranch}
+      `;
   }
 }
