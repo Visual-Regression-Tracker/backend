@@ -21,13 +21,8 @@ export class TasksService {
       const dateRemoveAfter: Date = new Date();
       dateRemoveAfter.setDate(dateRemoveAfter.getDate() - project.maxBranchLifetime);
 
-      const testVariations = await this.prismaService.testVariation.findMany({
-        where: {
-          projectId: project.id,
-          updatedAt: { lte: dateRemoveAfter },
-          branchName: { not: project.mainBranchName },
-        },
-      });
+      const testVariations = await this.testVariationService.findOldTestVariations(project, dateRemoveAfter);
+
       this.logger.debug(
         `Removing ${testVariations.length} TestVariations for ${project.name} later than ${dateRemoveAfter}`
       );

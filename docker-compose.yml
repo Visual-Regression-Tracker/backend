@@ -51,7 +51,7 @@ services:
   #   container_name: pgadmin4
   #   # https://hub.docker.com/r/dpage/pgadmin4
   #   # https://www.pgadmin.org/docs/pgadmin4/latest/release_notes_7_4.html
-  #   image: dpage/pgadmin4:7.4
+  #   image: dpage/pgadmin4
   #   restart: always
   #   environment:
   #     PGADMIN_DEFAULT_EMAIL: admin@admin.com

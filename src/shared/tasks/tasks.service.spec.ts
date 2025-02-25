@@ -6,7 +6,7 @@ import { TestVariationsService } from '../../test-variations/test-variations.ser
 
 const initService = async ({
   projectFindManyMock = jest.fn(),
-  testVariationFindManyMock = jest.fn(),
+  findOldTestVariationsMock = jest.fn(),
   testVariationsDeleteMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
@@ -15,9 +15,6 @@ const initService = async ({
       {
         provide: PrismaService,
         useValue: {
-          testVariation: {
-            findMany: testVariationFindManyMock,
-          },
           project: {
             findMany: projectFindManyMock,
           },
@@ -27,6 +24,7 @@ const initService = async ({
         provide: TestVariationsService,
         useValue: {
           delete: testVariationsDeleteMock,
+          findOldTestVariations: findOldTestVariationsMock,
         },
       },
     ],
@@ -43,11 +41,11 @@ describe('cleanOldTestVariations', () => {
     const project = TEST_PROJECT;
     const testVariation = generateTestVariation();
     const projectFindManyMock = jest.fn().mockResolvedValueOnce([project]);
-    const testVariationFindManyMock = jest.fn().mockResolvedValueOnce([testVariation]);
+    const findOldTestVariationsMock = jest.fn().mockResolvedValueOnce([testVariation]);
     const testVariationsDeleteMock = jest.fn();
     service = await initService({
       projectFindManyMock: projectFindManyMock,
-      testVariationFindManyMock: testVariationFindManyMock,
+      findOldTestVariationsMock: findOldTestVariationsMock,
       testVariationsDeleteMock: testVariationsDeleteMock,
     });
     const dateNow = new Date('2022-10-23');
@@ -59,13 +57,7 @@ describe('cleanOldTestVariations', () => {
     await service.cleanOldTestVariations();
 
     // .Assert
-    expect(testVariationFindManyMock).toHaveBeenCalledWith({
-      where: {
-        updatedAt: { lte: dateRemoveAfter },
-        branchName: { not: project.mainBranchName },
-        projectId: project.id,
-      },
-    });
+    expect(findOldTestVariationsMock).toHaveBeenCalledWith(project, dateRemoveAfter);
     expect(testVariationsDeleteMock).toBeCalledWith(testVariation.id);
   });
 });

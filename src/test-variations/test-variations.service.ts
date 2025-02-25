@@ -1,6 +1,6 @@
 import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation, Baseline, Build, TestRun, User } from '@prisma/client';
+import { TestVariation, Baseline, Build, TestRun, User, type Project } from '@prisma/client';
 import { StaticService } from '../static/static.service';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
@@ -79,21 +79,19 @@ export class TestVariationsService {
    * @param baselineData
    * @returns
    */
-  async find(
-    createTestRequestDto: BaselineDataDto & { projectId: string; sourceBranch?: string }
-  ): Promise<TestVariation | null> {
+  async find(createTestRequestDto: Omit<CreateTestRequestDto, 'buildId'>): Promise<TestVariation | null> {
     const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
-    const mainBranch = createTestRequestDto.sourceBranch ?? project.mainBranchName;
+    const baselineBranch = createTestRequestDto.baselineBranchName ?? project.mainBranchName;
 
     const [mainBranchTestVariation, currentBranchTestVariation] = await Promise.all([
-      // search main branch variation
+      // search baseline branch variation
       this.findUnique({
         projectId: createTestRequestDto.projectId,
-        branchName: mainBranch,
+        branchName: baselineBranch,
         ...getTestVariationUniqueData(createTestRequestDto),
       }),
       // search current branch variation
-      createTestRequestDto.branchName !== mainBranch &&
+      createTestRequestDto.branchName !== baselineBranch &&
         this.findUnique({
           projectId: createTestRequestDto.projectId,
           branchName: createTestRequestDto.branchName,
@@ -101,14 +99,14 @@ export class TestVariationsService {
         }),
     ]);
 
-    if (!!currentBranchTestVariation) {
+    if (currentBranchTestVariation) {
       if (mainBranchTestVariation && mainBranchTestVariation.updatedAt > currentBranchTestVariation.updatedAt) {
         return mainBranchTestVariation;
       }
       return currentBranchTestVariation;
     }
 
-    if (!!mainBranchTestVariation) {
+    if (mainBranchTestVariation) {
       return mainBranchTestVariation;
     }
   }
@@ -247,5 +245,15 @@ export class TestVariationsService {
     return this.prismaService.baseline.delete({
       where: { id: baseline.id },
     });
+  }
+
+  async findOldTestVariations(project: Project, dateRemoveAfter: Date) {
+    return await this.prismaService.$queryRaw<Project[]>`
+      SELECT * from public."TestVariation"
+        WHERE "projectId" = ${project.id}
+        AND "updatedAt" <= ${dateRemoveAfter}
+        AND "branchName" NOT LIKE ${project.mainBranchName}
+        AND "branchName" NOT SIMILAR TO ${project.protectedBranch}
+      `;
   }
 }
