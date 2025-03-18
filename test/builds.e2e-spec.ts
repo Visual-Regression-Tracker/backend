@@ -57,6 +57,34 @@ describe('Builds (e2e)', () => {
   });
 
   describe('POST /', () => {
+    it('deletes old builds', async () => {
+      const createBuild = async (count: number) => {
+        const image_v1 = './test/image.png';
+
+        const createBuildDto: CreateBuildDto = {
+          branchName: `branchName-${count}`,
+          project: project.id,
+        };
+        await requestWithApiKey(app, 'post', '/builds', user.apiKey).send(createBuildDto).expect(201);
+        await haveTestRunCreated(buildsService, testRunsService, project.id, `branchName-${count}`, image_v1);
+      };
+
+      for (let i = 0; i < 6; i++) {
+        await createBuild(i);
+      }
+
+      const builds = await buildsService.findMany(project.id, 10, 0);
+
+      expect(builds.total).toBe(project.maxBuildAllowed);
+      expect(builds.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ branchName: 'branchName-5' }),
+          expect.objectContaining({ branchName: 'branchName-4' }),
+          expect.objectContaining({ branchName: 'branchName-3' }),
+        ])
+      );
+    });
+
     it('201 by id', () => {
       const createBuildDto: CreateBuildDto = {
         branchName: 'branchName',

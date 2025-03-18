@@ -5,7 +5,7 @@ export const TEST_PROJECT: Project = {
   id: '1',
   name: 'Test Project',
   buildsCounter: 2,
-  maxBuildAllowed: 1,
+  maxBuildAllowed: 3,
   maxBranchLifetime: 30,
   mainBranchName: 'master',
   createdAt: new Date(),

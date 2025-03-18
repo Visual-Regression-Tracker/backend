@@ -1,11 +1,12 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build, Prisma, TestStatus } from '@prisma/client';
+import { Build, Prisma, TestStatus, Project } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
+import { StaticService } from '../static/static.service';
 
 @Injectable()
 export class BuildsService {
@@ -15,7 +16,8 @@ export class BuildsService {
     private prismaService: PrismaService,
     private eventsGateway: EventsGateway,
     @Inject(forwardRef(() => TestRunsService))
-    private testRunsService: TestRunsService
+    private testRunsService: TestRunsService,
+    private staticService: StaticService
   ) {}
 
   async findOne(id: string): Promise<BuildDto> {
@@ -93,12 +95,38 @@ export class BuildsService {
     return build;
   }
 
-  async deleteOldBuilds(projectId: string, keepBuilds: number) {
-    keepBuilds = keepBuilds < 2 ? keepBuilds : keepBuilds - 1;
-    this.findMany(projectId, undefined, keepBuilds).then((buildList) => {
-      buildList.data.forEach((eachBuild) => {
-        this.remove(eachBuild.id);
-      });
+  async deleteOldBuilds(project: Project) {
+    this.logger.log('Going to delete old builds');
+
+    const keepBuilds = project.maxBuildAllowed <= 1 ? 1 : project.maxBuildAllowed - 1;
+
+    const buildsToDelete = await this.prismaService.build.findMany({
+      where: { projectId: { equals: project.id } },
+      orderBy: { createdAt: 'desc' },
+      skip: keepBuilds,
+    });
+
+    const buildIds = buildsToDelete.map((build) => build.id);
+
+    const testRunsToDelete = await this.prismaService.testRun.findMany({ where: { buildId: { in: buildIds } } });
+
+    await this.prismaService.testRun.deleteMany({ where: { buildId: { in: buildIds } } });
+
+    testRunsToDelete.forEach((testRun) => {
+      this.staticService.deleteImage(testRun.diffName);
+      this.staticService.deleteImage(testRun.imageName);
+    });
+
+    testRunsToDelete.forEach((testRun) => {
+      this.logger.log(`TestRun deleted ${testRun.id}`);
+      this.eventsGateway.testRunDeleted(testRun);
+    });
+
+    await this.prismaService.build.deleteMany({ where: { id: { in: buildIds } } });
+
+    buildsToDelete.forEach((build) => {
+      this.logger.log(`Build deleted ${build.id}`);
+      this.eventsGateway.buildDeleted(new BuildDto({ ...build }));
     });
   }
 

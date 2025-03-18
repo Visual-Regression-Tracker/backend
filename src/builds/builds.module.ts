@@ -7,10 +7,12 @@ import { TestRunsModule } from '../test-runs/test-runs.module';
 import { SharedModule } from '../shared/shared.module';
 import { AuthModule } from '../auth/auth.module';
 import { ProjectsModule } from '../projects/projects.module';
+import { StaticService } from '../static/static.service';
+import { StaticFactoryService } from '../static/static.factory';
 
 @Module({
   imports: [SharedModule, UsersModule, forwardRef(() => TestRunsModule), AuthModule, forwardRef(() => ProjectsModule)],
-  providers: [BuildsService, PrismaService],
+  providers: [BuildsService, PrismaService, StaticFactoryService, StaticService],
   controllers: [BuildsController],
   exports: [BuildsService],
 })
