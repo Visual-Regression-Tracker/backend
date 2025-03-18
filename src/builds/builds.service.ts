@@ -21,16 +21,13 @@ export class BuildsService {
   ) {}
 
   async findOne(id: string): Promise<BuildDto> {
-    const [build, testRuns] = await Promise.all([
-      this.prismaService.build.findUnique({
-        where: { id },
-      }),
-      this.testRunsService.findMany(id),
-    ]);
-    return new BuildDto({
-      ...build,
-      testRuns,
+    const build = await this.prismaService.build.findUnique({
+      where: { id },
+      include: {
+        testRuns: true,
+      },
     });
+    return new BuildDto(build);
   }
 
   async findMany(projectId: string, take: number, skip: number): Promise<PaginatedBuildDto> {
@@ -41,11 +38,12 @@ export class BuildsService {
         take,
         skip,
         orderBy: { createdAt: 'desc' },
+        include: { testRuns: true },
       }),
     ]);
 
     return {
-      data: await Promise.all(buildList.map((build) => this.findOne(build.id))),
+      data: buildList.map((build) => new BuildDto(build)),
       total,
       take,
       skip,
@@ -76,7 +74,7 @@ export class BuildsService {
       return;
     }
 
-    await Promise.all(build.testRuns.map((testRun) => this.testRunsService.delete(testRun.id)));
+    await this.deleteBulkTestRuns([build.id]);
 
     try {
       await this.prismaService.build.delete({ where: { id } });
@@ -95,19 +93,7 @@ export class BuildsService {
     return build;
   }
 
-  async deleteOldBuilds(project: Project) {
-    this.logger.log('Going to delete old builds');
-
-    const keepBuilds = project.maxBuildAllowed <= 1 ? 1 : project.maxBuildAllowed - 1;
-
-    const buildsToDelete = await this.prismaService.build.findMany({
-      where: { projectId: { equals: project.id } },
-      orderBy: { createdAt: 'desc' },
-      skip: keepBuilds,
-    });
-
-    const buildIds = buildsToDelete.map((build) => build.id);
-
+  async deleteBulkTestRuns(buildIds: string[]) {
     const testRunsToDelete = await this.prismaService.testRun.findMany({ where: { buildId: { in: buildIds } } });
 
     await this.prismaService.testRun.deleteMany({ where: { buildId: { in: buildIds } } });
@@ -121,6 +107,22 @@ export class BuildsService {
       this.logger.log(`TestRun deleted ${testRun.id}`);
       this.eventsGateway.testRunDeleted(testRun);
     });
+  }
+
+  async deleteOldBuilds(project: Project) {
+    this.logger.log('Going to delete old builds');
+
+    const keepBuilds = project.maxBuildAllowed <= 1 ? 1 : project.maxBuildAllowed - 1;
+
+    const buildsToDelete = await this.prismaService.build.findMany({
+      where: { projectId: { equals: project.id } },
+      orderBy: { createdAt: 'desc' },
+      skip: keepBuilds,
+    });
+
+    const buildIds = buildsToDelete.map((build) => build.id);
+
+    await this.deleteBulkTestRuns(buildIds);
 
     await this.prismaService.build.deleteMany({ where: { id: { in: buildIds } } });
 

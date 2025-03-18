@@ -78,7 +78,7 @@ describe('Builds Controller', () => {
     const result = await controller.create(createBuildDto);
 
     expect(result).toStrictEqual(new BuildDto(buildWithNumber));
-    expect(deleteOldBuilds).toHaveBeenCalledWith(project.id, project.maxBuildAllowed);
+    expect(deleteOldBuilds).toHaveBeenCalledWith(project);
   });
 
   it('should reuse build', async () => {

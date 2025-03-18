@@ -12,6 +12,7 @@ import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { BuildsController } from '../src/builds/builds.controller';
 import { TEST_PROJECT } from '../src/_data_';
 import uuidAPIKey from 'uuid-apikey';
+import { readFileSync } from 'fs';
 
 describe('Builds (e2e)', () => {
   let app: INestApplication;
@@ -65,8 +66,20 @@ describe('Builds (e2e)', () => {
           branchName: `branchName-${count}`,
           project: project.id,
         };
-        await requestWithApiKey(app, 'post', '/builds', user.apiKey).send(createBuildDto).expect(201);
-        await haveTestRunCreated(buildsService, testRunsService, project.id, `branchName-${count}`, image_v1);
+
+        const buildId = (await requestWithApiKey(app, 'post', '/builds', user.apiKey).send(createBuildDto).expect(201))
+          .body.id;
+
+        await testRunsService.postTestRun({
+          createTestRequestDto: {
+            projectId: project.id,
+            branchName: `branchName-${count}`,
+            buildId,
+            name: 'Image name',
+            merge: false,
+          },
+          imageBuffer: readFileSync(image_v1),
+        });
       };
 
       for (let i = 0; i < 6; i++) {
