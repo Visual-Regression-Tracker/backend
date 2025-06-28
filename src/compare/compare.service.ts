@@ -18,7 +18,7 @@ export class CompareService {
     private readonly lookSameService: LookSameService,
     private readonly odiffService: OdiffService,
     private readonly prismaService: PrismaService
-  ) { }
+  ) {}
 
   async getDiff({ projectId, data }: { projectId: string; data: ImageCompareInput }): Promise<DiffResult> {
     const project: Project = await this.prismaService.project.findUnique({ where: { id: projectId } });
@@ -37,7 +37,9 @@ export class CompareService {
       }
       case ImageComparison.odiff: {
         if (!isHddStaticServiceConfigured()) {
-          throw new Error('Odiff can only be used with HDD static service. Please use another image comparison lib in project settings or switch STATIC_SERVICE envitonmental variable to HDD.');
+          throw new Error(
+            'Odiff can only be used with HDD static service. Please use another image comparison lib in project settings or switch STATIC_SERVICE envitonmental variable to HDD.'
+          );
         }
 
         return this.odiffService;

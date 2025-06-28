@@ -51,7 +51,8 @@ describe('CompareService', () => {
       jest.spyOn(utils, 'isHddStaticServiceConfigured').mockReturnValue(false);
 
       expect(() => service.getComparator(ImageComparison.odiff)).toThrow(
-        "Odiff can only be used with HDD static service. Please use another image comparison lib in project settings or switch STATIC_SERVICE envitonmental variable to HDD.");
+        'Odiff can only be used with HDD static service. Please use another image comparison lib in project settings or switch STATIC_SERVICE envitonmental variable to HDD.'
+      );
     });
 
     it('should return pixelmatchService for unknown value', () => {
