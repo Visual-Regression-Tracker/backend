@@ -9,5 +9,5 @@ export function isS3ServiceConfigured() {
 }
 
 export function generateNewImageName(type: 'screenshot' | 'diff' | 'baseline'): string {
-    return`${uuidAPIKey.create({ noDashes: true }).apiKey}.${type}.png`;
-  }
+  return `${uuidAPIKey.create({ noDashes: true }).apiKey}.${type}.png`;
+}
