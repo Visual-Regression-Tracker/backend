@@ -4,6 +4,7 @@ import { Static } from '../static.interface';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { generateNewImageName } from '../utils';
 
 export class AWSS3Service implements Static {
   private readonly logger: Logger = new Logger(AWSS3Service.name);
@@ -26,7 +27,7 @@ export class AWSS3Service implements Static {
   }
 
   async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
-    const imageName = `${Date.now()}.${type}.png`;
+    const imageName = generateNewImageName(type);
     try {
       await this.s3Client.send(
         new PutObjectCommand({

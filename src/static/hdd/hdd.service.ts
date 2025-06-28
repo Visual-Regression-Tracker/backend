@@ -5,12 +5,13 @@ import { PNG, PNGWithMetadata } from 'pngjs';
 import uuidAPIKey from 'uuid-apikey';
 import { Static } from '../static.interface';
 import { HDD_IMAGE_PATH } from './constants';
+import { generateNewImageName } from '../utils';
 
 export class HddService implements Static {
   private readonly logger: Logger = new Logger(HddService.name);
 
   generateNewImage(type: 'screenshot' | 'diff' | 'baseline'): { imageName: string; imagePath: string } {
-    const imageName = `${uuidAPIKey.create({ noDashes: true }).apiKey}.${type}.png`;
+    const imageName = generateNewImageName(type);
     return {
       imageName,
       imagePath: this.getImagePath(imageName),
