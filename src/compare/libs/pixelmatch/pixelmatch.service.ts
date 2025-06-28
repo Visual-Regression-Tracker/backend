@@ -16,7 +16,7 @@ export const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialia
 export class PixelmatchService implements ImageComparator {
   private readonly logger: Logger = new Logger(PixelmatchService.name);
 
-  constructor(private staticService: StaticService) {}
+  constructor(private readonly staticService: StaticService) {}
 
   parseConfig(configJson: string): PixelmatchConfig {
     return parseConfig(configJson, DEFAULT_CONFIG, this.logger);
