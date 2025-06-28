@@ -21,7 +21,7 @@ export const DEFAULT_CONFIG: LooksSameConfig = {
 export class LookSameService implements ImageComparator {
   private readonly logger: Logger = new Logger(LookSameService.name);
 
-  constructor(private staticService: StaticService) {}
+  constructor(private readonly staticService: StaticService) {}
 
   parseConfig(configJson: string): LooksSameConfig {
     return parseConfig(configJson, DEFAULT_CONFIG, this.logger);

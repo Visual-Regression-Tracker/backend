@@ -10,7 +10,6 @@ import { compare } from 'odiff-bin';
 import { IgnoreAreaDto } from 'src/test-runs/dto/ignore-area.dto';
 import { OdiffConfig, OdiffIgnoreRegions, OdiffResult } from './odiff.types';
 import { HddService } from 'src/static/hdd/hdd.service';
-import { isHddStaticServiceConfigured } from '../../../static/utils';
 
 export const DEFAULT_CONFIG: OdiffConfig = {
   outputDiffMask: true,
@@ -24,12 +23,7 @@ export class OdiffService implements ImageComparator {
   private readonly logger: Logger = new Logger(OdiffService.name);
   private readonly hddService: HddService;
 
-  constructor(private staticService: StaticService) {
-    if (!isHddStaticServiceConfigured()) {
-      return undefined;
-      // If we throw an exception, the application does not start.
-      // throw new Error('OdiffService can only be used with HddService');
-    }
+  constructor(private readonly staticService: StaticService) {
     this.hddService = this.staticService as unknown as HddService;
   }
 
