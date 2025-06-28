@@ -1,4 +1,4 @@
-FROM node:18-bookworm-slim AS builder
+FROM node:20-bookworm-slim AS builder
 # Create app directory
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY src ./src
 
 RUN npm run build
 
-FROM node:18-bookworm-slim
+FROM node:20-bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update && apt install -y libssl3 && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/node_modules ./node_modules
