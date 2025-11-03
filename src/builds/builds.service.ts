@@ -10,6 +10,7 @@ import { ModifyBuildDto } from './dto/build-modify.dto';
 @Injectable()
 export class BuildsService {
   private readonly logger: Logger = new Logger(BuildsService.name);
+  private readonly ongoingDeletions = new Map<string, Promise<void>>();
 
   constructor(
     private prismaService: PrismaService,
@@ -60,6 +61,10 @@ export class BuildsService {
   }
 
   async remove(id: string): Promise<Build> {
+    if (!id) {
+      this.logger.warn(`Attempted to remove build with undefined ID.`);
+      return;
+    }
     this.logger.debug(`Going to remove Build ${id}`);
 
     const build = await this.prismaService.build.findUnique({
@@ -93,13 +98,30 @@ export class BuildsService {
     return build;
   }
 
-  async deleteOldBuilds(projectId: string, keepBuilds: number) {
-    keepBuilds = keepBuilds < 2 ? keepBuilds : keepBuilds - 1;
-    this.findMany(projectId, undefined, keepBuilds).then((buildList) => {
-      buildList.data.forEach((eachBuild) => {
-        this.remove(eachBuild.id);
-      });
+  async deleteOldBuilds(projectId: string, keepBuilds: number): Promise<void> {
+    if (this.ongoingDeletions.has(projectId)) {
+      this.logger.debug(`Deletion for project ${projectId} is already in progress. Returning existing promise.`);
+      return this.ongoingDeletions.get(projectId);
+    }
+
+    const deletionPromise = (async () => {
+      this.logger.debug(`Starting to delete old builds for project ${projectId}, keeping ${keepBuilds} builds.`);
+      keepBuilds = keepBuilds < 2 ? keepBuilds : keepBuilds - 1;
+      const buildList = await this.findMany(projectId, undefined, keepBuilds);
+      for (const eachBuild of buildList.data) {
+        await this.remove(eachBuild.id);
+      }
+      this.logger.debug(`Finished deleting old builds for project ${projectId}.`);
+    })();
+
+    this.ongoingDeletions.set(projectId, deletionPromise);
+
+    deletionPromise.finally(() => {
+      this.ongoingDeletions.delete(projectId);
+      this.logger.debug(`Deletion promise for project ${projectId} resolved/rejected and removed from map.`);
     });
+
+    return deletionPromise;
   }
 
   async approve(id: string, merge: boolean): Promise<void> {

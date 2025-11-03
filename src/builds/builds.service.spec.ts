@@ -151,32 +151,128 @@ describe('BuildsService', () => {
     });
   });
 
-  it('delete', async () => {
-    const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-    const buildFindManyMock = jest.fn().mockImplementation(() => Promise.resolve(build));
-    const buildDeleteMock = jest.fn().mockImplementation(() => Promise.resolve(build));
-    const testRunDeleteMock = jest.fn();
-    const eventBuildDeletedMock = jest.fn();
-    service = await initService({
-      buildFindUniqueMock,
-      buildDeleteMock,
-      testRunDeleteMock,
-      eventBuildDeletedMock,
-      buildFindManyMock,
+  describe('remove', () => {
+    it('should remove a build successfully', async () => {
+      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
+      const buildFindManyMock = jest.fn().mockImplementation(() => Promise.resolve(build));
+      const buildDeleteMock = jest.fn().mockImplementation(() => Promise.resolve(build));
+      const testRunDeleteMock = jest.fn();
+      const eventBuildDeletedMock = jest.fn();
+      service = await initService({
+        buildFindUniqueMock,
+        buildDeleteMock,
+        testRunDeleteMock,
+        eventBuildDeletedMock,
+        buildFindManyMock,
+      });
+
+      await service.remove(build.id);
+
+      expect(buildFindUniqueMock).toHaveBeenCalledWith({
+        where: { id: build.id },
+        include: {
+          testRuns: true,
+        },
+      });
+      expect(testRunDeleteMock).toHaveBeenCalledWith(build.testRuns[0].id);
+      expect(eventBuildDeletedMock).toHaveBeenCalledWith(new BuildDto(build));
+      expect(buildDeleteMock).toHaveBeenCalledWith({
+        where: { id: build.id },
+      });
     });
 
-    await service.remove(build.id);
+    it('should handle undefined ID gracefully', async () => {
+      const buildFindUniqueMock = jest.fn();
+      const loggerWarnMock = jest.fn();
+      service = await initService({ buildFindUniqueMock });
+      (service as any).logger = { warn: loggerWarnMock }; // Mock the logger
 
-    expect(buildFindUniqueMock).toHaveBeenCalledWith({
-      where: { id: build.id },
-      include: {
-        testRuns: true,
-      },
+      await service.remove(undefined);
+
+      expect(loggerWarnMock).toHaveBeenCalledWith('Attempted to remove build with undefined ID.');
+      expect(buildFindUniqueMock).not.toHaveBeenCalled();
     });
-    expect(testRunDeleteMock).toHaveBeenCalledWith(build.testRuns[0].id);
-    expect(eventBuildDeletedMock).toHaveBeenCalledWith(new BuildDto(build));
-    expect(buildDeleteMock).toHaveBeenCalledWith({
-      where: { id: build.id },
+  });
+
+  describe('deleteOldBuilds', () => {
+    const projectId = 'someProjectId';
+    const build1 = { ...buildDto, id: 'build1', createdAt: new Date(Date.now() - 10000) };
+    const build2 = { ...buildDto, id: 'build2', createdAt: new Date(Date.now() - 5000) };
+
+    it('should delete old builds and keep the specified number', async () => {
+      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build1, build2]);
+      const buildCountMock = jest.fn().mockResolvedValueOnce(2);
+      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build1).mockResolvedValueOnce(build2);
+      mocked(BuildDto)
+        .mockReturnValueOnce(build1 as MockedObject<BuildDto>)
+        .mockReturnValueOnce(build2 as MockedObject<BuildDto>);
+      const testRunFindManyMock = jest.fn().mockResolvedValue([]);
+      const removeMock = jest.fn().mockResolvedValue(undefined);
+      const loggerDebugMock = jest.fn();
+
+      service = await initService({ buildFindManyMock, buildCountMock, buildFindUniqueMock, testRunFindManyMock });
+      service.remove = removeMock;
+      (service as any).logger = { debug: loggerDebugMock };
+
+      await service.deleteOldBuilds(projectId, 2);
+
+      expect(buildFindManyMock).toHaveBeenCalledWith({
+        where: { projectId },
+        take: undefined,
+        skip: 1,
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(removeMock).toHaveBeenCalledTimes(2);
+      expect(removeMock).toHaveBeenCalledWith(build1.id);
+      expect(removeMock).toHaveBeenCalledWith(build2.id);
+      expect(loggerDebugMock).toHaveBeenCalledWith(
+        `Starting to delete old builds for project ${projectId}, keeping 2 builds.`
+      );
+      expect(loggerDebugMock).toHaveBeenCalledWith(`Finished deleting old builds for project ${projectId}.`);
+    });
+
+    it('should handle concurrent calls for the same project by returning the existing promise', async () => {
+      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build1, build2]);
+      const buildCountMock = jest.fn().mockResolvedValueOnce(2);
+      const removeMock = jest.fn().mockResolvedValue(undefined);
+      const testRunFindManyMock = jest.fn().mockResolvedValue([]);
+      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build1).mockResolvedValueOnce(build2);
+      mocked(BuildDto)
+        .mockReturnValueOnce(build1 as MockedObject<BuildDto>)
+        .mockReturnValueOnce(build2 as MockedObject<BuildDto>);
+      const loggerDebugMock = jest.fn();
+
+      service = await initService({ buildFindManyMock, buildCountMock, testRunFindManyMock, buildFindUniqueMock });
+      service.remove = removeMock;
+      (service as any).logger = { debug: loggerDebugMock };
+
+      const promise1 = service.deleteOldBuilds(projectId, 2);
+      const promise2 = service.deleteOldBuilds(projectId, 2);
+
+      expect(promise1).toStrictEqual(promise2);
+      expect(loggerDebugMock).toHaveBeenCalledWith(
+        `Deletion for project ${projectId} is already in progress. Returning existing promise.`
+      );
+
+      await promise1; // Wait for the deletion to complete
+
+      expect(buildFindManyMock).toHaveBeenCalledTimes(1); // Only called once
+      expect(removeMock).toHaveBeenCalledTimes(2);
+      expect(loggerDebugMock).toHaveBeenCalledWith(`Finished deleting old builds for project ${projectId}.`);
+    });
+
+    it('should remove the promise from the map after completion (success)', async () => {
+      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build1]);
+      const buildCountMock = jest.fn().mockResolvedValueOnce(1);
+      const removeMock = jest.fn().mockResolvedValue(undefined);
+
+      service = await initService({ buildFindManyMock, buildCountMock });
+      service.remove = removeMock;
+
+      const projectId = 'testProject';
+      await service.deleteOldBuilds(projectId, 0);
+
+      expect(service['ongoingDeletions'].has(projectId)).toBe(false);
     });
   });
 
