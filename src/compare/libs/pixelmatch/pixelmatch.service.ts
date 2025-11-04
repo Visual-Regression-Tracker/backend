@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
-import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
@@ -15,14 +14,23 @@ export const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialia
 @Injectable()
 export class PixelmatchService implements ImageComparator {
   private readonly logger: Logger = new Logger(PixelmatchService.name);
+  private pixelmatch: any;
 
   constructor(private readonly staticService: StaticService) {}
+
+  private async getPixelmatch() {
+    if (!this.pixelmatch) {
+      this.pixelmatch = (await import('pixelmatch')).default;
+    }
+    return this.pixelmatch;
+  }
 
   parseConfig(configJson: string): PixelmatchConfig {
     return parseConfig(configJson, DEFAULT_CONFIG, this.logger);
   }
 
   async getDiff(data: ImageCompareInput, config: PixelmatchConfig): Promise<DiffResult> {
+    const pixelmatch = await this.getPixelmatch();
     const result: DiffResult = {
       ...NO_BASELINE_RESULT,
     };
@@ -58,7 +66,7 @@ export class PixelmatchService implements ImageComparator {
       width: maxWidth,
       height: maxHeight,
     });
-    result.pixelMisMatchCount = Pixelmatch(baselineIgnored.data, imageIgnored.data, diff.data, maxWidth, maxHeight, {
+    result.pixelMisMatchCount = pixelmatch(baselineIgnored.data, imageIgnored.data, diff.data, maxWidth, maxHeight, {
       includeAA: config.ignoreAntialiasing,
       threshold: config.threshold,
     });

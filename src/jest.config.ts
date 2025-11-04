@@ -9,5 +9,9 @@ module.exports = async () => {
     },
     coverageDirectory: '../coverage',
     testEnvironment: 'node',
+    moduleNameMapper: {
+      '^looks-same$': '<rootDir>/__mocks__/looks-same.ts',
+      '^pixelmatch$': '<rootDir>/__mocks__/pixelmatch.ts',
+    },
   };
 };

@@ -7,7 +7,6 @@ import { applyIgnoreAreas, parseConfig } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { LookSameResult, LooksSameConfig } from './looks-same.types';
-import looksSame from 'looks-same';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 
 export const DEFAULT_CONFIG: LooksSameConfig = {
@@ -20,14 +19,23 @@ export const DEFAULT_CONFIG: LooksSameConfig = {
 @Injectable()
 export class LookSameService implements ImageComparator {
   private readonly logger: Logger = new Logger(LookSameService.name);
+  private looksSame: any;
 
   constructor(private readonly staticService: StaticService) {}
+
+  private async getLooksSame() {
+    if (!this.looksSame) {
+      this.looksSame = (await import('looks-same')).default;
+    }
+    return this.looksSame;
+  }
 
   parseConfig(configJson: string): LooksSameConfig {
     return parseConfig(configJson, DEFAULT_CONFIG, this.logger);
   }
 
   async getDiff(data: ImageCompareInput, config: LooksSameConfig): Promise<DiffResult> {
+    const looksSame = await this.getLooksSame();
     const result: DiffResult = {
       ...NO_BASELINE_RESULT,
     };
@@ -67,6 +75,7 @@ export class LookSameService implements ImageComparator {
   }
 
   async compare(baseline: PNG, image: PNG, config: LooksSameConfig): Promise<LookSameResult | undefined> {
+    const looksSame = await this.getLooksSame();
     const diffResult = await looksSame(PNG.sync.write(baseline), PNG.sync.write(image), config).catch((error) => {
       this.logger.error(error.message);
     });
@@ -77,6 +86,7 @@ export class LookSameService implements ImageComparator {
   }
 
   async createDiff(baseline: PNG, image: PNG, config: LooksSameConfig): Promise<string | undefined> {
+    const looksSame = await this.getLooksSame();
     const buffer = await looksSame
       .createDiff({
         reference: PNG.sync.write(baseline),
