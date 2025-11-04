@@ -1,4 +1,4 @@
-FROM node:18-bookworm-slim
+FROM node:20-bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update && apt install -y libssl3 && rm -rf /var/lib/apt/lists/*
 
