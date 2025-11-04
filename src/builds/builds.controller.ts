@@ -89,10 +89,6 @@ export class BuildsController {
   @UseGuards(MixedGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   update(@Param('id', new ParseUUIDPipe()) id: string, @Body() modifyBuildDto?: ModifyBuildDto): Promise<BuildDto> {
-    //In future, no or empty body will do nothing as this check will be removed. It will expect a proper body to perform any patch.
-    if (modifyBuildDto == null || Object.keys(modifyBuildDto).length === 0) {
-      modifyBuildDto = { isRunning: false };
-    }
     return this.buildsService.update(id, modifyBuildDto);
   }
 

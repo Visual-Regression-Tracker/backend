@@ -258,7 +258,7 @@ describe('Builds (e2e)', () => {
       const build = await buildsController.create({ project: project.id, branchName: 'develop' });
 
       return requestWithAuth(app, 'patch', `/builds/${build.id}`, user.token)
-        .send()
+        .send({isRunning: false})
         .expect(200)
         .expect((res) => {
           expect(res.body.isRunning).toBe(false);
@@ -269,7 +269,7 @@ describe('Builds (e2e)', () => {
       const build = await buildsController.create({ project: project.id, branchName: 'develop' });
 
       return requestWithApiKey(app, 'patch', `/builds/${build.id}`, user.apiKey)
-        .send()
+        .send({isRunning: false})
         .expect(200)
         .expect((res) => {
           expect(res.body.isRunning).toBe(false);
