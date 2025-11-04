@@ -34,7 +34,7 @@ export class PixelmatchService implements ImageComparator {
       return NO_BASELINE_RESULT;
     }
 
-    if (baseline.data.equals(image.data)) {
+    if (baseline.data.equals(new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength))) {
       return EQUAL_RESULT;
     }
 

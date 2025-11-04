@@ -11,7 +11,6 @@ import { MergeParams } from './types';
 import { BaseTestVariationDto } from './dto/base-test-variation.dto';
 import { TestVariationDto } from './dto/test-variation.dto';
 
-/* eslint-disable @darraghor/nestjs-typed/injectable-should-be-provided */
 @ApiTags('test-variations')
 @Controller('test-variations')
 export class TestVariationsController {

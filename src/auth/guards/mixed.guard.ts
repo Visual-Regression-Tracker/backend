@@ -13,12 +13,12 @@ export class MixedGuard implements CanActivate {
     let jwtAuth = false;
     try {
       jwtAuth = (await this.authGuard.canActivate(context)) as boolean;
-    } catch (err) {}
+    } catch {}
 
     let apiAuth = false;
     try {
       apiAuth = await this.apiGuard.canActivate(context);
-    } catch (err) {}
+    } catch {}
     return jwtAuth || apiAuth;
   }
 }

@@ -29,12 +29,12 @@ export class HddService implements Static {
   async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
     try {
       new PNG().parse(imageBuffer);
-    } catch (ex) {
+    } catch {
       throw new Error('Cannot parse image as PNG file');
     }
 
     const { imageName, imagePath } = this.generateNewImage(type);
-    writeFileSync(imagePath, imageBuffer);
+    writeFileSync(imagePath, new Uint8Array(imageBuffer.buffer, imageBuffer.byteOffset, imageBuffer.byteLength));
     return imageName;
   }
 

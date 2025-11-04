@@ -40,7 +40,6 @@ import { CurrentUser } from '../shared/current-user.decorator';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
 
-/* eslint-disable @darraghor/nestjs-typed/injectable-should-be-provided */
 @ApiTags('test-runs')
 @Controller('test-runs')
 export class TestRunsController {
