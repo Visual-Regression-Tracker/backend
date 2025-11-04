@@ -8,24 +8,14 @@ export const ApiFile =
         type: 'array',
         isArray: true,
         items: {
-          type: 'file',
-          properties: {
-            [propertyKey]: {
-              type: 'string',
-              format: 'binary',
-            },
-          },
+          type: 'string',
+          format: 'binary',
         },
       })(target, propertyKey);
     } else {
       ApiProperty({
-        type: 'file',
-        properties: {
-          [propertyKey]: {
-            type: 'string',
-            format: 'binary',
-          },
-        },
+        type: 'string',
+        format: 'binary',
       })(target, propertyKey);
     }
   };
