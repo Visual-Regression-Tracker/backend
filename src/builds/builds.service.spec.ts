@@ -3,12 +3,11 @@ import { BuildsService } from './builds.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
-import { Build, TestRun, TestStatus } from '@prisma/client';
+import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { mocked, MockedObject } from 'jest-mock';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { generateTestRun } from '../_data_';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 jest.mock('./dto/build.dto');
 
@@ -387,7 +386,9 @@ describe('BuildsService', () => {
     it('create with retry', async () => {
       const buildUpsertMock = jest
         .fn()
-        .mockRejectedValueOnce(new PrismaClientKnownRequestError('mock error', { code: 'P2002', clientVersion: '5' }));
+        .mockRejectedValueOnce(
+          new Prisma.PrismaClientKnownRequestError('mock error', { code: 'P2002', clientVersion: '5' })
+        );
       const buildUpdateMock = jest.fn().mockResolvedValueOnce(build);
       service = await initService({ buildUpsertMock, buildUpdateMock });
       service.incrementBuildNumber = jest.fn().mockResolvedValueOnce(build);

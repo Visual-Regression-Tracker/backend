@@ -7,9 +7,6 @@ export class TestRunResultDto extends TestRunDto {
   pixelMisMatchCount?: number;
   @ApiProperty()
   url: string;
-  @ApiProperty()
-  baselineName: string;
-
   constructor(testRun: TestRun, testVariation: TestVariation) {
     super(testRun);
     this.baselineName = testVariation.baselineName;

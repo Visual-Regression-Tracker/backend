@@ -2,9 +2,10 @@
 module.exports = async () => {
   return {
     projects: [
-      './src/jest.config.ts', 
-      './test/jest.config.ts', 
-      './test_acceptance/jest.config.ts'
+      './src/jest.config.ts',
+      './test/jest.config.ts',
+      './test_acceptance/jest.config.ts',
+      './test_ldap/jest.config.ts'
     ],
     roots: ['./'],
     testTimeout: 30000,

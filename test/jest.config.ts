@@ -10,6 +10,7 @@ module.exports = async () => {
     transform: {
       ...createDefaultPreset().transform,
     },
+    transformIgnorePatterns: ['node_modules/(?!(pixelmatch)/)'],
     coverageDirectory: '../coverage',
     testEnvironment: 'node',
   };

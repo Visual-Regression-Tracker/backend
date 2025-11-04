@@ -2,7 +2,7 @@ FROM node:20-bookworm-slim AS builder
 # Create app directory
 WORKDIR /app
 
-COPY ./prisma/schema.prisma ./
+COPY ./prisma ./prisma
 
 # A wildcard is used to ensure both package.json AND package-lock.json are copied
 COPY package*.json ./

@@ -11,6 +11,7 @@
     "incremental": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "isolatedModules": true,
     // See: https://github.com/prisma/prisma/issues/10203
     "strictNullChecks": true
   },

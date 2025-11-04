@@ -25,7 +25,8 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
-import { Role, TestRun, TestStatus, User } from '@prisma/client';
+import { Role, TestRun, TestStatus } from '@prisma/client';
+import type { User } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';

@@ -1,3 +1,5 @@
+import { createDefaultPreset } from 'ts-jest';
+
 /** @returns {Promise<import('jest').Config>} */
 module.exports = async () => {
   return {
@@ -7,8 +9,9 @@ module.exports = async () => {
     testRegex: '.spec.ts$',
     moduleFileExtensions: ['js', 'json', 'ts'],
     transform: {
-      '^.+\\.(t|j)s$': 'ts-jest',
+      ...createDefaultPreset().transform,
     },
+    transformIgnorePatterns: ['node_modules/(?!(pixelmatch)/)'],
     testEnvironment: 'node',
   };
 };

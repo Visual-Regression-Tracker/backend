@@ -1,14 +1,19 @@
 import { TestingModule, Test } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
-import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
-import { mocked } from 'jest-mock';
 import { StaticService } from '../../../static/static.service';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
 import { PixelmatchConfig } from './pixelmatch.types';
 
-jest.mock('pixelmatch');
+const mockPixelmatch = jest.fn();
+
+// Helper to create a Uint8Array for a PNG of given dimensions
+const createUint8ArrayForPng = (width: number, height: number): Uint8Array => {
+  const png = new PNG({ width, height });
+  // Access the underlying buffer and create a Uint8Array view
+  return new Uint8Array(png.data.buffer, png.data.byteOffset, png.data.byteLength);
+};
 
 const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn(), deleteImageMock = jest.fn() }) => {
   const module: TestingModule = await Test.createTestingModule({
@@ -25,7 +30,12 @@ const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn()
     ],
   }).compile();
 
-  return module.get<PixelmatchService>(PixelmatchService);
+  const service = module.get<PixelmatchService>(PixelmatchService);
+
+  // Spy on loadPixelmatch to return our mock instead of dynamic import
+  jest.spyOn(service as any, 'loadPixelmatch').mockResolvedValue(mockPixelmatch);
+
+  return service;
 };
 
 let service: PixelmatchService;
@@ -123,8 +133,14 @@ describe('getDiff', () => {
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
     const diffName = 'diff name';
     const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
-    mocked(Pixelmatch).mockReturnValueOnce(5);
+    mockPixelmatch.mockReturnValueOnce(5);
     service = await initService({ saveImageMock, getImageMock });
+
+    const testConfig = {
+      allowDiffDimensions: true,
+      ignoreAntialiasing: true,
+      threshold: 0.1,
+    };
 
     const result = await service.getDiff(
       {
@@ -134,31 +150,18 @@ describe('getDiff', () => {
         ignoreAreas: [],
         saveDiffAsFile: true,
       },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0.1,
-      }
+      testConfig
     );
 
-    expect(mocked(Pixelmatch)).toHaveBeenCalledWith(
-      new PNG({
-        width: 2,
-        height: 5,
-      }).data,
-      new PNG({
-        width: 2,
-        height: 5,
-      }).data,
-      new PNG({
-        width: 2,
-        height: 5,
-      }).data,
+    expect(mockPixelmatch).toHaveBeenCalledWith(
+      createUint8ArrayForPng(2, 5),
+      createUint8ArrayForPng(2, 5),
+      createUint8ArrayForPng(2, 5),
       2,
       5,
       {
-        includeAA: true,
-        threshold: 0.1,
+        includeAA: testConfig.ignoreAntialiasing,
+        threshold: testConfig.threshold,
       }
     );
     expect(saveImageMock).toHaveBeenCalledTimes(1);
@@ -185,7 +188,7 @@ describe('getDiff', () => {
     const saveImageMock = jest.fn();
     service = await initService({ saveImageMock, getImageMock });
     const pixelMisMatchCount = 150;
-    mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
+    mockPixelmatch.mockReturnValueOnce(pixelMisMatchCount);
 
     const result = await service.getDiff(
       {
@@ -220,7 +223,7 @@ describe('getDiff', () => {
     });
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
     const pixelMisMatchCount = 200;
-    mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
+    mockPixelmatch.mockReturnValueOnce(pixelMisMatchCount);
     const diffName = 'diff name';
     const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
     service = await initService({

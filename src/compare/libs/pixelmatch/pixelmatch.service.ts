@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
-import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
@@ -18,11 +17,21 @@ export class PixelmatchService implements ImageComparator {
 
   constructor(private readonly staticService: StaticService) {}
 
-  parseConfig(configJson: string): PixelmatchConfig {
-    return parseConfig(configJson, DEFAULT_CONFIG, this.logger);
+  protected async loadPixelmatch() {
+    const { default: pixelmatch } = await import('pixelmatch');
+    return pixelmatch;
+  }
+
+  parseConfig(configInput: string | PixelmatchConfig): PixelmatchConfig {
+    if (typeof configInput === 'string') {
+      return parseConfig(configInput, DEFAULT_CONFIG, this.logger);
+    }
+    return { ...DEFAULT_CONFIG, ...configInput };
   }
 
   async getDiff(data: ImageCompareInput, config: PixelmatchConfig): Promise<DiffResult> {
+    const pixelmatch = await this.loadPixelmatch();
+
     const result: DiffResult = {
       ...NO_BASELINE_RESULT,
     };
@@ -58,10 +67,17 @@ export class PixelmatchService implements ImageComparator {
       width: maxWidth,
       height: maxHeight,
     });
-    result.pixelMisMatchCount = Pixelmatch(baselineIgnored.data, imageIgnored.data, diff.data, maxWidth, maxHeight, {
-      includeAA: config.ignoreAntialiasing,
-      threshold: config.threshold,
-    });
+    result.pixelMisMatchCount = pixelmatch(
+      new Uint8Array(baselineIgnored.data.buffer, baselineIgnored.data.byteOffset, baselineIgnored.data.byteLength),
+      new Uint8Array(imageIgnored.data.buffer, imageIgnored.data.byteOffset, imageIgnored.data.byteLength),
+      new Uint8Array(diff.data.buffer, diff.data.byteOffset, diff.data.byteLength),
+      maxWidth,
+      maxHeight,
+      {
+        includeAA: config.ignoreAntialiasing,
+        threshold: config.threshold,
+      }
+    );
     result.diffPercent = (result.pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
 
     // process result

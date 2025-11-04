@@ -27,8 +27,11 @@ export class OdiffService implements ImageComparator {
     this.hddService = this.staticService as unknown as HddService;
   }
 
-  parseConfig(configJson: string): OdiffConfig {
-    return parseConfig(configJson, DEFAULT_CONFIG, this.logger);
+  parseConfig(configInput: string | OdiffConfig): OdiffConfig {
+    if (typeof configInput === 'string') {
+      return parseConfig(configInput, DEFAULT_CONFIG, this.logger);
+    }
+    return { ...DEFAULT_CONFIG, ...configInput };
   }
 
   async getDiff(data: ImageCompareInput, config: OdiffConfig): Promise<DiffResult> {

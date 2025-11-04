@@ -1,5 +1,5 @@
 import { Controller, Get, Logger, Param, Res } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { StaticService } from './static.service';
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-/app/wait-for-it.sh postgres:5432 -- echo Postgress is up!
+./wait-for-it.sh postgres:5432 -- echo Postgress is up!
 
 echo Start applying migrations...
 

@@ -23,7 +23,7 @@ import { Build, Role } from '@prisma/client';
 import { BuildDto } from './dto/build.dto';
 import { MixedGuard } from '../auth/guards/mixed.guard';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
-import { ModifyBuildDto } from './dto/build-modify.dto';
+import type { ModifyBuildDto } from './dto/build-modify.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
