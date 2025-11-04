@@ -45,12 +45,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     message = message.includes('build.update()')
       ? 'There is already a build with this ci build id.'
       : message.includes('project.create()')
-      ? 'Project exists with this name.'
-      : message.includes('user.create()')
-      ? 'This user already exists.'
-      : message.includes('Forbidden resource')
-      ? 'You do not have permission to perform this operation.'
-      : message;
+        ? 'Project exists with this name.'
+        : message.includes('user.create()')
+          ? 'This user already exists.'
+          : message.includes('Forbidden resource')
+            ? 'You do not have permission to perform this operation.'
+            : message;
     return message;
   }
 }
