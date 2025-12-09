@@ -38,4 +38,3 @@ export interface OllamaModel {
 export interface OllamaModelsResponse {
   models: OllamaModel[];
 }
-

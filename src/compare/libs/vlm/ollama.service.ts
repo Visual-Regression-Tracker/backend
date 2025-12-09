@@ -1,11 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  OllamaGenerateRequest,
-  OllamaGenerateResponse,
-  OllamaModel,
-  OllamaModelsResponse,
-} from './ollama.types';
+import { OllamaGenerateRequest, OllamaGenerateResponse, OllamaModel, OllamaModelsResponse } from './ollama.types';
 
 @Injectable()
 export class OllamaService {
@@ -60,4 +55,3 @@ export class OllamaService {
     }
   }
 }
-

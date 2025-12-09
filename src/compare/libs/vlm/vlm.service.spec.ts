@@ -6,11 +6,7 @@ import { NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, VlmService } from './vlm.service';
 import { OllamaService } from './ollama.service';
 
-const initService = async ({
-  getImageMock = jest.fn(),
-  saveImageMock = jest.fn(),
-  ollamaGenerateMock = jest.fn(),
-}) => {
+const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn(), ollamaGenerateMock = jest.fn() }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       VlmService,

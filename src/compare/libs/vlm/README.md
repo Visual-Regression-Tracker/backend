@@ -41,7 +41,7 @@ Set project's image comparison to `vlm` with config:
 }
 ```
 
-Optional custom prompt:
+Optional custom prompt (replaces default system prompt):
 ```json
 {
   "model": "llava:7b",
@@ -50,11 +50,15 @@ Optional custom prompt:
 }
 ```
 
+**Note:** The `prompt` field replaces the entire system prompt. If omitted, a default system prompt is used that focuses on semantic differences while ignoring rendering artifacts.
+
 ## Recommended Models
 
 | Model | Size | Speed | Accuracy | Best For |
 |-------|------|-------|----------|----------|
-| `llava:7b` | 4.7GB | ⚡⚡ | ⭐⭐⭐ | **Recommended** - best balance |
+| `llava:7b` | 4.7GB | ⚡⚡ | ⭐⭐⭐ | **Recommended** - best balance (minimal) |
+| `qwen3-vl:8b` | ~8GB | ⚡⚡ | ⭐⭐⭐ | Minimal model option |
+| `gemma3:latest` | ~ | ⚡⚡ | ⭐⭐⭐ | Minimal model option |
 | `llava:13b` | 8GB | ⚡ | ⭐⭐⭐⭐ | Best accuracy |
 | `moondream` | 1.7GB | ⚡⚡⚡ | ⭐⭐ | Fast, may hallucinate |
 | `minicpm-v` | 5.5GB | ⚡⚡ | ⭐⭐⭐ | Good alternative |
@@ -63,16 +67,23 @@ Optional custom prompt:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `model` | string | `moondream` | Ollama vision model name |
-| `prompt` | string | `""` | Custom context prepended to system prompt |
-| `temperature` | number | `0.1` | Lower = more consistent results |
+| `model` | string | `llava:7b` | Ollama vision model name |
+| `prompt` | string | System prompt (see below) | Custom prompt for image comparison |
+| `temperature` | number | `0.1` | Lower = more consistent results (0.0-1.0) |
 
 ## How It Works
 
 1. VLM analyzes both images semantically
-2. Returns `YES` (pass) or `NO` (fail) based on meaningful differences
-3. Ignores technical differences (anti-aliasing, sub-pixel, minor spacing)
-4. Provides description of differences found
+2. Returns JSON with `{"identical": true/false, "description": "..."}` 
+3. `identical: true` = images match (pass), `identical: false` = differences found (fail)
+4. Ignores technical differences (anti-aliasing, shadows, 1-2px shifts)
+5. Provides description of differences found
+
+### Default System Prompt
+
+The default prompt instructs the model to:
+- **CHECK** for: data changes, missing/added elements, state changes, structural differences
+- **IGNORE**: rendering artifacts, anti-aliasing, shadows, minor pixel shifts
 
 ## API Endpoints
 
@@ -82,11 +93,4 @@ GET /ollama/models
 
 # Compare two images (for testing)
 POST /ollama/compare?model=llava:7b&prompt=<prompt>&temperature=0.1
-```
-
-**Example:**
-```bash
-curl -X POST "http://localhost:3000/ollama/compare?model=llava:7b&prompt=Are%20these%20images%20the%20same&temperature=0.1" \
-  -F "images=@baseline.png" \
-  -F "images=@comparison.png"
 ```

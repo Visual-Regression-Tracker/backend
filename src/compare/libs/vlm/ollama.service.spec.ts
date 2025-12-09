@@ -52,9 +52,9 @@ describe('OllamaService', () => {
         text: () => Promise.resolve('Internal Server Error'),
       });
 
-      await expect(
-        service.generate({ model: 'llava', prompt: 'Test' })
-      ).rejects.toThrow('Ollama API returned status 500');
+      await expect(service.generate({ model: 'llava', prompt: 'Test' })).rejects.toThrow(
+        'Ollama API returned status 500'
+      );
     });
 
     it('should throw error when OLLAMA_BASE_URL is not configured', async () => {
@@ -65,9 +65,7 @@ describe('OllamaService', () => {
       } as any;
       const newService = new OllamaService(mockConfigService);
 
-      await expect(
-        newService.generate({ model: 'llava', prompt: 'Test' })
-      ).rejects.toThrow('OLLAMA_BASE_URL');
+      await expect(newService.generate({ model: 'llava', prompt: 'Test' })).rejects.toThrow('OLLAMA_BASE_URL');
     });
   });
 
