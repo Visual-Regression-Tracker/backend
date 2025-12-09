@@ -69,7 +69,7 @@ model TestRun {
   baselineBranchName    String?
   ignoreAreas           String         @default("[]")
   tempIgnoreAreas       String         @default("[]")
-  vlmDescription        String?
+  vlmDescription        String?        @default(null)
   baseline              Baseline?
   build                 Build          @relation(fields: [buildId], references: [id])
   project               Project?       @relation(fields: [projectId], references: [id])
