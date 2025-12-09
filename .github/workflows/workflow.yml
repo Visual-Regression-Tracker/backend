@@ -27,8 +27,14 @@ jobs:
       - name: Unit tests
         run: npm run test:cov
 
-      - name: Build and run containers
-        run: docker compose up --build -d
+      - name: Start postgres
+        run: docker compose up postgres -d
+
+      - name: Run migrations
+        run: docker compose up --build migration
+
+      - name: Start remaining containers
+        run: docker compose up api -d
 
       - name: Run acceptance tests
         run: npm run test:acceptance
