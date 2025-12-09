@@ -31,7 +31,7 @@ jobs:
         run: docker compose up postgres -d
 
       - name: Run migrations
-        run: docker compose up --build migration
+        run: docker compose build migration && docker compose run --rm migration
 
       - name: Start remaining containers
         run: docker compose up api -d
