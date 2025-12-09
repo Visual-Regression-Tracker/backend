@@ -139,12 +139,21 @@ describe('VlmService', () => {
     expect(result.diffName).toBeNull();
   });
 
-  it('should parse config with defaults for invalid input', async () => {
+  it.each([
+    ['empty string', '', DEFAULT_CONFIG],
+    ['invalid JSON', 'invalid', DEFAULT_CONFIG],
+    ['partial config', '{"model":"llava:7b"}', { model: 'llava:7b' }],
+    [
+      'full config',
+      '{"model":"llava:13b","prompt":"Custom prompt","temperature":0.2}',
+      {
+        model: 'llava:13b',
+        prompt: 'Custom prompt',
+        temperature: 0.2,
+      },
+    ],
+  ])('should parse config: %s', async (_, configJson, expected) => {
     const service = await initService({});
-
-    expect(service.parseConfig('')).toStrictEqual(DEFAULT_CONFIG);
-    expect(service.parseConfig('invalid')).toStrictEqual(DEFAULT_CONFIG);
-    expect(service.parseConfig('{"model":"llava:7b"}').model).toBe('llava:7b');
-    expect(service.parseConfig('{"model":"llava:7b"}').prompt).toBe(DEFAULT_CONFIG.prompt);
+    expect(service.parseConfig(configJson)).toEqual(expected);
   });
 });

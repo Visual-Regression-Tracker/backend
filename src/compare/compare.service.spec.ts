@@ -1,9 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompareService } from './compare.service';
 import { LookSameService } from './libs/looks-same/looks-same.service';
 import { OdiffService } from './libs/odiff/odiff.service';
 import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
+import { VlmService } from './libs/vlm/vlm.service';
+import { OllamaService } from './libs/vlm/ollama.service';
 import { StaticModule } from '../static/static.module';
 import { ImageComparison } from '@prisma/client';
 import * as utils from '../static/utils';
@@ -16,7 +19,21 @@ describe('CompareService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CompareService, OdiffService, PixelmatchService, LookSameService, PrismaService],
+      providers: [
+        CompareService,
+        OdiffService,
+        PixelmatchService,
+        LookSameService,
+        VlmService,
+        OllamaService,
+        PrismaService,
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: jest.fn().mockReturnValue('http://localhost:11434'),
+          },
+        },
+      ],
       imports: [StaticModule],
     }).compile();
 
