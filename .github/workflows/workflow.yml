@@ -33,8 +33,10 @@ jobs:
       - name: Run acceptance tests
         run: npm run test:acceptance
 
+      - name: Wait for services to be ready with migrations
+        run: sleep 30
+
       - name: Run e2e tests
-        timeout-minutes: 1
         run: npm run test:e2e
 
       - name: Dump docker logs on failure
