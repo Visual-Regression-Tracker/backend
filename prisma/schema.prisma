@@ -69,6 +69,7 @@ model TestRun {
   baselineBranchName    String?
   ignoreAreas           String         @default("[]")
   tempIgnoreAreas       String         @default("[]")
+  vlmDescription        String?
   baseline              Baseline?
   build                 Build          @relation(fields: [buildId], references: [id])
   project               Project?       @relation(fields: [projectId], references: [id])
@@ -138,6 +139,7 @@ enum ImageComparison {
   pixelmatch
   lookSame
   odiff
+  vlm
 }
 
 enum Role {

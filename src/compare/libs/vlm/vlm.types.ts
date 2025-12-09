@@ -1,0 +1,19 @@
+export interface VlmConfig {
+  /**
+   * Ollama vision model to use for image comparison.
+   * @default "llava:7b"
+   */
+  model: string;
+
+  /**
+   * Custom prompt for image comparison.
+   */
+  prompt: string;
+
+  /**
+   * Temperature parameter controlling response randomness (0.0-1.0).
+   * Lower values = more consistent results.
+   * @default 0.1
+   */
+  temperature: number;
+}

@@ -16,10 +16,15 @@ services:
       APP_FRONTEND_URL: ${APP_FRONTEND_URL}
       BODY_PARSER_JSON_LIMIT: ${BODY_PARSER_JSON_LIMIT}
       ELASTIC_URL: ${ELASTIC_URL}
+      # VLM: Uncomment to use Ollama running on host machine
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
     ports:
       - "${APP_PORT}:3000"
     expose:
       - "${APP_PORT}"
+    # VLM: Uncomment to use Ollama running on host machine
+    extra_hosts:
+      - host.docker.internal:host-gateway
     depends_on:
       postgres:
         condition: service_healthy

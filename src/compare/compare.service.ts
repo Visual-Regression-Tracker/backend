@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DiffResult } from '../test-runs/diffResult';
 import { LookSameService } from './libs/looks-same/looks-same.service';
 import { OdiffService } from './libs/odiff/odiff.service';
+import { VlmService } from './libs/vlm/vlm.service';
 import { isHddStaticServiceConfigured } from '../static/utils';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class CompareService {
     private readonly pixelmatchService: PixelmatchService,
     private readonly lookSameService: LookSameService,
     private readonly odiffService: OdiffService,
+    private readonly vlmService: VlmService,
     private readonly prismaService: PrismaService
   ) {}
 
@@ -43,6 +45,9 @@ export class CompareService {
         }
 
         return this.odiffService;
+      }
+      case ImageComparison.vlm: {
+        return this.vlmService;
       }
       default: {
         this.logger.warn(`Unknown ImageComparison value: ${imageComparison}. Falling back to pixelmatch.`);

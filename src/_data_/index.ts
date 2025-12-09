@@ -96,6 +96,7 @@ export const generateTestRun = (testRun?: Partial<TestRun>): TestRun => {
     baselineBranchName: 'master',
     branchName: 'develop',
     merge: false,
+    vlmDescription: null,
     ...testRun,
   };
 };

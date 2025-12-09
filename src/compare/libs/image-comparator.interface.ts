@@ -3,8 +3,9 @@ import { ImageCompareInput } from './ImageCompareInput';
 import { LooksSameConfig } from './looks-same/looks-same.types';
 import { OdiffConfig } from './odiff/odiff.types';
 import { PixelmatchConfig } from './pixelmatch/pixelmatch.types';
+import { VlmConfig } from './vlm/vlm.types';
 
-export type ImageCompareConfig = PixelmatchConfig | LooksSameConfig | OdiffConfig;
+export type ImageCompareConfig = PixelmatchConfig | LooksSameConfig | OdiffConfig | VlmConfig;
 
 export interface ImageComparator {
   getDiff(data: ImageCompareInput, config: ImageCompareConfig): Promise<DiffResult>;
