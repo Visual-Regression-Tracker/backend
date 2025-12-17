@@ -173,7 +173,7 @@ export class TestRunsService {
           pixelMisMatchCount: diffResult && diffResult.pixelMisMatchCount,
           diffPercent: diffResult && diffResult.diffPercent,
           status: diffResult ? diffResult.status : TestStatus.new,
-          vlmDescription: diffResult?.vlmDescription,
+          vlmDescription: diffResult && diffResult?.vlmDescription,
         },
       })
       .then((testRun) => {

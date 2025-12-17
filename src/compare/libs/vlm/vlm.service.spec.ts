@@ -6,7 +6,7 @@ import { NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, VlmService } from './vlm.service';
 import { OllamaService } from './ollama.service';
 
-const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn(), ollamaGenerateMock = jest.fn() }) => {
+const initService = async ({ getImageMock = jest.fn(), ollamaGenerateMock = jest.fn() }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       VlmService,
@@ -14,7 +14,6 @@ const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn()
         provide: StaticService,
         useValue: {
           getImage: getImageMock,
-          saveImage: saveImageMock,
         },
       },
       {
@@ -65,12 +64,11 @@ describe('VlmService', () => {
 
   it('should return unresolved when VLM returns identical=false in JSON', async () => {
     const getImageMock = jest.fn().mockReturnValue(image);
-    const saveImageMock = jest.fn().mockResolvedValue('diff.png');
     const ollamaGenerateMock = jest.fn().mockResolvedValue({
       response: '{"identical": false, "description": "Button text changed from Submit to Send."}',
       done: true,
     });
-    const service = await initService({ getImageMock, saveImageMock, ollamaGenerateMock });
+    const service = await initService({ getImageMock, ollamaGenerateMock });
 
     const result = await service.getDiff(
       { baseline: 'baseline', image: 'image', diffTollerancePercent: 0.1, ignoreAreas: [], saveDiffAsFile: true },
@@ -79,9 +77,9 @@ describe('VlmService', () => {
 
     expect(result.status).toBe(TestStatus.unresolved);
     expect(result.vlmDescription).toBe('Button text changed from Submit to Send.');
-    expect(result.diffName).toBe('diff.png');
-    expect(result.pixelMisMatchCount).toBeDefined();
-    expect(result.diffPercent).toBeDefined();
+    expect(result.diffName).toBeNull();
+    expect(result.pixelMisMatchCount).toBe(0);
+    expect(result.diffPercent).toBe(0);
   });
 
   it('should handle invalid JSON response as error', async () => {

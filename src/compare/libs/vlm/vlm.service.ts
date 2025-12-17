@@ -1,10 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
-import Pixelmatch from 'pixelmatch';
-import { PNG } from 'pngjs';
 import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
-import { parseConfig, pngToBase64, scaleImageToSize } from '../../utils';
+import { parseConfig, pngToBase64 } from '../../utils';
 import { NO_BASELINE_RESULT } from '../consts';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
@@ -23,11 +21,21 @@ CHECK for differences:
 IGNORE rendering artifacts: anti-aliasing, shadows, 1-2px shifts.`;
 
 // Internal constant - not exposed to user config to ensure consistent JSON output
-const JSON_FORMAT_INSTRUCTION = `
-Respond with JSON: {"identical": true/false, "description": "explanation"}
-- Set "identical": true if screenshots match or have only ignorable artifacts
-- Set "identical": false if meaningful differences exist
-- Always provide a brief description`;
+const JSON_FORMAT_INSTRUCTION = `CRITICAL: You must respond with ONLY valid JSON in this exact format:
+{"identical": Boolean, "description": String}
+
+**JSON Schema Reference:**
+The JSON object MUST conform to the following schema:
+{
+  "identical": <boolean>,
+  "description": <string>
+}
+
+**Requirements:**
+1.  **"identical":** Must be a standard boolean (\`true\` or \`false\`).
+2.  **"description":** Must be a detailed string explaining the reasoning.
+    * If identical is \`true\`, the description should be "Screenshots are functionally identical based on all comparison criteria."
+    * If identical is \`false\`, the description must clearly and concisely list the differences found (e.g., "The user count changed from 12 to 15, and the 'New User' button is missing."). Escape any internal double quotes with \\".`;
 
 export const DEFAULT_CONFIG: VlmConfig = {
   model: 'llava:7b',
@@ -75,10 +83,9 @@ export class VlmService implements ImageComparator {
         result.diffName = null;
       } else {
         result.status = TestStatus.unresolved;
-        const pixelDiff = this.calculatePixelDiff(baseline, image);
-        result.pixelMisMatchCount = pixelDiff.pixelMisMatchCount;
-        result.diffPercent = pixelDiff.diffPercent;
-        result.diffName = data.saveDiffAsFile ? await this.saveDiffImage(baseline, image) : null;
+        result.pixelMisMatchCount = 0;
+        result.diffPercent = 0;
+        result.diffName = null;
       }
     } catch (error) {
       this.logger.error(`VLM comparison failed: ${error.message}`, error.stack);
@@ -129,39 +136,5 @@ export class VlmService implements ImageComparator {
       pass: parsed.identical,
       description: parsed.description || 'No description provided',
     };
-  }
-
-  private calculatePixelDiff(baseline: PNG, image: PNG): { pixelMisMatchCount: number; diffPercent: number } {
-    const maxWidth = Math.max(baseline.width, image.width);
-    const maxHeight = Math.max(baseline.height, image.height);
-    const scaledBaseline = scaleImageToSize(baseline, maxWidth, maxHeight);
-    const scaledImage = scaleImageToSize(image, maxWidth, maxHeight);
-
-    const diff = new PNG({ width: maxWidth, height: maxHeight });
-    const pixelMisMatchCount = Pixelmatch(scaledBaseline.data, scaledImage.data, diff.data, maxWidth, maxHeight, {
-      threshold: 0.1,
-      includeAA: true,
-    });
-
-    const diffPercent = Number(((pixelMisMatchCount * 100) / (maxWidth * maxHeight)).toFixed(2));
-    this.logger.debug(`Pixelmatch: ${pixelMisMatchCount} pixels (${diffPercent}%)`);
-
-    return { pixelMisMatchCount, diffPercent };
-  }
-
-  private async saveDiffImage(baseline: PNG, image: PNG): Promise<string> {
-    const maxWidth = Math.max(baseline.width, image.width);
-    const maxHeight = Math.max(baseline.height, image.height);
-    const scaledBaseline = scaleImageToSize(baseline, maxWidth, maxHeight);
-    const scaledImage = scaleImageToSize(image, maxWidth, maxHeight);
-
-    const diff = new PNG({ width: maxWidth, height: maxHeight });
-    Pixelmatch(scaledBaseline.data, scaledImage.data, diff.data, maxWidth, maxHeight, {
-      threshold: 0.1,
-      includeAA: true,
-    });
-
-    const diffBuffer = PNG.sync.write(diff);
-    return this.staticService.saveImage('diff', diffBuffer);
   }
 }

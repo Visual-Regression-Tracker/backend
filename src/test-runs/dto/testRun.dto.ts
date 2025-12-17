@@ -44,6 +44,8 @@ export class TestRunDto {
   baselineBranchName: string;
   @ApiProperty()
   merge: boolean;
+  @ApiPropertyOptional()
+  vlmDescription?: string;
 
   constructor(testRun: TestRun) {
     this.id = testRun.id;
@@ -67,5 +69,6 @@ export class TestRunDto {
     this.branchName = testRun.branchName;
     this.baselineBranchName = testRun.baselineBranchName;
     this.merge = testRun.merge;
+    this.vlmDescription = testRun.vlmDescription;
   }
 }

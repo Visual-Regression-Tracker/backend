@@ -345,6 +345,7 @@ describe('TestRunsService', () => {
           diffName: null,
           pixelMisMatchCount: null,
           diffPercent: null,
+          vlmDescription: null,
         },
       });
       expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
@@ -357,6 +358,7 @@ describe('TestRunsService', () => {
         pixelMisMatchCount: 11,
         diffPercent: 22,
         isSameDimension: true,
+        vlmDescription: 'VLM detected significant color differences in the header section',
       };
       const id = 'some id';
       const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
@@ -375,6 +377,7 @@ describe('TestRunsService', () => {
           diffName: diff.diffName,
           pixelMisMatchCount: diff.pixelMisMatchCount,
           diffPercent: diff.diffPercent,
+          vlmDescription: diff.vlmDescription,
         },
       });
       expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
@@ -383,7 +386,9 @@ describe('TestRunsService', () => {
 
   it('findMany', async () => {
     const buildId = 'some id';
-    const testRun: TestRun = generateTestRun();
+    const testRun: TestRun = generateTestRun({
+      vlmDescription: 'VLM analysis completed',
+    });
     const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
     service = await initService({
       testRunFindManyMock,

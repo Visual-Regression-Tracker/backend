@@ -57,7 +57,6 @@ Optional custom prompt (replaces default system prompt):
 | Model | Size | Speed | Accuracy | Best For |
 |-------|------|-------|----------|----------|
 | `llava:7b` | 4.7GB | ⚡⚡ | ⭐⭐⭐ | **Recommended** - best balance (minimal) |
-| `qwen3-vl:8b` | ~8GB | ⚡⚡ | ⭐⭐⭐ | Minimal model option |
 | `gemma3:latest` | ~ | ⚡⚡ | ⭐⭐⭐ | Minimal model option |
 | `llava:13b` | 8GB | ⚡ | ⭐⭐⭐⭐ | Best accuracy |
 | `moondream` | 1.7GB | ⚡⚡⚡ | ⭐⭐ | Fast, may hallucinate |
