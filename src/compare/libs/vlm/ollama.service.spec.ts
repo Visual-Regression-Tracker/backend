@@ -16,7 +16,6 @@ jest.mock('ollama', () => {
   };
 });
 
-
 describe('OllamaService', () => {
   let service: OllamaService;
 
@@ -102,7 +101,8 @@ describe('OllamaService', () => {
       mockChat.mockResolvedValue(mockResponse);
 
       // Use a longer base64 string
-      const longBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const longBase64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
       const result = await service.generate({
         model: 'llava',
         messages: [

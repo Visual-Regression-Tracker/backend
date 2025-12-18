@@ -1,7 +1,7 @@
 export interface VlmConfig {
   /**
    * Ollama vision model to use for image comparison.
-   * @default "llava:7b"
+   * @default "gemma3:12b"
    */
   model: string;
 

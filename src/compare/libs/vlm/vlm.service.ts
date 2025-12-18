@@ -3,45 +3,34 @@ import { TestStatus } from '@prisma/client';
 import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
 import { parseConfig } from '../../utils';
-import { NO_BASELINE_RESULT } from '../consts';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { VlmConfig } from './vlm.types';
 import { OllamaService } from './ollama.service';
-import { VlmComparisonResult } from './ollama.types';
+import { PixelmatchService, DEFAULT_CONFIG as PIXELMATCH_DEFAULT_CONFIG } from '../pixelmatch/pixelmatch.service';
 import { PNG } from 'pngjs';
+import { z } from 'zod';
 
-export const SYSTEM_PROMPT = `Compare two UI screenshots for visual regression testing.
+export const DEFAULT_PROMPT = `You are provided with three images:
+1. First image: baseline screenshot
+2. Second image: new version screenshot
+3. Diff image
 
-CRITICAL: Your primary goal is to detect ANY differences that would be immediately noticeable to a human eye when viewing these screenshots side-by-side.
+Spot any difference in text, color, shape and position of elements treat as different event slight change
+Ignore minor rendering artifacts that are imperceptible to users like antialliasing 
+Describe the difference like 100 words`;
 
-MANDATORY CHECKS - You MUST examine and report differences in:
-   - Does one screenshot show data/content differently?
-   - Text content
-   - Missing, added, or moved UI components
-
-IGNORE ONLY: Minor rendering artifacts imperceptible to human eye (anti-aliasing, subtle shadows, 1-2px shifts that don't affect content visibility or functionality).`;
-
-// Internal constant - not exposed to user config to ensure consistent JSON output
-const JSON_FORMAT_INSTRUCTION = `CRITICAL: You must respond with ONLY valid JSON in this exact format:
-{"identical": Boolean, "description": String}
-
-**JSON Schema Reference:**
-The JSON object MUST conform to the following schema:
-{
-  "identical": <boolean>,
-  "description": <string>
-}
-
-**Requirements:**
-1.  **"identical":** Must be a standard boolean (\`true\` or \`false\`).
-2.  **"description":** Must be a detailed string explaining the reasoning.
-    * If identical is \`true\`, the description should be "Screenshots are functionally identical based on all comparison criteria."
-    * If identical is \`false\`, the description must clearly and concisely list the differences found (e.g., "The user count changed from 12 to 15, and the 'New User' button is missing."). Escape any internal double quotes with \\".`;
+const VlmComparisonResultSchema: z.ZodObject<{
+  identical: z.ZodBoolean;
+  description: z.ZodString;
+}> = z.object({
+  identical: z.boolean(),
+  description: z.string(),
+});
 
 export const DEFAULT_CONFIG: VlmConfig = {
-  model: 'llava:7b',
-  prompt: SYSTEM_PROMPT,
+  model: 'gemma3:12b',
+  prompt: DEFAULT_PROMPT,
   temperature: 0.1,
   useThinking: false,
 };
@@ -52,7 +41,8 @@ export class VlmService implements ImageComparator {
 
   constructor(
     private readonly staticService: StaticService,
-    private readonly ollamaService: OllamaService
+    private readonly ollamaService: OllamaService,
+    private readonly pixelmatchService: PixelmatchService
   ) {}
 
   parseConfig(configJson: string): VlmConfig {
@@ -60,51 +50,65 @@ export class VlmService implements ImageComparator {
   }
 
   async getDiff(data: ImageCompareInput, config: VlmConfig): Promise<DiffResult> {
-    const result: DiffResult = {
-      ...NO_BASELINE_RESULT,
-    };
+    const pixelmatchResult = await this.pixelmatchService.getDiff(
+      {
+        ...data,
+        saveDiffAsFile: true,
+      },
+      PIXELMATCH_DEFAULT_CONFIG
+    );
 
-    const baseline = await this.staticService.getImage(data.baseline);
-    const image = await this.staticService.getImage(data.image);
-
-    if (!baseline || !image) {
-      return NO_BASELINE_RESULT;
+    if (pixelmatchResult.status === TestStatus.new) {
+      return pixelmatchResult;
     }
 
-    result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
+    if (pixelmatchResult.status === TestStatus.ok) {
+      return pixelmatchResult;
+    }
 
+    this.logger.debug('Pixel diff is being sent to VLM');
     try {
+      const baseline = await this.staticService.getImage(data.baseline);
+      const image = await this.staticService.getImage(data.image);
+      const diffImage = pixelmatchResult.diffName ? await this.staticService.getImage(pixelmatchResult.diffName) : null;
+
+      if (!baseline || !image || !diffImage) {
+        this.logger.warn('Missing images for VLM analysis, returning pixelmatch result');
+        return pixelmatchResult;
+      }
+
       const baselineBytes = new Uint8Array(PNG.sync.write(baseline));
       const imageBytes = new Uint8Array(PNG.sync.write(image));
-      const { pass, description } = await this.compareImagesWithVLM(baselineBytes, imageBytes, config);
-      result.vlmDescription = description;
+      const diffBytes = new Uint8Array(PNG.sync.write(diffImage));
+
+      const { pass, description } = await this.compareImagesWithVLM(baselineBytes, imageBytes, diffBytes, config);
+
+      // Build result from pixelmatch, but override status based on VLM analysis
+      const result: DiffResult = {
+        ...pixelmatchResult,
+        vlmDescription: description,
+      };
 
       if (pass) {
         result.status = TestStatus.ok;
-        result.pixelMisMatchCount = 0;
-        result.diffPercent = 0;
-        result.diffName = null;
       } else {
         result.status = TestStatus.unresolved;
-        result.pixelMisMatchCount = 0;
-        result.diffPercent = 0;
-        result.diffName = null;
       }
+
+      return result;
     } catch (error) {
       this.logger.error(`VLM comparison failed: ${error.message}`, error.stack);
-      result.status = TestStatus.unresolved;
-      result.pixelMisMatchCount = 0;
-      result.diffPercent = 0;
-      result.diffName = null;
-      result.vlmDescription = `VLM analysis failed: ${error.message}`;
+      return {
+        ...pixelmatchResult,
+        vlmDescription: `VLM analysis failed: ${error.message}`,
+      };
     }
-
-    return result;
   }
 
   private async compareImagesWithVLM(
     baselineBytes: Uint8Array,
     imageBytes: Uint8Array,
+    diffBytes: Uint8Array,
     config: VlmConfig
   ): Promise<{ pass: boolean; description: string }> {
     const data = await this.ollamaService.generate({
@@ -112,11 +116,11 @@ export class VlmService implements ImageComparator {
       messages: [
         {
           role: 'user',
-          content: `${config.prompt}\n${JSON_FORMAT_INSTRUCTION}`,
-          images: [baselineBytes, imageBytes],
+          content: config.prompt,
+          images: [baselineBytes, imageBytes, diffBytes],
         },
       ],
-      format: 'json',
+      format: z.toJSONSchema(VlmComparisonResultSchema),
       options: {
         temperature: config.temperature,
       },
@@ -126,6 +130,8 @@ export class VlmService implements ImageComparator {
     const preferred = config.useThinking ? data.message.thinking : data.message.content;
     const fallback = config.useThinking ? data.message.content : data.message.thinking;
     const content = preferred || fallback;
+
+    this.logger.debug(`${JSON.stringify(data)}`);
     this.logger.debug(`VLM Response: ${content}`);
 
     if (!content) {
@@ -136,15 +142,12 @@ export class VlmService implements ImageComparator {
   }
 
   private parseVlmResponse(response: string): { pass: boolean; description: string } {
-    const parsed = JSON.parse(response) as VlmComparisonResult;
-
-    if (typeof parsed.identical !== 'boolean') {
-      throw new TypeError('Missing or invalid "identical" field');
-    }
+    const parsed = JSON.parse(response);
+    const validated = VlmComparisonResultSchema.parse(parsed);
 
     return {
-      pass: parsed.identical,
-      description: parsed.description || 'No description provided',
+      pass: validated.identical,
+      description: validated.description || 'No description provided',
     };
   }
 }

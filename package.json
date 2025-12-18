@@ -64,7 +64,8 @@
     "rimraf": "^5.0.1",
     "rxjs": "^7.8.2",
     "swagger-ui-express": "^4.6.3",
-    "uuid-apikey": "^1.5.3"
+    "uuid-apikey": "^1.5.3",
+    "zod": "^4.2.1"
   },
   "devDependencies": {
     "@darraghor/eslint-plugin-nestjs-typed": "^6.9.3",
