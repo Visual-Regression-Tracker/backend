@@ -46,8 +46,17 @@ describe('VlmService', () => {
   it('should return ok status when VLM returns identical=true in JSON', async () => {
     const getImageMock = jest.fn().mockReturnValue(image);
     const ollamaGenerateMock = jest.fn().mockResolvedValue({
-      response: '{"identical": true, "description": "Screenshots are visually identical."}',
+      model: 'llava:7b',
+      created_at: new Date(),
+      message: { content: '{"identical": true, "description": "Screenshots are visually identical."}', role: 'assistant' },
       done: true,
+      done_reason: 'stop',
+      total_duration: 1000,
+      load_duration: 100,
+      prompt_eval_count: 10,
+      prompt_eval_duration: 200,
+      eval_count: 5,
+      eval_duration: 300,
     });
     const service = await initService({ getImageMock, ollamaGenerateMock });
 
@@ -65,8 +74,17 @@ describe('VlmService', () => {
   it('should return unresolved when VLM returns identical=false in JSON', async () => {
     const getImageMock = jest.fn().mockReturnValue(image);
     const ollamaGenerateMock = jest.fn().mockResolvedValue({
-      response: '{"identical": false, "description": "Button text changed from Submit to Send."}',
+      model: 'llava:7b',
+      created_at: new Date(),
+      message: { content: '{"identical": false, "description": "Button text changed from Submit to Send."}', role: 'assistant' },
       done: true,
+      done_reason: 'stop',
+      total_duration: 1000,
+      load_duration: 100,
+      prompt_eval_count: 10,
+      prompt_eval_duration: 200,
+      eval_count: 5,
+      eval_duration: 300,
     });
     const service = await initService({ getImageMock, ollamaGenerateMock });
 
@@ -85,8 +103,17 @@ describe('VlmService', () => {
   it('should handle invalid JSON response as error', async () => {
     const getImageMock = jest.fn().mockReturnValue(image);
     const ollamaGenerateMock = jest.fn().mockResolvedValue({
-      response: 'Invalid JSON response from model',
+      model: 'llava:7b',
+      created_at: new Date(),
+      message: { content: 'Invalid JSON response from model', role: 'assistant' },
       done: true,
+      done_reason: 'stop',
+      total_duration: 1000,
+      load_duration: 100,
+      prompt_eval_count: 10,
+      prompt_eval_duration: 200,
+      eval_count: 5,
+      eval_duration: 300,
     });
     const service = await initService({ getImageMock, ollamaGenerateMock });
 
@@ -102,8 +129,17 @@ describe('VlmService', () => {
   it('should use custom model and temperature from config', async () => {
     const getImageMock = jest.fn().mockReturnValue(image);
     const ollamaGenerateMock = jest.fn().mockResolvedValue({
-      response: '{"identical": true, "description": "No differences."}',
+      model: 'llava:13b',
+      created_at: new Date(),
+      message: { content: '{"identical": true, "description": "No differences."}', role: 'assistant' },
       done: true,
+      done_reason: 'stop',
+      total_duration: 1000,
+      load_duration: 100,
+      prompt_eval_count: 10,
+      prompt_eval_duration: 200,
+      eval_count: 5,
+      eval_duration: 300,
     });
     const service = await initService({ getImageMock, ollamaGenerateMock });
 
@@ -114,8 +150,13 @@ describe('VlmService', () => {
 
     expect(ollamaGenerateMock).toHaveBeenCalledWith({
       model: 'llava:13b',
-      prompt: expect.stringContaining('Custom context'),
-      images: expect.any(Array),
+      messages: [
+        {
+          role: 'user',
+          content: expect.stringContaining('Custom context'),
+          images: expect.any(Array),
+        },
+      ],
       format: 'json',
       options: { temperature: 0.2 },
     });
@@ -137,17 +178,48 @@ describe('VlmService', () => {
     expect(result.diffName).toBeNull();
   });
 
+  it('should use thinking field when useThinking is true', async () => {
+    const getImageMock = jest.fn().mockReturnValue(image);
+    const ollamaGenerateMock = jest.fn().mockResolvedValue({
+      model: 'llava:7b',
+      created_at: new Date(),
+      message: {
+        content: '{"identical": false, "description": "Content field"}',
+        thinking: '{"identical": true, "description": "Thinking field"}',
+        role: 'assistant',
+      },
+      done: true,
+      done_reason: 'stop',
+      total_duration: 1000,
+      load_duration: 100,
+      prompt_eval_count: 10,
+      prompt_eval_duration: 200,
+      eval_count: 5,
+      eval_duration: 300,
+    });
+    const service = await initService({ getImageMock, ollamaGenerateMock });
+
+    const result = await service.getDiff(
+      { baseline: 'baseline', image: 'image', diffTollerancePercent: 0.1, ignoreAreas: [], saveDiffAsFile: false },
+      { ...DEFAULT_CONFIG, useThinking: true }
+    );
+
+    expect(result.status).toBe(TestStatus.ok);
+    expect(result.vlmDescription).toBe('Thinking field');
+  });
+
   it.each([
     ['empty string', '', DEFAULT_CONFIG],
     ['invalid JSON', 'invalid', DEFAULT_CONFIG],
     ['partial config', '{"model":"llava:7b"}', { model: 'llava:7b' }],
     [
       'full config',
-      '{"model":"llava:13b","prompt":"Custom prompt","temperature":0.2}',
+      '{"model":"llava:13b","prompt":"Custom prompt","temperature":0.2,"useThinking":true}',
       {
         model: 'llava:13b',
         prompt: 'Custom prompt',
         temperature: 0.2,
+        useThinking: true,
       },
     ],
   ])('should parse config: %s', async (_, configJson, expected) => {

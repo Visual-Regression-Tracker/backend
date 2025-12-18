@@ -2,23 +2,25 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
-import { parseConfig, pngToBase64 } from '../../utils';
+import { parseConfig } from '../../utils';
 import { NO_BASELINE_RESULT } from '../consts';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { VlmConfig } from './vlm.types';
 import { OllamaService } from './ollama.service';
 import { VlmComparisonResult } from './ollama.types';
+import { PNG } from 'pngjs';
 
 export const SYSTEM_PROMPT = `Compare two UI screenshots for visual regression testing.
 
-CHECK for differences:
-- Data: text, numbers, counts, values
-- Elements: missing, added, or moved components
-- State: selected, disabled, expanded, checked
-- Structure: row/column count, list items, tabs
+CRITICAL: Your primary goal is to detect ANY differences that would be immediately noticeable to a human eye when viewing these screenshots side-by-side.
 
-IGNORE rendering artifacts: anti-aliasing, shadows, 1-2px shifts.`;
+MANDATORY CHECKS - You MUST examine and report differences in:
+   - Does one screenshot show data/content differently?
+   - Text content
+   - Missing, added, or moved UI components
+
+IGNORE ONLY: Minor rendering artifacts imperceptible to human eye (anti-aliasing, subtle shadows, 1-2px shifts that don't affect content visibility or functionality).`;
 
 // Internal constant - not exposed to user config to ensure consistent JSON output
 const JSON_FORMAT_INSTRUCTION = `CRITICAL: You must respond with ONLY valid JSON in this exact format:
@@ -41,6 +43,7 @@ export const DEFAULT_CONFIG: VlmConfig = {
   model: 'llava:7b',
   prompt: SYSTEM_PROMPT,
   temperature: 0.1,
+  useThinking: false,
 };
 
 @Injectable()
@@ -71,9 +74,9 @@ export class VlmService implements ImageComparator {
     result.isSameDimension = baseline.width === image.width && baseline.height === image.height;
 
     try {
-      const baselineBase64 = pngToBase64(baseline);
-      const imageBase64 = pngToBase64(image);
-      const { pass, description } = await this.compareImagesWithVLM(baselineBase64, imageBase64, config);
+      const baselineBytes = new Uint8Array(PNG.sync.write(baseline));
+      const imageBytes = new Uint8Array(PNG.sync.write(image));
+      const { pass, description } = await this.compareImagesWithVLM(baselineBytes, imageBytes, config);
       result.vlmDescription = description;
 
       if (pass) {
@@ -100,14 +103,19 @@ export class VlmService implements ImageComparator {
   }
 
   private async compareImagesWithVLM(
-    baselineBase64: string,
-    imageBase64: string,
+    baselineBytes: Uint8Array,
+    imageBytes: Uint8Array,
     config: VlmConfig
   ): Promise<{ pass: boolean; description: string }> {
     const data = await this.ollamaService.generate({
       model: config.model,
-      prompt: `${config.prompt}\n${JSON_FORMAT_INSTRUCTION}`,
-      images: [baselineBase64, imageBase64],
+      messages: [
+        {
+          role: 'user',
+          content: `${config.prompt}\n${JSON_FORMAT_INSTRUCTION}`,
+          images: [baselineBytes, imageBytes],
+        },
+      ],
       format: 'json',
       options: {
         temperature: config.temperature,
@@ -115,7 +123,9 @@ export class VlmService implements ImageComparator {
     });
 
     // Some models return result in thinking field instead of response
-    const content = data.response || data.thinking;
+    const preferred = config.useThinking ? data.message.thinking : data.message.content;
+    const fallback = config.useThinking ? data.message.content : data.message.thinking;
+    const content = preferred || fallback;
     this.logger.debug(`VLM Response: ${content}`);
 
     if (!content) {

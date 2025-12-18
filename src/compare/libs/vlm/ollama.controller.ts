@@ -50,9 +50,14 @@ export class OllamaController {
 
     return this.ollamaService.generate({
       model,
-      prompt,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+          images: files.map((f) => new Uint8Array(f.buffer)),
+        },
+      ],
       format: 'json',
-      images: files.map((f) => f.buffer.toString('base64')),
       options: { temperature: Number(temperature) },
     });
   }

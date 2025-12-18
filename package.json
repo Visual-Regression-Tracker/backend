@@ -52,6 +52,7 @@
     "ldapts": "^7.1.0",
     "looks-same": "^9.0.0",
     "odiff-bin": "^2.6.1",
+    "ollama": "^0.6.3",
     "passport": "^0.6.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
