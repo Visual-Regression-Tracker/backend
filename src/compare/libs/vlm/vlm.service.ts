@@ -16,9 +16,9 @@ export const DEFAULT_PROMPT = `You are provided with three images:
 2. Second image: new version screenshot
 3. Diff image
 
-Spot any difference in text, color, shape and position of elements treat as different event slight change
-Ignore minor rendering artifacts that are imperceptible to users like antialliasing 
-Describe the difference like 100 words`;
+Spot any difference in text, color, shape and position of elements - treat as different even slight change.
+Ignore minor rendering artifacts that are imperceptible to users like antialiasing.
+Describe the difference in about 100 words.`;
 
 const VlmComparisonResultSchema: z.ZodObject<{
   identical: z.ZodBoolean;
@@ -126,13 +126,12 @@ export class VlmService implements ImageComparator {
       },
     });
 
-    // Some models return result in thinking field instead of response
+    // Some models return result in thinking field instead of content field
     const preferred = config.useThinking ? data.message.thinking : data.message.content;
     const fallback = config.useThinking ? data.message.content : data.message.thinking;
     const content = preferred || fallback;
 
-    this.logger.debug(`${JSON.stringify(data)}`);
-    this.logger.debug(`VLM Response: ${content}`);
+    this.logger.debug(`VLM response content: ${content}`);
 
     if (!content) {
       throw new Error('Empty response from model');

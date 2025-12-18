@@ -16,7 +16,7 @@ services:
       APP_FRONTEND_URL: ${APP_FRONTEND_URL}
       BODY_PARSER_JSON_LIMIT: ${BODY_PARSER_JSON_LIMIT}
       ELASTIC_URL: ${ELASTIC_URL}
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
     ports:
       - "${APP_PORT}:3000"
     expose:

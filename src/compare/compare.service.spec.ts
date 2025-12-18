@@ -30,7 +30,7 @@ describe('CompareService', () => {
         {
           provide: ConfigService,
           useValue: {
-            getOrThrow: jest.fn().mockReturnValue('http://localhost:11434'),
+            getOrThrow: jest.fn(),
           },
         },
       ],
