@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
 import { PNG } from 'pngjs';
+import { z } from 'zod';
 import { StaticService } from '../../../static/static.service';
 import { NO_BASELINE_RESULT, EQUAL_RESULT } from '../consts';
 import { DEFAULT_CONFIG, VlmService } from './vlm.service';
@@ -254,16 +255,22 @@ describe('VlmService', () => {
       { model: 'llava:13b', prompt: 'Custom context', temperature: 0.2 }
     );
 
+    const VlmComparisonResultSchema = z.object({
+      identical: z.boolean(),
+      description: z.string(),
+    });
+    const expectedJsonSchema = z.toJSONSchema(VlmComparisonResultSchema);
+
     expect(ollamaGenerateMock).toHaveBeenCalledWith({
       model: 'llava:13b',
       messages: [
         {
           role: 'user',
-          content: expect.stringContaining('Custom context'),
+          content: 'Custom context',
           images: expect.arrayContaining([expect.any(Uint8Array), expect.any(Uint8Array), expect.any(Uint8Array)]),
         },
       ],
-      format: 'json',
+      format: expectedJsonSchema,
       options: { temperature: 0.2 },
     });
   });
