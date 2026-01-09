@@ -39,10 +39,7 @@ export class GeminiService implements VlmProvider {
         },
       }));
 
-      const parts = [
-        { text: geminiConfig.prompt },
-        ...imageParts,
-      ];
+      const parts = [{ text: geminiConfig.prompt }, ...imageParts];
 
       const result = await genAI.models.generateContent({
         model: geminiConfig.model,

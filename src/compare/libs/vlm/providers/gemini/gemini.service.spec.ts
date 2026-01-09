@@ -82,7 +82,7 @@ describe('GeminiService', () => {
 
       const callArgs = mockGenerateContent.mock.calls[0][0];
       expect(callArgs.contents.length).toBe(expectedPartsCount);
-      
+
       // Verify first image is base64 encoded
       if (images.length > 0) {
         const imagePart = callArgs.contents[1];
@@ -116,13 +116,12 @@ describe('GeminiService', () => {
       ['SDK call fails', { apiKey: 'test-api-key' }, 'API Error'],
     ])('should throw error when %s', async (_, overrides, expectedError) => {
       const config = createConfig(overrides);
-      
+
       if (expectedError === 'API Error') {
         mockGenerateContent.mockRejectedValue(new Error(expectedError));
       }
-      
+
       await expect(service.generate(config, [])).rejects.toThrow(expectedError);
     });
   });
 });
-

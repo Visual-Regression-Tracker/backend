@@ -11,7 +11,15 @@ import { StaticModule } from '../static/static.module';
 
 @Module({
   controllers: [OllamaController],
-  providers: [CompareService, PixelmatchService, LookSameService, OdiffService, VlmService, OllamaService, GeminiService],
+  providers: [
+    CompareService,
+    PixelmatchService,
+    LookSameService,
+    OdiffService,
+    VlmService,
+    OllamaService,
+    GeminiService,
+  ],
   imports: [StaticModule],
   exports: [CompareService],
 })

@@ -122,7 +122,6 @@ describe('OllamaService', () => {
     });
   });
 
-
   describe('listModels', () => {
     it('should return list of models', async () => {
       const mockDate = new Date('2024-01-01');
@@ -179,4 +178,3 @@ describe('OllamaService', () => {
     });
   });
 });
-

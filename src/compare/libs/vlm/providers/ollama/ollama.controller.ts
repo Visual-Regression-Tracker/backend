@@ -61,4 +61,3 @@ export class OllamaController {
     return this.ollamaService.generate(config, images);
   }
 }
-

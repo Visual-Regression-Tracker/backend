@@ -55,16 +55,11 @@ const createImageMocks = () => {
   return {
     image,
     diffImage,
-    getImageMock: jest
-      .fn()
-      .mockReturnValueOnce(image)
-      .mockReturnValueOnce(image)
-      .mockReturnValueOnce(diffImage),
+    getImageMock: jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image).mockReturnValueOnce(diffImage),
   };
 };
 
 describe('VlmService', () => {
-
   it('should return NO_BASELINE_RESULT when pixelmatch returns no baseline', async () => {
     const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(NO_BASELINE_RESULT);
     const service = await initService({ pixelmatchGetDiffMock });
@@ -109,7 +104,10 @@ describe('VlmService', () => {
     ],
     [
       'keep unresolved when VLM confirms noticeable',
-      { identical: false, description: 'Button text changed from Submit to Send, and user count changed from 12 to 15.' },
+      {
+        identical: false,
+        description: 'Button text changed from Submit to Send, and user count changed from 12 to 15.',
+      },
       TestStatus.unresolved,
       { pixelMisMatchCount: 500, diffPercent: 12.5 },
     ],
@@ -138,7 +136,11 @@ describe('VlmService', () => {
   });
 
   it.each([
-    ['invalid JSON response', { content: 'Invalid JSON response from model' }, { pixelMisMatchCount: 200, diffPercent: 5 }],
+    [
+      'invalid JSON response',
+      { content: 'Invalid JSON response from model' },
+      { pixelMisMatchCount: 200, diffPercent: 5 },
+    ],
     ['API error', null, { pixelMisMatchCount: 300, diffPercent: 7.5 }],
   ])('should handle %s gracefully and return pixelmatch result', async (_, vlmResponse, pixelmatchOverrides) => {
     const pixelmatchResult = createPixelmatchResult(pixelmatchOverrides);

@@ -11,7 +11,7 @@ import { OllamaService } from './providers/ollama/ollama.service';
 import { GeminiService } from './providers/gemini/gemini.service';
 import { PixelmatchService, DEFAULT_CONFIG as PIXELMATCH_DEFAULT_CONFIG } from '../pixelmatch/pixelmatch.service';
 import { PNG } from 'pngjs';
-import z from 'zod/v3'; 
+import z from 'zod/v3';
 
 export const DEFAULT_PROMPT = `You are provided with three images:
 1. First image: baseline screenshot
