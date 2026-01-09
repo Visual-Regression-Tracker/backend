@@ -30,6 +30,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.922.0",
     "@aws-sdk/s3-request-presigner": "^3.922.0",
+    "@google/genai": "^1.34.0",
     "@nestjs/cache-manager": "^3.0.1",
     "@nestjs/common": "^11.1.8",
     "@nestjs/config": "^4.0.2",
@@ -65,7 +66,8 @@
     "rxjs": "^7.8.2",
     "swagger-ui-express": "^4.6.3",
     "uuid-apikey": "^1.5.3",
-    "zod": "^4.2.1"
+    "zod": "^4.2.1",
+    "zod-to-json-schema": "^3.25.0"
   },
   "devDependencies": {
     "@darraghor/eslint-plugin-nestjs-typed": "^6.9.3",

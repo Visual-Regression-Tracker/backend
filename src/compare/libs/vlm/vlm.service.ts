@@ -5,11 +5,13 @@ import { DiffResult } from '../../../test-runs/diffResult';
 import { parseConfig } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
-import { VlmConfig } from './vlm.types';
-import { OllamaService } from './ollama.service';
+import { VlmConfig, OllamaVlmConfig } from './vlm.types';
+import { VlmProvider } from './vlm-provider.interface';
+import { OllamaService } from './providers/ollama/ollama.service';
+import { GeminiService } from './providers/gemini/gemini.service';
 import { PixelmatchService, DEFAULT_CONFIG as PIXELMATCH_DEFAULT_CONFIG } from '../pixelmatch/pixelmatch.service';
 import { PNG } from 'pngjs';
-import { z } from 'zod';
+import z from 'zod/v3'; 
 
 export const DEFAULT_PROMPT = `You are provided with three images:
 1. First image: baseline screenshot
@@ -20,15 +22,13 @@ Spot any difference in text, color, shape and position of elements - treat as di
 Ignore minor rendering artifacts that are imperceptible to users like antialiasing.
 Describe the difference in about 100 words.`;
 
-const VlmComparisonResultSchema: z.ZodObject<{
-  identical: z.ZodBoolean;
-  description: z.ZodString;
-}> = z.object({
+export const VlmComparisonResultSchema = z.object({
   identical: z.boolean(),
   description: z.string(),
 });
 
-export const DEFAULT_CONFIG: VlmConfig = {
+export const DEFAULT_CONFIG: OllamaVlmConfig = {
+  provider: 'ollama',
   model: 'gemma3:12b',
   prompt: DEFAULT_PROMPT,
   temperature: 0.1,
@@ -42,6 +42,7 @@ export class VlmService implements ImageComparator {
   constructor(
     private readonly staticService: StaticService,
     private readonly ollamaService: OllamaService,
+    private readonly geminiService: GeminiService,
     private readonly pixelmatchService: PixelmatchService
   ) {}
 
@@ -105,48 +106,51 @@ export class VlmService implements ImageComparator {
     }
   }
 
-  private async compareImagesWithVLM(
-    baselineBytes: Uint8Array,
-    imageBytes: Uint8Array,
-    diffBytes: Uint8Array,
-    config: VlmConfig
-  ): Promise<{ pass: boolean; description: string }> {
-    const data = await this.ollamaService.generate({
-      model: config.model,
-      messages: [
-        {
-          role: 'user',
-          content: config.prompt,
-          images: [baselineBytes, imageBytes, diffBytes],
-        },
-      ],
-      format: z.toJSONSchema(VlmComparisonResultSchema),
-      options: {
-        temperature: config.temperature,
-      },
-    });
+  private getProvider(config: VlmConfig): VlmProvider {
+    const provider = config.provider || 'ollama'; // Default to ollama for backward compatibility
 
-    // Some models return result in thinking field instead of content field
-    const preferred = config.useThinking ? data.message.thinking : data.message.content;
-    const fallback = config.useThinking ? data.message.content : data.message.thinking;
+    switch (provider) {
+      case 'gemini':
+        return this.geminiService;
+      case 'ollama':
+      default:
+        return this.ollamaService;
+    }
+  }
+
+  private extractResponseContent(config: VlmConfig, response: { content?: string; thinking?: string }): string {
+    const preferred = config.useThinking ? response.thinking : response.content;
+    const fallback = config.useThinking ? response.content : response.thinking;
     const content = preferred || fallback;
-
-    this.logger.debug(`VLM response content: ${content}`);
 
     if (!content) {
       throw new Error('Empty response from model');
     }
 
-    return this.parseVlmResponse(content);
+    this.logger.debug(`VLM response content: ${content}`);
+    return content;
   }
 
-  private parseVlmResponse(response: string): { pass: boolean; description: string } {
-    const parsed = JSON.parse(response);
+  private parseVlmResponse(responseContent: string): { pass: boolean; description: string } {
+    const parsed = JSON.parse(responseContent);
     const validated = VlmComparisonResultSchema.parse(parsed);
 
     return {
       pass: validated.identical,
       description: validated.description || 'No description provided',
     };
+  }
+
+  private async compareImagesWithVLM(
+    baselineBytes: Uint8Array,
+    imageBytes: Uint8Array,
+    diffBytes: Uint8Array,
+    config: VlmConfig
+  ): Promise<{ pass: boolean; description: string }> {
+    const provider = this.getProvider(config);
+    const images = [baselineBytes, imageBytes, diffBytes];
+    const response = await provider.generate(config, images);
+    const content = this.extractResponseContent(config, response);
+    return this.parseVlmResponse(content);
   }
 }
