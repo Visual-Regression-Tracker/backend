@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { OllamaService } from './ollama.service';
 
-// Mock the ollama module
 const mockChat = jest.fn();
 const mockList = jest.fn();
 
@@ -20,7 +19,6 @@ describe('OllamaService', () => {
   let service: OllamaService;
 
   beforeEach(async () => {
-    // Reset mocks
     jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
@@ -100,7 +98,6 @@ describe('OllamaService', () => {
       };
       mockChat.mockResolvedValue(mockResponse);
 
-      // Use a longer base64 string
       const longBase64 =
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
       const result = await service.generate({
@@ -109,7 +106,7 @@ describe('OllamaService', () => {
           {
             role: 'user',
             content: 'Test prompt',
-            images: [longBase64], // base64 string - passed through as-is
+            images: [longBase64],
           },
         ],
       });

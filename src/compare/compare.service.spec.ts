@@ -12,6 +12,11 @@ import { StaticModule } from '../static/static.module';
 import { ImageComparison } from '@prisma/client';
 import * as utils from '../static/utils';
 
+jest.mock('zod/v3', () => {
+  const actualZod = jest.requireActual('zod');
+  return actualZod;
+});
+
 describe('CompareService', () => {
   let service: CompareService;
   let pixelmatchService: PixelmatchService;

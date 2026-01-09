@@ -9,6 +9,11 @@ import { GeminiService } from './providers/gemini/gemini.service';
 import { PixelmatchService } from '../pixelmatch/pixelmatch.service';
 import { DiffResult } from '../../../test-runs/diffResult';
 
+jest.mock('zod/v3', () => {
+  const actualZod = jest.requireActual('zod');
+  return actualZod;
+});
+
 const initService = async ({
   getImageMock = jest.fn(),
   ollamaGenerateMock = jest.fn(),
@@ -222,12 +227,11 @@ describe('VlmService', () => {
   it.each([
     ['empty string', '', DEFAULT_CONFIG],
     ['invalid JSON', 'invalid', DEFAULT_CONFIG],
-    ['partial config', '{"model":"llava:7b"}', { ...DEFAULT_CONFIG, model: 'llava:7b' }],
+    ['partial config', '{"model":"llava:7b"}', { model: 'llava:7b' }],
     [
       'full config',
       '{"model":"llava:13b","prompt":"Custom prompt","temperature":0.2,"useThinking":true}',
       {
-        ...DEFAULT_CONFIG,
         model: 'llava:13b',
         prompt: 'Custom prompt',
         temperature: 0.2,
@@ -277,23 +281,24 @@ describe('VlmService', () => {
       expect(ollamaGenerateMock).not.toHaveBeenCalled();
     });
 
-    it('should throw error when Gemini API key is missing', async () => {
+    it('should handle error when Gemini API key is missing', async () => {
       const pixelmatchResult = createPixelmatchResult({});
       const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(pixelmatchResult);
       const { getImageMock } = createImageMocks();
       const service = await initService({ getImageMock, pixelmatchGetDiffMock });
 
-      await expect(
-        service.getDiff(
-          { baseline: 'baseline', image: 'image', diffTollerancePercent: 0.1, ignoreAreas: [], saveDiffAsFile: false },
-          {
-            provider: 'gemini' as const,
-            model: 'gemini-1.5-pro',
-            prompt: DEFAULT_CONFIG.prompt,
-            temperature: 0.1,
-          } as any
-        )
-      ).rejects.toThrow('Gemini API key is required');
+      const result = await service.getDiff(
+        { baseline: 'baseline', image: 'image', diffTollerancePercent: 0.1, ignoreAreas: [], saveDiffAsFile: false },
+        {
+          provider: 'gemini' as const,
+          model: 'gemini-1.5-pro',
+          prompt: DEFAULT_CONFIG.prompt,
+          temperature: 0.1,
+        } as any
+      );
+
+      expect(result.vlmDescription).toContain('VLM analysis failed');
+      expect(result.status).toBe(TestStatus.unresolved);
     });
   });
 });

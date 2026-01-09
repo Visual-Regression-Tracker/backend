@@ -3,7 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { OllamaService } from './ollama.service';
 import { OllamaVlmConfig } from '../../vlm.types';
 
-// Mock the ollama module
+jest.mock('zod/v3', () => {
+  const actualZod = jest.requireActual('zod');
+  return actualZod;
+});
+
 const mockChat = jest.fn();
 const mockList = jest.fn();
 
