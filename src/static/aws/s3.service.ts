@@ -8,21 +8,12 @@ import { generateNewImageName } from '../utils';
 
 export class AWSS3Service implements Static {
   private readonly logger: Logger = new Logger(AWSS3Service.name);
-  private readonly AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
-  private readonly AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
-  private readonly AWS_REGION = process.env.AWS_REGION;
   private readonly AWS_S3_BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME;
 
   private s3Client: S3Client;
 
   constructor() {
-    this.s3Client = new S3Client({
-      credentials: {
-        accessKeyId: this.AWS_ACCESS_KEY_ID,
-        secretAccessKey: this.AWS_SECRET_ACCESS_KEY,
-      },
-      region: this.AWS_REGION,
-    });
+    this.s3Client = new S3Client();
     this.logger.log('AWS S3 service is being used for file storage.');
   }
 
