@@ -108,7 +108,9 @@ describe('AWSS3Service', () => {
 
       await expect(service.getImage('baseline.png')).resolves.toBeUndefined();
 
-      expect(loggerSpy).toHaveBeenCalledWith('Error from read : Cannot get image: baseline.png. Error: download failed');
+      expect(loggerSpy).toHaveBeenCalledWith(
+        'Error from read : Cannot get image: baseline.png. Error: download failed'
+      );
     });
   });
 
