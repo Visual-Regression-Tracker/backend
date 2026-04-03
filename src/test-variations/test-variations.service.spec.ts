@@ -306,6 +306,126 @@ describe('TestVariationsService', () => {
       });
       expect(result).toBe(variationMainMock);
     });
+
+    it('can find by baselineBranchName', async () => {
+      const createRequest: CreateTestRequestDto = {
+        buildId: 'buildId',
+        projectId: projectMock.id,
+        name: 'Test name',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        customTags: '',
+        branchName: 'develop',
+        baselineBranchName: 'main',
+      };
+
+      const variationMock: TestVariation = {
+        id: '123',
+        projectId: projectMock.id,
+        name: 'Test name',
+        baselineName: 'main',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        customTags: '',
+        ignoreAreas: '[]',
+        comment: 'some comment',
+        branchName: 'develop',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
+      service = await initModule({ projectFindUniqueMock });
+      service.findUnique = jest.fn().mockResolvedValueOnce(variationMock).mockResolvedValueOnce(undefined);
+
+      const result = await service.find(createRequest);
+
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: createRequest.baselineBranchName,
+      });
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: createRequest.branchName,
+      });
+      expect(result).toBe(variationMock);
+    });
+
+    it("can find by current branch if baselineBranchName doesn't exist", async () => {
+      const createRequest: CreateTestRequestDto = {
+        buildId: 'buildId',
+        projectId: projectMock.id,
+        name: 'Test name',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        customTags: '',
+        branchName: 'main',
+        baselineBranchName: 'release-1',
+      };
+
+      const variationMock: TestVariation = {
+        id: '123',
+        projectId: projectMock.id,
+        name: 'Test name',
+        baselineName: 'baselineName',
+        os: 'OS',
+        browser: 'browser',
+        viewport: 'viewport',
+        device: 'device',
+        customTags: '',
+        ignoreAreas: '[]',
+        comment: 'some comment',
+        branchName: 'develop',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
+      service = await initModule({ projectFindUniqueMock });
+      service.findUnique = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(variationMock);
+
+      const result = await service.find(createRequest);
+
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: createRequest.baselineBranchName,
+      });
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
+        name: createRequest.name,
+        projectId: createRequest.projectId,
+        os: createRequest.os,
+        browser: createRequest.browser,
+        viewport: createRequest.viewport,
+        device: createRequest.device,
+        customTags: createRequest.customTags,
+        branchName: createRequest.branchName,
+      });
+      expect(result).toBe(variationMock);
+    });
   });
 
   it('create', async () => {

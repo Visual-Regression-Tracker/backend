@@ -197,6 +197,105 @@ describe('TestRuns (e2e)', () => {
 
       expect(testRun.status).toBe(TestStatus.autoApproved);
     });
+
+    it('Works with baselineBranchName', async () => {
+      const baselineBranchName = 'release-1';
+
+      // Add baseline to main branch
+      const { testRun: mainBranchTestRun } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v1
+      );
+      await testRunsService.approve(mainBranchTestRun.id);
+
+      // Add different baseline to release branch
+      const { testRun: releaseBranchTestRun } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        baselineBranchName,
+        image_v2,
+        false,
+        baselineBranchName
+      );
+      await testRunsService.approve(releaseBranchTestRun.id);
+
+      // Should find diff in main branch
+      const { testRun: testRunAgainstMainBranch } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'feature-to-main',
+        image_v2,
+        false,
+        project.mainBranchName // baselineBranchName have to be defined for auto-approve filtering
+      );
+      expect(testRunAgainstMainBranch.status).toBe(TestStatus.unresolved);
+
+      // Should be OK in in release branch
+      const { testRun: testRunAgainstReleaseBranch1 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'feature-to-release',
+        image_v2,
+        false,
+        baselineBranchName
+      );
+      expect(testRunAgainstReleaseBranch1.status).toBe(TestStatus.ok);
+
+      // Should NOT auto-approve based on runs other than the ones against baselineBranchName
+      const { testRun: testRunAgainstReleaseBranch2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'feature-to-release',
+        image_v1,
+        false,
+        baselineBranchName
+      );
+      expect(testRunAgainstReleaseBranch2.status).toBe(TestStatus.unresolved);
+
+      // Should find diff in release branch
+      const { testRun: testRunAgainstReleaseBranch3 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'feature-to-release',
+        image_v3,
+        false,
+        baselineBranchName
+      );
+      expect(testRunAgainstReleaseBranch3.status).toBe(TestStatus.unresolved);
+      await testRunsService.approve(testRunAgainstReleaseBranch3.id);
+
+      // Should auto-approve runs approved in release branch
+      const { testRun: testRunAgainstReleaseBranch4 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        baselineBranchName,
+        image_v3,
+        false,
+        baselineBranchName
+      );
+      expect(testRunAgainstReleaseBranch4.status).toBe(TestStatus.autoApproved);
+
+      // Should NOT auto-approve runs in main branch, which were approved in release branch
+      const { testRun: testRunAgainstMainBranch2 } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v3,
+        false,
+        project.mainBranchName
+      );
+      expect(testRunAgainstMainBranch2.status).toBe(TestStatus.unresolved);
+    });
   });
 
   describe('POST /multipart', () => {

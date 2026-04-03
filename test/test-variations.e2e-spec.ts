@@ -67,4 +67,52 @@ describe('TestVariations (e2e)', () => {
       expect((await testRunsService.findOne(testRun.id)).testVariationId).toBeNull();
     });
   });
+
+  describe('find old test variations', () => {
+    it('filters out test runs matching releaseBranch and mainBranchName', async () => {
+      const baselineBranchName = 'release-1';
+      const image_v1 = './test/image.png';
+      const image_v2 = './test/image_edited.png';
+
+      // Add variation to main branch
+      const { testRun: mainBranchTestRun } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        project.mainBranchName,
+        image_v1
+      );
+      await testRunsService.approve(mainBranchTestRun.id);
+
+      // Add variation to release branch
+      const { testRun: releaseBranchTestRun } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        baselineBranchName,
+        image_v1,
+        false,
+        baselineBranchName
+      );
+      await testRunsService.approve(releaseBranchTestRun.id);
+
+      // Add variation to feature branch
+      const { testRun: featureBranchTestRun } = await haveTestRunCreated(
+        buildsService,
+        testRunsService,
+        project.id,
+        'feature',
+        image_v2,
+        false,
+        project.mainBranchName
+      );
+      const featureBranchTestRunApproved = await testRunsService.approve(featureBranchTestRun.id);
+
+      const result = await testVariationsService.findOldTestVariations(project, new Date());
+      expect(result).toHaveLength(1);
+      expect(result).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: featureBranchTestRunApproved.testVariationId })])
+      );
+    });
+  });
 });
