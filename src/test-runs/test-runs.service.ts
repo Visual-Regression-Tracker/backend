@@ -1,5 +1,6 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { PNG } from 'pngjs';
+import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../static/static.service';
@@ -150,6 +151,119 @@ export class TestRunsService {
     // update status
     const status = autoApprove ? TestStatus.autoApproved : TestStatus.approved;
     return this.setStatus(id, status);
+  }
+
+  /**
+   * Finds sibling variations of a test run in the same build — same screen
+   * (name) and same test-variation axes except the one configured on the project
+   * as `bulkApproveGroupBy` (customTags by default, i.e. per-locale screenshots).
+   * The feature is opt-in per project via `bulkApproveVariations`.
+   *
+   * Matching uses a position-independent color signature of the changed pixels
+   * (which colors appeared/changed), so it survives per-locale layout shifts —
+   * e.g. a title wrapping to a different number of lines pushes the whole screen
+   * down, but the same change (a moved selection, a recolored button) still
+   * produces the same signature. A loose guard on change size (diffPercent) also
+   * skips variations whose change area is far larger/smaller — a same-palette but
+   * additional/different change — while tolerating per-locale text reflow.
+   * Siblings that don't match, or have no diff to compare, are reported as
+   * skipped. Used by {@link getMatchingVariations}.
+   */
+  private async findMatchingSiblings(
+    id: string
+  ): Promise<{ testRun: TestRun; matching: TestRun[]; skipped: SkippedSibling[] }> {
+    const testRun = await this.findOne(id);
+    if (!testRun) {
+      throw new Error(`No test run found: ${id}`);
+    }
+
+    const project = testRun.projectId
+      ? await this.prismaService.project.findUnique({ where: { id: testRun.projectId } })
+      : null;
+    if (!project?.bulkApproveVariations) {
+      return { testRun, matching: [], skipped: [] };
+    }
+
+    const groupBy = resolveGroupByAxis(project.bulkApproveGroupBy);
+    const fixedAxes: Record<string, string | null> = {};
+    for (const axis of GROUP_BY_AXES) {
+      if (axis !== groupBy) {
+        fixedAxes[axis] = (testRun as unknown as Record<string, string | null>)[axis] ?? null;
+      }
+    }
+
+    const referenceSignature = await this.getChangeSignature(testRun);
+    const siblings = await this.prismaService.testRun.findMany({
+      where: {
+        id: { not: testRun.id },
+        buildId: testRun.buildId,
+        branchName: testRun.branchName,
+        name: testRun.name,
+        ...fixedAxes,
+        status: { in: [TestStatus.unresolved, TestStatus.new] },
+      },
+    });
+
+    const matching: TestRun[] = [];
+    const skipped: SkippedSibling[] = [];
+
+    if (!referenceSignature) {
+      for (const sibling of siblings) {
+        skipped.push({ run: sibling, reason: 'no reference diff' });
+      }
+      return { testRun, matching, skipped };
+    }
+
+    for (const sibling of siblings) {
+      const signature = await this.getChangeSignature(sibling);
+      if (!signature) {
+        skipped.push({ run: sibling, reason: 'no diff to match' });
+      } else if (!signaturesMatch(referenceSignature, signature)) {
+        skipped.push({ run: sibling, reason: 'different change pattern' });
+      } else if (!magnitudesSimilar(testRun.diffPercent, sibling.diffPercent)) {
+        skipped.push({ run: sibling, reason: 'different change size' });
+      } else {
+        matching.push(sibling);
+      }
+    }
+
+    return { testRun, matching, skipped };
+  }
+
+  /**
+   * Returns the group of variations for the reviewed run — the run itself plus
+   * the sibling variations whose change matches it — for the reviewer to confirm
+   * before a bulk approve/reject. Nothing is mutated here: the actual action is
+   * driven by the reviewer's explicit selection (regular approve/reject of the
+   * chosen ids), so a regression that merely looks similar can never be approved
+   * without a human seeing it. `skipped` lists siblings left out of the group
+   * (different/additional change, or no diff to compare).
+   */
+  async getMatchingVariations(
+    id: string
+  ): Promise<{ variations: TestRunDto[]; skipped: Array<TestRunDto & { reason: string }> }> {
+    const { testRun, matching, skipped } = await this.findMatchingSiblings(id);
+    const variations = [testRun, ...matching].map((run) => new TestRunDto(run));
+    const skippedDto = skipped.map((item) => ({ ...new TestRunDto(item.run), reason: item.reason }));
+    return { variations, skipped: skippedDto };
+  }
+
+  /**
+   * Position-independent color signature of the change between a test run's
+   * baseline and image: a normalized histogram of the colors the changed pixels
+   * took in the new image. Null when there is no baseline, dimensions differ, or
+   * nothing changed.
+   */
+  private async getChangeSignature(testRun: TestRun): Promise<number[] | null> {
+    if (!testRun.baselineName) {
+      return null;
+    }
+    const baseline = await this.staticService.getImage(testRun.baselineName);
+    const image = await this.staticService.getImage(testRun.imageName);
+    if (!baseline || !image || baseline.width !== image.width || baseline.height !== image.height) {
+      return null;
+    }
+    return changeColorSignature(baseline, image);
   }
 
   async setStatus(id: string, status: TestStatus): Promise<TestRun> {
@@ -409,3 +523,134 @@ interface AutoApproveProps {
   testVariation: TestVariation;
   testRun: TestRun;
 }
+
+interface SkippedSibling {
+  run: TestRun;
+  reason: string;
+}
+
+// Test-variation axes a project may bulk-approve across (the one that varies
+// within a group). customTags (e.g. locales) is the default.
+const GROUP_BY_AXES = ['customTags', 'os', 'device', 'browser', 'viewport'] as const;
+
+function resolveGroupByAxis(value: string | null | undefined): string {
+  return value && (GROUP_BY_AXES as readonly string[]).includes(value) ? value : 'customTags';
+}
+
+// Colors are quantized to this many levels per RGB channel, giving
+// COLOR_BUCKETS_PER_CHANNEL^3 histogram buckets.
+const COLOR_BUCKETS_PER_CHANNEL = 4;
+// Two changes are considered the same pattern when their color signatures'
+// cosine similarity is at least this value.
+const SIGNATURE_SIMILARITY_THRESHOLD = 0.9;
+
+// Longest side (px) images are downscaled to before computing the color
+// signature — keeps the histogram representative while cutting pixelmatch cost.
+const SIGNATURE_MAX_DIMENSION = 500;
+
+// Nearest-neighbour downscale so the longest side is at most maxDimension.
+// Returns the original when already small enough.
+function downscale(
+  source: { data: Buffer; width: number; height: number },
+  maxDimension: number
+): { data: Buffer; width: number; height: number } {
+  const scale = maxDimension / Math.max(source.width, source.height);
+  if (scale >= 1) {
+    return source;
+  }
+  const width = Math.max(1, Math.round(source.width * scale));
+  const height = Math.max(1, Math.round(source.height * scale));
+  const data: Buffer = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const sourceY = Math.min(source.height - 1, Math.floor(y / scale));
+    for (let x = 0; x < width; x++) {
+      const sourceX = Math.min(source.width - 1, Math.floor(x / scale));
+      const sourceIndex = (sourceY * source.width + sourceX) * 4;
+      const targetIndex = (y * width + x) * 4;
+      data[targetIndex] = source.data[sourceIndex];
+      data[targetIndex + 1] = source.data[sourceIndex + 1];
+      data[targetIndex + 2] = source.data[sourceIndex + 2];
+      data[targetIndex + 3] = source.data[sourceIndex + 3];
+    }
+  }
+  return { data, width, height };
+}
+
+/**
+ * Position-independent signature of a change: a normalized histogram of the
+ * colors that the changed pixels take in the new image. Because it ignores
+ * *where* the change is, it is robust to per-locale layout shifts (a title
+ * wrapping to a different number of lines, options moving down, etc.) while
+ * still capturing *what* changed (a selection highlight, a recolored button).
+ */
+function changeColorSignature(
+  baselineImage: { data: Buffer; width: number; height: number },
+  checkpointImage: { data: Buffer; width: number; height: number }
+): number[] | null {
+  // The signature is a coarse color histogram, so full resolution is wasteful —
+  // downscale first to make pixelmatch (CPU-bound, run per variation) much faster.
+  const baseline = downscale(baselineImage, SIGNATURE_MAX_DIMENSION);
+  const image = downscale(checkpointImage, SIGNATURE_MAX_DIMENSION);
+  const { width, height } = baseline;
+  const mask = new PNG({ width, height });
+  const changedPixels = Pixelmatch(baseline.data, image.data, mask.data, width, height, {
+    threshold: 0.1,
+    includeAA: false,
+    diffMask: true,
+  });
+  if (changedPixels === 0) {
+    return null;
+  }
+
+  const bucketSize = 256 / COLOR_BUCKETS_PER_CHANNEL;
+  const histogram = new Array(COLOR_BUCKETS_PER_CHANNEL ** 3).fill(0);
+  for (let i = 0; i < width * height; i++) {
+    if (mask.data[i * 4 + 3] === 0) {
+      continue;
+    }
+    const r = Math.min(COLOR_BUCKETS_PER_CHANNEL - 1, Math.floor(image.data[i * 4] / bucketSize));
+    const g = Math.min(COLOR_BUCKETS_PER_CHANNEL - 1, Math.floor(image.data[i * 4 + 1] / bucketSize));
+    const b = Math.min(COLOR_BUCKETS_PER_CHANNEL - 1, Math.floor(image.data[i * 4 + 2] / bucketSize));
+    histogram[r * COLOR_BUCKETS_PER_CHANNEL * COLOR_BUCKETS_PER_CHANNEL + g * COLOR_BUCKETS_PER_CHANNEL + b]++;
+  }
+
+  const total = histogram.reduce((sum, value) => sum + value, 0);
+  if (total === 0) {
+    return null;
+  }
+  return histogram.map((value) => value / total);
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) {
+    return 0;
+  }
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+function signaturesMatch(a: number[], b: number[]): boolean {
+  return cosineSimilarity(a, b) >= SIGNATURE_SIMILARITY_THRESHOLD;
+}
+
+// Same palette but a much larger/smaller change area signals a different or
+// additional change (an extra element changed too), not just per-locale text
+// reflow — which stays well under this ratio. Such variations go to manual review.
+const MATCH_MAGNITUDE_RATIO = 2;
+
+function magnitudesSimilar(a: number | null, b: number | null): boolean {
+  const min = Math.min(a ?? 0, b ?? 0);
+  const max = Math.max(a ?? 0, b ?? 0);
+  if (min <= 0) {
+    return max <= 0;
+  }
+  return max / min <= MATCH_MAGNITUDE_RATIO;
+}
+
