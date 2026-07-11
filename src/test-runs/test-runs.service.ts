@@ -14,6 +14,9 @@ import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData } from '../utils';
 import { CompareService } from '../compare/compare.service';
 import { UpdateTestRunDto } from './dto/update-test.dto';
+import { applyIgnoreAreas, parseConfig } from '../compare/utils';
+import { DEFAULT_CONFIG } from '../compare/libs/pixelmatch/pixelmatch.service';
+import { PixelmatchConfig } from '../compare/libs/pixelmatch/pixelmatch.types';
 
 @Injectable()
 export class TestRunsService {
@@ -184,6 +187,13 @@ export class TestRunsService {
       return { testRun, matching: [], skipped: [] };
     }
 
+    // Mirror the project's diff config so the change signature classifies the
+    // same way the normal pixelmatch diff does, rather than a hardcoded threshold.
+    const config: PixelmatchConfig = {
+      ...DEFAULT_CONFIG,
+      ...parseConfig(project.imageComparisonConfig, DEFAULT_CONFIG, this.logger),
+    };
+
     const groupBy = resolveGroupByAxis(project.bulkApproveGroupBy);
     const fixedAxes: Record<string, string | null> = {};
     for (const axis of GROUP_BY_AXES) {
@@ -192,7 +202,7 @@ export class TestRunsService {
       }
     }
 
-    const referenceSignature = await this.getChangeSignature(testRun);
+    const referenceSignature = await this.getChangeSignature(testRun, config);
     const siblings = await this.prismaService.testRun.findMany({
       where: {
         id: { not: testRun.id },
@@ -215,7 +225,7 @@ export class TestRunsService {
     }
 
     for (const sibling of siblings) {
-      const signature = await this.getChangeSignature(sibling);
+      const signature = await this.getChangeSignature(sibling, config);
       if (!signature) {
         skipped.push({ run: sibling, reason: 'no diff to match' });
       } else if (!signaturesMatch(referenceSignature, signature)) {
@@ -254,7 +264,7 @@ export class TestRunsService {
    * took in the new image. Null when there is no baseline, dimensions differ, or
    * nothing changed.
    */
-  private async getChangeSignature(testRun: TestRun): Promise<number[] | null> {
+  private async getChangeSignature(testRun: TestRun, config: PixelmatchConfig): Promise<number[] | null> {
     if (!testRun.baselineName) {
       return null;
     }
@@ -263,7 +273,15 @@ export class TestRunsService {
     if (!baseline || !image || baseline.width !== image.width || baseline.height !== image.height) {
       return null;
     }
-    return changeColorSignature(baseline, image);
+    // Apply ignore areas exactly as the diff does, so masked regions never count
+    // toward the change signature.
+    const ignoreAreas = this.getAllIgnoteAreas(testRun);
+    applyIgnoreAreas(baseline, ignoreAreas);
+    applyIgnoreAreas(image, ignoreAreas);
+    return changeColorSignature(baseline, image, {
+      threshold: config.threshold,
+      includeAA: config.ignoreAntialiasing,
+    });
   }
 
   async setStatus(id: string, status: TestStatus): Promise<TestRun> {
@@ -585,7 +603,8 @@ function downscale(
  */
 function changeColorSignature(
   baselineImage: { data: Buffer; width: number; height: number },
-  checkpointImage: { data: Buffer; width: number; height: number }
+  checkpointImage: { data: Buffer; width: number; height: number },
+  options: { threshold: number; includeAA: boolean }
 ): number[] | null {
   // The signature is a coarse color histogram, so full resolution is wasteful —
   // downscale first to make pixelmatch (CPU-bound, run per variation) much faster.
@@ -594,8 +613,8 @@ function changeColorSignature(
   const { width, height } = baseline;
   const mask = new PNG({ width, height });
   const changedPixels = Pixelmatch(baseline.data, image.data, mask.data, width, height, {
-    threshold: 0.1,
-    includeAA: false,
+    threshold: options.threshold,
+    includeAA: options.includeAA,
     diffMask: true,
   });
   if (changedPixels === 0) {
