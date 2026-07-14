@@ -16,6 +16,8 @@ const mockDefaultProject = {
   autoApproveFeature: true,
   imageComparison: 'pixelmatch',
   imageComparisonConfig: '{ "threshold": 0.1, "ignoreAntialiasing": true, "allowDiffDimensions": false }',
+  bulkApproveVariations: false,
+  bulkApproveGroupBy: 'customTags',
 } as const;
 
 const mockDefaultUser = {

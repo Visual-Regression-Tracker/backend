@@ -704,4 +704,63 @@ describe('TestRunsService', () => {
       });
     });
   });
+
+  describe('getMatchingVariations', () => {
+    it('matches same-palette, same-size siblings and skips different pattern / far larger change', async () => {
+      const testRun = generateTestRun({
+        id: 'target',
+        status: TestStatus.unresolved,
+        name: 'Screen A',
+        diffPercent: 12,
+      });
+      const matching = generateTestRun({
+        id: 'match',
+        status: TestStatus.unresolved,
+        name: 'Screen A',
+        customTags: 'locale-a',
+        diffPercent: 12,
+      });
+      const bigger = generateTestRun({
+        id: 'bigger',
+        status: TestStatus.unresolved,
+        name: 'Screen A',
+        customTags: 'locale-b',
+        diffPercent: 30,
+      });
+      const different = generateTestRun({
+        id: 'diff',
+        status: TestStatus.unresolved,
+        name: 'Screen A',
+        customTags: 'locale-c',
+        diffPercent: 12,
+      });
+
+      const testRunFindUniqueMock = jest
+        .fn()
+        .mockResolvedValueOnce({ ...testRun, testVariation: generateTestVariation() });
+      const testRunFindManyMock = jest.fn().mockResolvedValueOnce([matching, bigger, different]);
+      const projectFindUniqueMock = jest
+        .fn()
+        .mockResolvedValueOnce({ bulkApproveVariations: true, bulkApproveGroupBy: 'customTags' });
+      service = await initService({ testRunFindUniqueMock, testRunFindManyMock, projectFindUniqueMock });
+
+      const referenceSignature = [1, 0];
+      service['getChangeSignature'] = jest
+        .fn()
+        .mockResolvedValueOnce(referenceSignature) // target
+        .mockResolvedValueOnce(referenceSignature) // matching sibling
+        .mockResolvedValueOnce(referenceSignature) // bigger sibling (same palette, 2.5x larger change)
+        .mockResolvedValueOnce([0, 1]); // different palette sibling
+
+      const result = await service.getMatchingVariations(testRun.id);
+
+      expect(result.variations.map((variation) => variation.id)).toEqual([testRun.id, matching.id]);
+      expect(result.skipped.map((item) => ({ id: item.id, customTags: item.customTags, reason: item.reason }))).toEqual(
+        [
+          { id: bigger.id, customTags: 'locale-b', reason: 'different change size' },
+          { id: different.id, customTags: 'locale-c', reason: 'different change pattern' },
+        ]
+      );
+    });
+  });
 });

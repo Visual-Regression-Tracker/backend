@@ -13,6 +13,8 @@ export const TEST_PROJECT: Project = {
   autoApproveFeature: true,
   imageComparisonConfig: '{ "threshold": 0.1, "ignoreAntialiasing": true, "allowDiffDimensions": false }',
   imageComparison: ImageComparison.pixelmatch,
+  bulkApproveVariations: false,
+  bulkApproveGroupBy: 'customTags',
 };
 
 export const TEST_BUILD: Build = {
