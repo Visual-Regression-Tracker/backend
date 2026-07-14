@@ -707,7 +707,12 @@ describe('TestRunsService', () => {
 
   describe('getMatchingVariations', () => {
     it('matches same-palette, same-size siblings and skips different pattern / far larger change', async () => {
-      const testRun = generateTestRun({ id: 'target', status: TestStatus.unresolved, name: 'Screen A', diffPercent: 12 });
+      const testRun = generateTestRun({
+        id: 'target',
+        status: TestStatus.unresolved,
+        name: 'Screen A',
+        diffPercent: 12,
+      });
       const matching = generateTestRun({
         id: 'match',
         status: TestStatus.unresolved,
@@ -750,10 +755,12 @@ describe('TestRunsService', () => {
       const result = await service.getMatchingVariations(testRun.id);
 
       expect(result.variations.map((variation) => variation.id)).toEqual([testRun.id, matching.id]);
-      expect(result.skipped.map((item) => ({ id: item.id, customTags: item.customTags, reason: item.reason }))).toEqual([
-        { id: bigger.id, customTags: 'locale-b', reason: 'different change size' },
-        { id: different.id, customTags: 'locale-c', reason: 'different change pattern' },
-      ]);
+      expect(result.skipped.map((item) => ({ id: item.id, customTags: item.customTags, reason: item.reason }))).toEqual(
+        [
+          { id: bigger.id, customTags: 'locale-b', reason: 'different change size' },
+          { id: different.id, customTags: 'locale-c', reason: 'different change pattern' },
+        ]
+      );
     });
   });
 });

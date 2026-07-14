@@ -672,4 +672,3 @@ function magnitudesSimilar(a: number | null, b: number | null): boolean {
   }
   return max / min <= MATCH_MAGNITUDE_RATIO;
 }
-
