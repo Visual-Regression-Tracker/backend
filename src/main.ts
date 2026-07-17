@@ -33,14 +33,7 @@ async function bootstrap() {
 
   // Fan out socket.io events across API instances when running multiple
   // replicas. Without REDIS_URL the default in-memory adapter is used.
-  if (process.env.REDIS_URL) {
-    const redisIoAdapter = new RedisIoAdapter(app);
-    await redisIoAdapter.connectToRedis(process.env.REDIS_URL);
-    app.useWebSocketAdapter(redisIoAdapter);
-    Logger.log('Socket.io Redis adapter enabled');
-  } else {
-    Logger.log('REDIS_URL not set — socket.io running with the in-memory adapter (single instance only)');
-  }
+  await RedisIoAdapter.use(app, process.env.REDIS_URL);
 
   if (process.env.BODY_PARSER_JSON_LIMIT) {
     app.use(bodyParser.json({ limit: process.env.BODY_PARSER_JSON_LIMIT }));

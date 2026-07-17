@@ -53,6 +53,9 @@ describe('RedisIoAdapter', () => {
 
     expect(() => errorHandler(new Error('boom'))).not.toThrow();
     expect(logSpy).toHaveBeenCalled();
+
+    const [, subErrorHandler] = subClient.on.mock.calls.find(([event]) => event === 'error');
+    expect(() => subErrorHandler(new Error('boom'))).not.toThrow();
   });
 
   it('rejects when a client fails to connect', async () => {
@@ -75,5 +78,32 @@ describe('RedisIoAdapter', () => {
     expect(result).toBe(server);
 
     superSpy.mockRestore();
+  });
+
+  describe('use', () => {
+    beforeEach(() => {
+      jest
+        .spyOn((RedisIoAdapter as unknown as { logger: { log: () => void } }).logger, 'log')
+        .mockImplementation(() => undefined);
+    });
+
+    it('skips wiring and returns false without a url', async () => {
+      const app = { useWebSocketAdapter: jest.fn() };
+
+      const enabled = await RedisIoAdapter.use(app as never, undefined);
+
+      expect(enabled).toBe(false);
+      expect(app.useWebSocketAdapter).not.toHaveBeenCalled();
+    });
+
+    it('connects and installs the adapter when a url is provided', async () => {
+      const app = { useWebSocketAdapter: jest.fn() };
+
+      const enabled = await RedisIoAdapter.use(app as never, 'redis://localhost:6379');
+
+      expect(enabled).toBe(true);
+      expect(createClientMock).toHaveBeenCalledWith({ url: 'redis://localhost:6379' });
+      expect(app.useWebSocketAdapter).toHaveBeenCalledWith(expect.any(RedisIoAdapter));
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { INestApplicationContext, Logger } from '@nestjs/common';
+import { INestApplication, INestApplicationContext, Logger } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
@@ -33,5 +33,23 @@ export class RedisIoAdapter extends IoAdapter {
     const server = super.createIOServer(port, options);
     server.adapter(this.adapterConstructor);
     return server;
+  }
+
+  /**
+   * Installs the Redis-backed socket.io adapter on the app when `redisUrl` is
+   * provided. Returns whether the Redis adapter was enabled (false = default
+   * in-memory adapter, i.e. single-instance mode).
+   */
+  static async use(app: INestApplication, redisUrl?: string): Promise<boolean> {
+    if (!redisUrl) {
+      this.logger.log('REDIS_URL not set — socket.io running with the in-memory adapter (single instance only)');
+      return false;
+    }
+
+    const adapter = new RedisIoAdapter(app);
+    await adapter.connectToRedis(redisUrl);
+    app.useWebSocketAdapter(adapter);
+    this.logger.log('Socket.io Redis adapter enabled');
+    return true;
   }
 }
