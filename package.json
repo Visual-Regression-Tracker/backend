@@ -98,6 +98,7 @@
     "jest-mock-extended": "^4.0.0",
     "prettier": "^3.6.2",
     "prisma": "^6.18.0",
+    "socket.io-client": "^4.8.1",
     "supertest": "^6.3.3",
     "ts-jest": "^29.4.5",
     "ts-loader": "^9.5.4",

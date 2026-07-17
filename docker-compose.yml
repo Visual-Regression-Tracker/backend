@@ -17,6 +17,7 @@ services:
       BODY_PARSER_JSON_LIMIT: ${BODY_PARSER_JSON_LIMIT}
       ELASTIC_URL: ${ELASTIC_URL}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports:
       - "${APP_PORT}:3000"
     expose:
@@ -25,6 +26,8 @@ services:
       - host.docker.internal:host-gateway
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
   migration:
     container_name: vrt_migration
@@ -54,6 +57,17 @@ services:
       test: ["CMD-SHELL", "pg_isready -d $$POSTGRES_DB -U $$POSTGRES_USER"]
       interval: 10s
       timeout: 120s
+      retries: 10
+  redis:
+    container_name: vrt_redis
+    image: redis:7-alpine
+    restart: always
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
       retries: 10
   # Available at http://localhost:5050
   # pgadmin:
