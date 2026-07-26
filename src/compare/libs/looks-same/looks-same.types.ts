@@ -44,7 +44,7 @@ export interface CoordBounds {
   bottom: number;
 }
 
-type LookSameBaseResult = {
+export type LookSameResult = {
   /**
    * true if images are equal, false - otherwise
    */
@@ -57,29 +57,4 @@ type LookSameBaseResult = {
    * diff clusters for not equal images
    */
   diffClusters?: CoordBounds[];
-  /**
-   * number of pixels considered different
-   */
-  differentPixels: number;
-  /**
-   * number of pixels compared
-   */
-  totalPixels: number;
-  /**
-   * generated diff image when createDiffImage is enabled
-   */
 };
-
-type DiffImage = {
-  createBuffer(extension: 'png' | 'raw'): Promise<Buffer>;
-};
-
-export type LookSameResult =
-  | (LookSameBaseResult & {
-      equal: true;
-      diffImage: null;
-    })
-  | (LookSameBaseResult & {
-      equal: false;
-      diffImage: DiffImage;
-    });

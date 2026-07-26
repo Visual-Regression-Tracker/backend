@@ -54,16 +54,15 @@ export class LookSameService implements ImageComparator {
 
     // compare
     const compareResult = await this.compare(baselineIgnored, imageIgnored, config);
-    result.pixelMisMatchCount = compareResult.differentPixels;
-    result.diffPercent =
-      compareResult.totalPixels > 0 ? (compareResult.differentPixels * 100) / compareResult.totalPixels : 0;
-
     if (compareResult.equal) {
       result.status = TestStatus.ok;
     } else {
       result.status = TestStatus.unresolved;
       if (data.saveDiffAsFile) {
-        result.diffName = await this.staticService.saveImage('diff', await compareResult.diffImage.createBuffer('png'));
+        const diff = await this.createDiff(baselineIgnored, imageIgnored, config);
+        if (diff) {
+          Object.assign(result, diff);
+        }
       }
     }
 
@@ -71,15 +70,35 @@ export class LookSameService implements ImageComparator {
   }
 
   async compare(baseline: PNG, image: PNG, config: LooksSameConfig): Promise<LookSameResult | undefined> {
-    const diffResult = await looksSame(PNG.sync.write(baseline), PNG.sync.write(image), {
-      ...config,
-      createDiffImage: true,
-    }).catch((error) => {
+    const diffResult = await looksSame(PNG.sync.write(baseline), PNG.sync.write(image), config).catch((error) => {
       this.logger.error(error.message);
     });
     if (diffResult) {
       return diffResult;
     }
     return undefined;
+  }
+
+  async createDiff(
+    baseline: PNG,
+    image: PNG,
+    config: LooksSameConfig
+  ): Promise<Pick<DiffResult, 'diffName' | 'diffPercent' | 'pixelMisMatchCount'> | undefined> {
+    const diffResult = await looksSame(PNG.sync.write(baseline), PNG.sync.write(image), {
+      ...config,
+      createDiffImage: true,
+    }).catch((error) => {
+      this.logger.error(error.message);
+    });
+
+    if (!diffResult || diffResult.equal) {
+      return undefined;
+    }
+
+    return {
+      diffName: await this.staticService.saveImage('diff', await diffResult.diffImage.createBuffer('png')),
+      diffPercent: diffResult.totalPixels > 0 ? (diffResult.differentPixels * 100) / diffResult.totalPixels : 0,
+      pixelMisMatchCount: diffResult.differentPixels,
+    };
   }
 }
