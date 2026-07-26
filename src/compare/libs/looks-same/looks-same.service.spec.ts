@@ -59,7 +59,9 @@ describe('getDiff', () => {
     width: 20,
     height: 20,
   });
-  anotherImage.data[0] = 1; // alterate pixel to have it different from 0
+  image.data[3] = 255;
+  anotherImage.data[0] = 255; // alter pixel to have it different from 0
+  anotherImage.data[3] = 255;
 
   it('no baseline', async () => {
     const getImageMock = jest.fn().mockReturnValueOnce(undefined).mockReturnValueOnce(image);
@@ -138,8 +140,8 @@ describe('getDiff', () => {
     expect(result).toStrictEqual({
       status: TestStatus.ok,
       diffName: null,
-      diffPercent: undefined,
-      pixelMisMatchCount: undefined,
+      diffPercent: 0.25,
+      pixelMisMatchCount: 1,
       isSameDimension: true,
     });
   });
@@ -164,8 +166,8 @@ describe('getDiff', () => {
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName: null,
-      diffPercent: undefined,
-      pixelMisMatchCount: undefined,
+      diffPercent: 0.25,
+      pixelMisMatchCount: 1,
       isSameDimension: true,
     });
   });
@@ -192,8 +194,8 @@ describe('getDiff', () => {
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName: 'diff name',
-      diffPercent: undefined,
-      pixelMisMatchCount: undefined,
+      diffPercent: 0.25,
+      pixelMisMatchCount: 1,
       isSameDimension: true,
     });
   });

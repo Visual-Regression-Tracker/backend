@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
+import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
@@ -54,6 +55,19 @@ export class LookSameService implements ImageComparator {
 
     // compare
     const compareResult = await this.compare(baselineIgnored, imageIgnored, config);
+    result.pixelMisMatchCount = Pixelmatch(
+      baselineIgnored.data,
+      imageIgnored.data,
+      null,
+      baselineIgnored.width,
+      baselineIgnored.height,
+      {
+        includeAA: !config.ignoreAntialiasing,
+        threshold: 0.1,
+      }
+    );
+    result.diffPercent = (result.pixelMisMatchCount * 100) / (imageIgnored.width * imageIgnored.height);
+
     if (compareResult.equal) {
       result.status = TestStatus.ok;
     } else {
