@@ -57,4 +57,18 @@ export type LookSameResult = {
    * diff clusters for not equal images
    */
   diffClusters?: CoordBounds[];
+  /**
+   * number of pixels considered different
+   */
+  differentPixels: number;
+  /**
+   * number of pixels compared
+   */
+  totalPixels: number;
+  /**
+   * generated diff image when createDiffImage is enabled
+   */
+  diffImage: {
+    createBuffer(extension: 'png' | 'raw'): Promise<Buffer>;
+  } | null;
 };
