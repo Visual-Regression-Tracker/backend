@@ -60,9 +60,9 @@ export class LookSameService implements ImageComparator {
       result.status = TestStatus.unresolved;
       if (data.saveDiffAsFile) {
         const diff = await this.createDiff(baselineIgnored, imageIgnored, config);
-        if (diff) {
-          Object.assign(result, diff);
-        }
+        result.diffName = diff.diffName;
+        result.diffPercent = diff.diffPercent;
+        result.pixelMisMatchCount = diff.pixelMisMatchCount;
       }
     }
 
@@ -83,16 +83,14 @@ export class LookSameService implements ImageComparator {
     baseline: PNG,
     image: PNG,
     config: LooksSameConfig
-  ): Promise<Pick<DiffResult, 'diffName' | 'diffPercent' | 'pixelMisMatchCount'> | undefined> {
+  ): Promise<Pick<DiffResult, 'diffName' | 'diffPercent' | 'pixelMisMatchCount'>> {
     const diffResult = await looksSame(PNG.sync.write(baseline), PNG.sync.write(image), {
       ...config,
       createDiffImage: true,
-    }).catch((error) => {
-      this.logger.error(error.message);
     });
 
-    if (!diffResult || diffResult.equal) {
-      return undefined;
+    if (diffResult.equal) {
+      throw new Error('Cannot create a diff image for an equal Looks-Same result');
     }
 
     return {

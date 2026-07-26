@@ -227,4 +227,13 @@ describe('createDiff', () => {
     });
     expect(saveImageMock).toHaveBeenCalledWith('diff', expect.any(Buffer));
   });
+
+  it('rejects an equal result instead of silently omitting the artifact', async () => {
+    const image = new PNG({ width: 1, height: 1 });
+    service = await initService({});
+
+    await expect(service.createDiff(image, image, DEFAULT_CONFIG)).rejects.toThrow(
+      'Cannot create a diff image for an equal Looks-Same result'
+    );
+  });
 });
