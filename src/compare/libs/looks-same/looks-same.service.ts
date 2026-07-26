@@ -62,7 +62,7 @@ export class LookSameService implements ImageComparator {
       result.status = TestStatus.ok;
     } else {
       result.status = TestStatus.unresolved;
-      if (data.saveDiffAsFile && compareResult.diffImage) {
+      if (data.saveDiffAsFile) {
         result.diffName = await this.staticService.saveImage('diff', await compareResult.diffImage.createBuffer('png'));
       }
     }

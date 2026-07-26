@@ -44,7 +44,7 @@ export interface CoordBounds {
   bottom: number;
 }
 
-export type LookSameResult = {
+type LookSameBaseResult = {
   /**
    * true if images are equal, false - otherwise
    */
@@ -68,7 +68,18 @@ export type LookSameResult = {
   /**
    * generated diff image when createDiffImage is enabled
    */
-  diffImage: {
-    createBuffer(extension: 'png' | 'raw'): Promise<Buffer>;
-  } | null;
 };
+
+type DiffImage = {
+  createBuffer(extension: 'png' | 'raw'): Promise<Buffer>;
+};
+
+export type LookSameResult =
+  | (LookSameBaseResult & {
+      equal: true;
+      diffImage: null;
+    })
+  | (LookSameBaseResult & {
+      equal: false;
+      diffImage: DiffImage;
+    });

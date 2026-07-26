@@ -156,7 +156,7 @@ describe('getDiff', () => {
       equal: false,
       differentPixels: 20,
       totalPixels: 400,
-      diffImage: null,
+      diffImage: { createBuffer: jest.fn() },
     });
 
     const result = await service.getDiff(
