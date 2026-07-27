@@ -66,6 +66,7 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.ldap.yml down
 
       - name: SonarCloud Scan
+        if: ${{ secrets.SONARCLOUD_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
