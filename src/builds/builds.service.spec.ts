@@ -3,7 +3,7 @@ import { BuildsService } from './builds.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
-import { Build, TestRun, TestStatus } from '@prisma/client';
+import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { mocked, MockedObject } from 'jest-mock';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
@@ -148,6 +148,46 @@ describe('BuildsService', () => {
       total: 33,
       take: 10,
       skip: 20,
+    });
+  });
+
+  it('findMany filtered by ciBuildId', async () => {
+    const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
+    const buildCountMock = jest.fn().mockResolvedValueOnce(1);
+    const projectId = 'someId';
+    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
+    service = await initService({ buildFindManyMock, buildCountMock });
+
+    await service.findMany(projectId, 10, 0, 'Onboarding');
+
+    const where = {
+      projectId,
+      ciBuildId: { contains: 'Onboarding', mode: Prisma.QueryMode.insensitive },
+    };
+    expect(buildCountMock).toHaveBeenCalledWith({ where });
+    expect(buildFindManyMock).toHaveBeenCalledWith({
+      take: 10,
+      skip: 0,
+      orderBy: { createdAt: 'desc' },
+      where,
+    });
+  });
+
+  it('findMany ignores an empty ciBuildId', async () => {
+    const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
+    const buildCountMock = jest.fn().mockResolvedValueOnce(33);
+    const projectId = 'someId';
+    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
+    service = await initService({ buildFindManyMock, buildCountMock });
+
+    await service.findMany(projectId, 10, 0, '');
+
+    expect(buildCountMock).toHaveBeenCalledWith({ where: { projectId } });
+    expect(buildFindManyMock).toHaveBeenCalledWith({
+      take: 10,
+      skip: 0,
+      orderBy: { createdAt: 'desc' },
+      where: { projectId },
     });
   });
 
