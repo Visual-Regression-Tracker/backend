@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import path from 'path';
 import { writeFileSync, readFileSync, unlink, mkdirSync, existsSync } from 'fs';
 import { PNG, PNGWithMetadata } from 'pngjs';
@@ -6,6 +6,7 @@ import { Static } from '../static.interface';
 import { HDD_IMAGE_PATH } from './constants';
 import { generateNewImageName } from '../utils';
 
+@Injectable()
 export class HddService implements Static {
   private readonly logger: Logger = new Logger(HddService.name);
 
