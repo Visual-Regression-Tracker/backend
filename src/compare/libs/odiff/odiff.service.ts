@@ -7,9 +7,9 @@ import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { DIFF_DIMENSION_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { compare } from 'odiff-bin';
-import { IgnoreAreaDto } from 'src/test-runs/dto/ignore-area.dto';
+import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { OdiffConfig, OdiffIgnoreRegions, OdiffResult } from './odiff.types';
-import { HddService } from 'src/static/hdd/hdd.service';
+import { HddService } from '../../../static/hdd/hdd.service';
 
 export const DEFAULT_CONFIG: OdiffConfig = {
   outputDiffMask: true,
@@ -21,11 +21,11 @@ export const DEFAULT_CONFIG: OdiffConfig = {
 @Injectable()
 export class OdiffService implements ImageComparator {
   private readonly logger: Logger = new Logger(OdiffService.name);
-  private readonly hddService: HddService;
 
-  constructor(private readonly staticService: StaticService) {
-    this.hddService = this.staticService as unknown as HddService;
-  }
+  constructor(
+    private readonly staticService: StaticService,
+    private readonly hddService: HddService,
+  ) {}
 
   parseConfig(configJson: string): OdiffConfig {
     return parseConfig(configJson, DEFAULT_CONFIG, this.logger);
