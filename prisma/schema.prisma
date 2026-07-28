@@ -38,6 +38,8 @@ model Project {
   autoApproveFeature    Boolean         @default(true)
   imageComparison       ImageComparison @default(pixelmatch)
   imageComparisonConfig String          @default("{ \"threshold\": 0.1, \"ignoreAntialiasing\": true, \"allowDiffDimensions\": false }")
+  bulkApproveVariations Boolean         @default(false)
+  bulkApproveGroupBy    String          @default("customTags")
   builds                Build[]
   TestRun               TestRun[]
   testVariations        TestVariation[]

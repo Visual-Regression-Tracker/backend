@@ -8,6 +8,7 @@ import { readFileSync, existsSync } from 'fs';
 import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { HDD_IMAGE_PATH } from './static/hdd/constants';
+import { RedisIoAdapter } from './redis-io.adapter';
 
 function getHttpsOptions(): HttpsOptions | null {
   const keyPath = './secrets/ssl.key';
@@ -29,6 +30,10 @@ async function bootstrap() {
   });
   app.useGlobalPipes(new ValidationPipe());
   setupSwagger(app);
+
+  // Fan out socket.io events across API instances when running multiple
+  // replicas. Without REDIS_URL the default in-memory adapter is used.
+  await RedisIoAdapter.use(app, process.env.REDIS_URL);
 
   if (process.env.BODY_PARSER_JSON_LIMIT) {
     app.use(bodyParser.json({ limit: process.env.BODY_PARSER_JSON_LIMIT }));

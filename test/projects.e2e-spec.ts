@@ -20,6 +20,8 @@ const project: ProjectDto = {
   maxBuildAllowed: 0,
   maxBranchLifetime: 0,
   imageComparisonConfig: '{}',
+  bulkApproveVariations: false,
+  bulkApproveGroupBy: 'customTags',
 };
 
 const projectServiceMock = {

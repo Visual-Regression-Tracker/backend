@@ -48,6 +48,8 @@ export class ProjectsService {
         imageComparisonConfig: projectDto.imageComparisonConfig,
         maxBuildAllowed: projectDto.maxBuildAllowed,
         maxBranchLifetime: projectDto.maxBranchLifetime,
+        bulkApproveVariations: projectDto.bulkApproveVariations,
+        bulkApproveGroupBy: projectDto.bulkApproveGroupBy,
       },
     });
   }
@@ -63,6 +65,8 @@ export class ProjectsService {
         maxBuildAllowed: projectDto.maxBuildAllowed,
         maxBranchLifetime: projectDto.maxBranchLifetime,
         imageComparisonConfig: projectDto.imageComparisonConfig,
+        bulkApproveVariations: projectDto.bulkApproveVariations,
+        bulkApproveGroupBy: projectDto.bulkApproveGroupBy,
       },
     });
   }

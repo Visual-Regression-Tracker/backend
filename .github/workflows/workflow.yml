@@ -1,11 +1,17 @@
 name: CI
 
-on: [push]
-
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+    
 jobs:
   build:
     # https://github.com/actions/runner-images#available-images
     runs-on: ubuntu-22.04
+    env:
+      SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -62,9 +68,8 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.ldap.yml down
 
       - name: SonarCloud Scan
+        if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@v6
-        env:
-          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
 
   test-migrations:
     # See: https://github.com/Visual-Regression-Tracker/backend/issues/273

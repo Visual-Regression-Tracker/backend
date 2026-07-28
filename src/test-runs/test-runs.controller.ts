@@ -23,6 +23,7 @@ import {
   ApiOkResponse,
   ApiConsumes,
   ApiBody,
+  ApiOperation,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { Role, TestRun, TestStatus, User } from '@prisma/client';
@@ -78,6 +79,25 @@ export class TestRunsController {
     for (const id of ids) {
       await this.testRunsService.approve(id, merge, false, user.id);
     }
+  }
+
+  @Get('matchingSiblings/:id')
+  @ApiOperation({
+    summary: 'Preview the variation group of a test run for bulk review',
+    description:
+      'Read-only. Returns the reviewed test run together with its sibling variations in the same build ' +
+      '(same name/os/device/browser/viewport/branch, differing only by customTags — e.g. locales) whose ' +
+      'change matches it, plus the siblings left out (skipped) because of a different/additional change. ' +
+      'Nothing is mutated: the reviewer confirms the group and then approves/rejects the chosen ids, so a ' +
+      'similar-looking regression can never be accepted without a human seeing it.',
+  })
+  @ApiParam({ name: 'id', required: true })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  getMatchingSiblings(
+    @Param('id', new ParseUUIDPipe()) id: string
+  ): Promise<{ variations: TestRunDto[]; skipped: Array<TestRunDto & { reason: string }> }> {
+    return this.testRunsService.getMatchingVariations(id);
   }
 
   @Post('reject')

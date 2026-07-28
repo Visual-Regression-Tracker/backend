@@ -49,4 +49,12 @@ export class ProjectDto implements Project {
   @ApiProperty()
   @IsJSON()
   imageComparisonConfig: string;
+
+  @ApiProperty()
+  @IsBoolean()
+  bulkApproveVariations: boolean;
+
+  @ApiProperty()
+  @IsString()
+  bulkApproveGroupBy: string;
 }
