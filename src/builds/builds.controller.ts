@@ -16,7 +16,7 @@ import {
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
-import { ApiBearerAuth, ApiTags, ApiSecurity, ApiOkResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiSecurity, ApiOkResponse, ApiQuery } from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { Build, Role } from '@prisma/client';
@@ -39,14 +39,16 @@ export class BuildsController {
 
   @Get()
   @ApiOkResponse({ type: PaginatedBuildDto })
+  @ApiQuery({ name: 'ciBuildId', required: false, description: 'Case insensitive substring of the CI build id' })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   get(
     @Query('projectId', new ParseUUIDPipe()) projectId: string,
     @Query('take', new ParseIntPipe()) take: number,
-    @Query('skip', new ParseIntPipe()) skip: number
+    @Query('skip', new ParseIntPipe()) skip: number,
+    @Query('ciBuildId') ciBuildId?: string
   ): Promise<PaginatedBuildDto> {
-    return this.buildsService.findMany(projectId, take, skip);
+    return this.buildsService.findMany(projectId, take, skip, ciBuildId);
   }
 
   @Get(':id')

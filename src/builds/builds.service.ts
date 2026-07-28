@@ -32,11 +32,18 @@ export class BuildsService {
     });
   }
 
-  async findMany(projectId: string, take: number, skip: number): Promise<PaginatedBuildDto> {
+  async findMany(projectId: string, take: number, skip: number, ciBuildId?: string): Promise<PaginatedBuildDto> {
+    const where: Prisma.BuildWhereInput = {
+      projectId,
+      ...(ciBuildId && {
+        ciBuildId: { contains: ciBuildId, mode: Prisma.QueryMode.insensitive },
+      }),
+    };
+
     const [total, buildList] = await Promise.all([
-      this.prismaService.build.count({ where: { projectId } }),
+      this.prismaService.build.count({ where }),
       this.prismaService.build.findMany({
-        where: { projectId },
+        where,
         take,
         skip,
         orderBy: { createdAt: 'desc' },
