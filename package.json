@@ -52,7 +52,7 @@
     "class-validator": "^0.14.0",
     "fs-extra": "^11.3.2",
     "ldapts": "^7.1.0",
-    "looks-same": "^9.0.0",
+    "looks-same": "^10.0.1",
     "odiff-bin": "^2.6.1",
     "ollama": "^0.6.3",
     "passport": "^0.6.0",
