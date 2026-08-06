@@ -59,7 +59,10 @@ export class LookSameService implements ImageComparator {
     } else {
       result.status = TestStatus.unresolved;
       if (data.saveDiffAsFile) {
-        result.diffName = await this.createDiff(baselineIgnored, imageIgnored, config);
+        const diff = await this.createDiff(baselineIgnored, imageIgnored, config);
+        result.diffName = diff.diffName;
+        result.diffPercent = diff.diffPercent;
+        result.pixelMisMatchCount = diff.pixelMisMatchCount;
       }
     }
 
@@ -76,20 +79,24 @@ export class LookSameService implements ImageComparator {
     return undefined;
   }
 
-  async createDiff(baseline: PNG, image: PNG, config: LooksSameConfig): Promise<string | undefined> {
-    const buffer = await looksSame
-      .createDiff({
-        reference: PNG.sync.write(baseline),
-        current: PNG.sync.write(image),
-        highlightColor: '#ff00ff',
-        ...config,
-      })
-      .catch((error) => {
-        this.logger.error(error.message);
-      });
-    if (buffer) {
-      return this.staticService.saveImage('diff', buffer);
+  async createDiff(
+    baseline: PNG,
+    image: PNG,
+    config: LooksSameConfig
+  ): Promise<Pick<DiffResult, 'diffName' | 'diffPercent' | 'pixelMisMatchCount'>> {
+    const diffResult = await looksSame(PNG.sync.write(baseline), PNG.sync.write(image), {
+      ...config,
+      createDiffImage: true,
+    });
+
+    if (diffResult.equal) {
+      throw new Error('Cannot create a diff image for an equal Looks-Same result');
     }
-    return undefined;
+
+    return {
+      diffName: await this.staticService.saveImage('diff', await diffResult.diffImage.createBuffer('png')),
+      diffPercent: diffResult.totalPixels > 0 ? (diffResult.differentPixels * 100) / diffResult.totalPixels : 0,
+      pixelMisMatchCount: diffResult.differentPixels,
+    };
   }
 }
