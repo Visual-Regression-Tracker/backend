@@ -26,6 +26,9 @@ export class DiffWorkerPool implements OnModuleDestroy {
     1,
     Math.min(Number(process.env.DIFF_WORKERS_COUNT) || availableParallelism() - 1, 8)
   );
+  // Queued jobs hold both full image buffers, so an unbounded queue could
+  // exhaust memory under a flood of concurrent uploads.
+  private readonly queueLimit = Number(process.env.DIFF_QUEUE_LIMIT) || 256;
   // The compiled worker file only exists in the built app (dist). Under
   // ts-jest / ts-node run the job inline instead.
   private readonly inline = !existsSync(WORKER_FILE);
@@ -39,6 +42,12 @@ export class DiffWorkerPool implements OnModuleDestroy {
   async run(input: PixelmatchJobInput): Promise<PixelmatchJobOutput> {
     if (this.inline) {
       return computePixelmatchDiff(input);
+    }
+    if (this.destroyed) {
+      throw new Error('Image diff worker pool is shut down');
+    }
+    if (this.queue.length >= this.queueLimit) {
+      throw new Error(`Image diff queue is full (${this.queueLimit} jobs)`);
     }
     this.start();
     return new Promise<PixelmatchJobOutput>((resolve, reject) => {
@@ -106,6 +115,15 @@ export class DiffWorkerPool implements OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     this.destroyed = true;
+    const shutdownError = new Error('Image diff worker pool is shutting down');
+    for (const job of this.queue) {
+      job.reject(shutdownError);
+    }
+    this.queue = [];
+    for (const job of this.inFlight.values()) {
+      job.reject(shutdownError);
+    }
+    this.inFlight.clear();
     const workers = this.workers;
     this.workers = [];
     this.idle = [];
