@@ -12,7 +12,7 @@ import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 
 const initModule = async ({
   imageDeleteMock = jest.fn(),
-  getImageMock = jest.fn(),
+  getImageBufferMock = jest.fn(),
   variationfindUniqueMock = jest.fn,
   variationFindManyMock = jest.fn().mockReturnValue([]),
   variationCreateMock = jest.fn(),
@@ -34,7 +34,7 @@ const initModule = async ({
       {
         provide: StaticService,
         useValue: {
-          getImage: getImageMock,
+          getImageBuffer: getImageBufferMock,
           deleteImage: imageDeleteMock,
         },
       },
@@ -462,7 +462,12 @@ describe('TestVariationsService', () => {
       width: 10,
       height: 10,
     });
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image).mockReturnValueOnce(null);
+    const imageBuffer = PNG.sync.write(image);
+    const getImageBufferMock = jest
+      .fn()
+      .mockReturnValueOnce(imageBuffer)
+      .mockReturnValueOnce(imageBuffer)
+      .mockReturnValueOnce(null);
     const testRunCreateMock = jest.fn();
     const buildUpdateMock = jest.fn();
     const testRuncalCulateDiffMock = jest.fn();
@@ -472,7 +477,7 @@ describe('TestVariationsService', () => {
       testRunCreateMock,
       testRuncalCulateDiffMock,
       variationFindManyMock,
-      getImageMock,
+      getImageBufferMock,
     });
     service.find = jest
       .fn()
@@ -519,7 +524,7 @@ describe('TestVariationsService', () => {
         merge: true,
         ignoreAreas: JSON.parse(testVariation.ignoreAreas),
       },
-      imageBuffer: PNG.sync.write(image),
+      imageBuffer,
     });
     expect(testRunCreateMock).toHaveBeenNthCalledWith(2, {
       testVariation: testVariationTargetBranch,
@@ -531,7 +536,7 @@ describe('TestVariationsService', () => {
         merge: true,
         ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
       },
-      imageBuffer: PNG.sync.write(image),
+      imageBuffer,
     });
     expect(testRunCreateMock).toHaveBeenCalledTimes(2);
     expect(buildUpdateMock).toHaveBeenCalledWith(build.id, { isRunning: false });

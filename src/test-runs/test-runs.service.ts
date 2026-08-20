@@ -106,9 +106,9 @@ export class TestRunsService {
       throw new Error('No test variation found. Re-create test run');
     }
 
-    // save new baseline
-    const baseline = await this.staticService.getImage(testRun.imageName);
-    const baselineName = await this.staticService.saveImage('baseline', PNG.sync.write(baseline));
+    // save new baseline as a byte-for-byte copy — decoding and re-encoding the
+    // PNG here blocked the event loop for every approved run
+    const baselineName = await this.staticService.copyImage('baseline', testRun.imageName);
 
     if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
       // replace main branch with feature branch test variation

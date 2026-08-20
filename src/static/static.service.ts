@@ -24,6 +24,10 @@ export class StaticService {
     return this.staticService.getImageBuffer(imageName);
   }
 
+  async copyImage(type: 'screenshot' | 'diff' | 'baseline', sourceImageName: string): Promise<string> {
+    return this.staticService.copyImage(type, sourceImageName);
+  }
+
   async deleteImage(imageName: string): Promise<boolean> {
     return this.staticService.deleteImage(imageName);
   }

@@ -1,7 +1,13 @@
 import { PNG, PNGWithMetadata } from 'pngjs';
 import { Logger } from '@nestjs/common';
 import { Static } from '../static.interface';
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  CopyObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { generateNewImageName } from '../utils';
@@ -36,6 +42,17 @@ export class AWSS3Service implements Static {
 
   async getImage(fileName: string): Promise<PNGWithMetadata> {
     if (!fileName) return null;
+    const imageBuffer = await this.getImageBuffer(fileName);
+    if (!imageBuffer) return undefined;
+    try {
+      return PNG.sync.read(imageBuffer);
+    } catch (ex) {
+      this.logger.error(`Error from read : Cannot decode image: ${fileName}. ${ex}`);
+    }
+  }
+
+  async getImageBuffer(fileName: string): Promise<Buffer | null> {
+    if (!fileName) return null;
     try {
       // the comparison pipeline treats an unreadable image as a missing
       // baseline, so storage failures stay contained here
@@ -62,6 +79,22 @@ export class AWSS3Service implements Static {
         return null;
       }
       throw ex;
+    }
+  }
+
+  async copyImage(type: 'screenshot' | 'diff' | 'baseline', sourceImageName: string): Promise<string> {
+    const imageName = generateNewImageName(type);
+    try {
+      await this.s3Client.send(
+        new CopyObjectCommand({
+          Bucket: this.AWS_S3_BUCKET_NAME,
+          CopySource: `${this.AWS_S3_BUCKET_NAME}/${sourceImageName}`,
+          Key: imageName,
+        })
+      );
+      return imageName;
+    } catch (ex) {
+      throw new Error('Could not copy file at AWS S3 : ' + ex);
     }
   }
 

@@ -1,10 +1,12 @@
 import { Logger } from '@nestjs/common';
 import path from 'path';
-import { writeFileSync, readFileSync, unlink, mkdirSync, existsSync } from 'fs';
+import { promises as fs, mkdirSync, existsSync } from 'fs';
 import { PNG, PNGWithMetadata } from 'pngjs';
 import { Static } from '../static.interface';
 import { HDD_IMAGE_PATH } from './constants';
 import { generateNewImageName } from '../utils';
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 export class HddService implements Static {
   private readonly logger: Logger = new Logger(HddService.name);
@@ -39,30 +41,34 @@ export class HddService implements Static {
   }
 
   async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
-    try {
-      new PNG().parse(imageBuffer);
-    } catch {
+    // Signature check instead of a full decode: parsing megapixel PNGs just to
+    // validate them blocks the event loop on every upload.
+    if (
+      imageBuffer.length < PNG_SIGNATURE.length ||
+      !imageBuffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
+    ) {
       throw new Error('Cannot parse image as PNG file');
     }
 
     const { imageName, imagePath } = this.generateNewImage(type);
-    writeFileSync(imagePath, new Uint8Array(imageBuffer.buffer, imageBuffer.byteOffset, imageBuffer.byteLength));
+    await fs.writeFile(imagePath, new Uint8Array(imageBuffer.buffer, imageBuffer.byteOffset, imageBuffer.byteLength));
     return imageName;
   }
 
   async getImage(imageName: string): Promise<PNGWithMetadata> {
-    if (!imageName) return;
+    const imageBuffer = await this.getImageBuffer(imageName);
+    if (!imageBuffer) return;
     try {
-      return PNG.sync.read(readFileSync(this.getImagePath(imageName)));
+      return PNG.sync.read(imageBuffer);
     } catch (ex) {
-      this.logger.error(`Cannot get image: ${imageName}. ${ex}`);
+      this.logger.error(`Cannot decode image: ${imageName}. ${ex}`);
     }
   }
 
   async getImageBuffer(imageName: string): Promise<Buffer | null> {
     if (!imageName) return null;
     try {
-      return readFileSync(this.getImagePath(imageName));
+      return await fs.readFile(this.getImagePath(imageName));
     } catch (ex) {
       this.logger.error(`Cannot get image: ${imageName}. ${ex}`);
       // an absent file is the only case that means "no image"; a permission or
@@ -74,16 +80,20 @@ export class HddService implements Static {
     }
   }
 
+  async copyImage(type: 'screenshot' | 'diff' | 'baseline', sourceImageName: string): Promise<string> {
+    const { imageName, imagePath } = this.generateNewImage(type);
+    await fs.copyFile(this.getImagePath(sourceImageName), imagePath);
+    return imageName;
+  }
+
   async deleteImage(imageName: string): Promise<boolean> {
     if (!imageName) return;
-    return new Promise((resolvePromise) => {
-      unlink(this.getImagePath(imageName), (err) => {
-        if (err) {
-          this.logger.error(err);
-        }
-        resolvePromise(true);
-      });
-    });
+    try {
+      await fs.unlink(this.getImagePath(imageName));
+    } catch (err) {
+      this.logger.error(err);
+    }
+    return true;
   }
 
   private ensureDirectoryExistence(dir: string) {
