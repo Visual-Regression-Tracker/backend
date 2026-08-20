@@ -42,17 +42,6 @@ export class AWSS3Service implements Static {
 
   async getImage(fileName: string): Promise<PNGWithMetadata> {
     if (!fileName) return null;
-    const imageBuffer = await this.getImageBuffer(fileName);
-    if (!imageBuffer) return undefined;
-    try {
-      return PNG.sync.read(imageBuffer);
-    } catch (ex) {
-      this.logger.error(`Error from read : Cannot decode image: ${fileName}. ${ex}`);
-    }
-  }
-
-  async getImageBuffer(fileName: string): Promise<Buffer | null> {
-    if (!fileName) return null;
     try {
       // the comparison pipeline treats an unreadable image as a missing
       // baseline, so storage failures stay contained here

@@ -6,8 +6,6 @@ import { Static } from '../static.interface';
 import { HDD_IMAGE_PATH } from './constants';
 import { generateNewImageName } from '../utils';
 
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
 export class HddService implements Static {
   private readonly logger: Logger = new Logger(HddService.name);
 
@@ -41,15 +39,6 @@ export class HddService implements Static {
   }
 
   async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
-    // Signature check instead of a full decode: parsing megapixel PNGs just to
-    // validate them blocks the event loop on every upload.
-    if (
-      imageBuffer.length < PNG_SIGNATURE.length ||
-      !imageBuffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
-    ) {
-      throw new Error('Cannot parse image as PNG file');
-    }
-
     const { imageName, imagePath } = this.generateNewImage(type);
     await fs.writeFile(imagePath, new Uint8Array(imageBuffer.buffer, imageBuffer.byteOffset, imageBuffer.byteLength));
     return imageName;
