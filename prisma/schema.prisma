@@ -76,6 +76,8 @@ model TestRun {
   build                 Build          @relation(fields: [buildId], references: [id])
   project               Project?       @relation(fields: [projectId], references: [id])
   testVariation         TestVariation? @relation(fields: [testVariationId], references: [id])
+
+  @@index([buildId, branchName, name])
 }
 
 model TestVariation {
