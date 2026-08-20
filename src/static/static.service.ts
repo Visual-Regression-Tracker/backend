@@ -20,6 +20,10 @@ export class StaticService {
     return this.staticService.getImage(imageName);
   }
 
+  async getImageBuffer(imageName: string): Promise<Buffer | null> {
+    return this.staticService.getImageBuffer(imageName);
+  }
+
   async deleteImage(imageName: string): Promise<boolean> {
     return this.staticService.deleteImage(imageName);
   }

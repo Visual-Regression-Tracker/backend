@@ -36,13 +36,25 @@ export class AWSS3Service implements Static {
 
   async getImage(fileName: string): Promise<PNGWithMetadata> {
     if (!fileName) return null;
+    const imageBuffer = await this.getImageBuffer(fileName);
+    if (!imageBuffer) return undefined;
+    try {
+      return PNG.sync.read(imageBuffer);
+    } catch (ex) {
+      this.logger.error(`Error from read : Cannot decode image: ${fileName}. ${ex}`);
+    }
+  }
+
+  async getImageBuffer(fileName: string): Promise<Buffer | null> {
+    if (!fileName) return null;
     try {
       const command = new GetObjectCommand({ Bucket: this.AWS_S3_BUCKET_NAME, Key: fileName });
       const s3Response = await this.s3Client.send(command);
       const stream = s3Response.Body as Readable;
-      return PNG.sync.read(Buffer.concat(await stream.toArray()));
+      return Buffer.concat(await stream.toArray());
     } catch (ex) {
       this.logger.error(`Error from read : Cannot get image: ${fileName}. ${ex}`);
+      return null;
     }
   }
 

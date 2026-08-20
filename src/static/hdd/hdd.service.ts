@@ -47,6 +47,16 @@ export class HddService implements Static {
     }
   }
 
+  async getImageBuffer(imageName: string): Promise<Buffer | null> {
+    if (!imageName) return null;
+    try {
+      return readFileSync(this.getImagePath(imageName));
+    } catch (ex) {
+      this.logger.error(`Cannot get image: ${imageName}. ${ex}`);
+      return null;
+    }
+  }
+
   async deleteImage(imageName: string): Promise<boolean> {
     if (!imageName) return;
     return new Promise((resolvePromise) => {
