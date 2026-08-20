@@ -19,7 +19,15 @@ export class HddService implements Static {
 
   getImagePath(imageName: string): string {
     this.ensureDirectoryExistence(HDD_IMAGE_PATH);
-    return path.resolve(HDD_IMAGE_PATH, imageName);
+    const root = path.resolve(HDD_IMAGE_PATH);
+    const imagePath = path.resolve(root, imageName);
+    // image names reach here straight from the request, so a traversal value
+    // would otherwise read any file the process can see
+    const relativeToRoot = path.relative(root, imagePath);
+    if (!relativeToRoot || relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot)) {
+      throw new Error(`Image name outside of the image directory: ${imageName}`);
+    }
+    return imagePath;
   }
 
   getImageUrl(imageName: string): Promise<string> {
@@ -53,7 +61,12 @@ export class HddService implements Static {
       return readFileSync(this.getImagePath(imageName));
     } catch (ex) {
       this.logger.error(`Cannot get image: ${imageName}. ${ex}`);
-      return null;
+      // an absent file is the only case that means "no image"; a permission or
+      // I/O failure has to stay an error rather than read as a missing image
+      if (ex?.code === 'ENOENT') {
+        return null;
+      }
+      throw ex;
     }
   }
 

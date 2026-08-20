@@ -36,12 +36,14 @@ export class AWSS3Service implements Static {
 
   async getImage(fileName: string): Promise<PNGWithMetadata> {
     if (!fileName) return null;
-    const imageBuffer = await this.getImageBuffer(fileName);
-    if (!imageBuffer) return undefined;
     try {
+      // the comparison pipeline treats an unreadable image as a missing
+      // baseline, so storage failures stay contained here
+      const imageBuffer = await this.getImageBuffer(fileName);
+      if (!imageBuffer) return undefined;
       return PNG.sync.read(imageBuffer);
     } catch (ex) {
-      this.logger.error(`Error from read : Cannot decode image: ${fileName}. ${ex}`);
+      this.logger.error(`Error from read : Cannot get image: ${fileName}. ${ex}`);
     }
   }
 
@@ -54,7 +56,12 @@ export class AWSS3Service implements Static {
       return Buffer.concat(await stream.toArray());
     } catch (ex) {
       this.logger.error(`Error from read : Cannot get image: ${fileName}. ${ex}`);
-      return null;
+      // only a missing object means "no image"; credentials, throttling and
+      // network failures have to stay errors instead of reading as absence
+      if (ex?.name === 'NoSuchKey' || ex?.$metadata?.httpStatusCode === 404) {
+        return null;
+      }
+      throw ex;
     }
   }
 

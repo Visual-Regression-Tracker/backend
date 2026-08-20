@@ -1,6 +1,7 @@
-import { Controller, Get, Logger, NotFoundException, Param, Res } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Logger, NotFoundException, Param, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { basename } from 'path';
 import { StaticService } from './static.service';
 
 @ApiTags('images')
@@ -30,6 +31,12 @@ export class StaticController {
   @Get('/:fileName/download')
   @ApiOkResponse()
   async download(@Param('fileName') fileName: string, @Res() res: Response) {
+    // a stored image is always a plain file name, so anything carrying a path
+    // is rejected before it reaches storage
+    if (!fileName || fileName !== basename(fileName)) {
+      throw new BadRequestException('Invalid image name');
+    }
+
     const imageBuffer = await this.staticService.getImageBuffer(fileName);
     if (!imageBuffer) {
       throw new NotFoundException(`Image not found: ${fileName}`);
