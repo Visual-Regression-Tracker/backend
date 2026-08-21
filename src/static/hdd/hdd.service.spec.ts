@@ -7,7 +7,16 @@ describe('HddService', () => {
     expect(service.getImagePath('ABC123.screenshot.png')).toMatch(/imageUploads\/ABC123\.screenshot\.png$/);
   });
 
-  it.each(['../../etc/passwd', '../outside.png', '/etc/passwd', 'nested/../../outside.png', '..'])(
+  // a name may begin with dots without climbing out of the directory
+  it.each(['..thumbnail.png', '...png', '.hidden.png'])(
+    'resolves a dotted name inside the directory: %s',
+    (imageName) => {
+      expect(service.getImagePath(imageName)).toContain('imageUploads');
+      expect(() => service.getImagePath(imageName)).not.toThrow();
+    }
+  );
+
+  it.each(['../../etc/passwd', '../outside.png', '/etc/passwd', 'nested/../../outside.png', '..', '.'])(
     'rejects an image name pointing outside the image directory: %s',
     (imageName) => {
       expect(() => service.getImagePath(imageName)).toThrow(/outside of the image directory/);

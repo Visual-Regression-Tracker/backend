@@ -23,8 +23,12 @@ export class HddService implements Static {
     const imagePath = path.resolve(root, imageName);
     // image names reach here straight from the request, so a traversal value
     // would otherwise read any file the process can see
+    // only a leading parent-directory step means the name climbs out: a file
+    // whose name merely starts with dots stays inside
     const relativeToRoot = path.relative(root, imagePath);
-    if (!relativeToRoot || relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot)) {
+    const climbsOut =
+      relativeToRoot === '..' || relativeToRoot.startsWith(`..${path.sep}`) || path.isAbsolute(relativeToRoot);
+    if (!relativeToRoot || climbsOut) {
       throw new Error(`Image name outside of the image directory: ${imageName}`);
     }
     return imagePath;

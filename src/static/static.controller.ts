@@ -32,8 +32,10 @@ export class StaticController {
   @ApiOkResponse()
   async download(@Param('fileName') fileName: string, @Res() res: Response) {
     // a stored image is always a plain file name, so anything carrying a path
-    // is rejected before it reaches storage
-    if (!fileName || fileName !== basename(fileName)) {
+    // is rejected before it reaches storage. basename keeps '.' and '..' as
+    // they are, so both are named here rather than reaching a backend that
+    // would answer 500 for them, or ask storage for a directory.
+    if (!fileName || fileName === '.' || fileName === '..' || fileName !== basename(fileName)) {
       throw new BadRequestException('Invalid image name');
     }
 
