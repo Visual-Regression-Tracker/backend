@@ -4,6 +4,7 @@ import { Build, Prisma, TestStatus } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
+import { getBuildsStats } from './build-stats';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
 
@@ -20,16 +21,13 @@ export class BuildsService {
   ) {}
 
   async findOne(id: string): Promise<BuildDto> {
-    const [build, testRuns] = await Promise.all([
+    const [build, stats] = await Promise.all([
       this.prismaService.build.findUnique({
         where: { id },
       }),
-      this.testRunsService.findMany(id),
+      getBuildsStats(this.prismaService, [id]),
     ]);
-    return new BuildDto({
-      ...build,
-      testRuns,
-    });
+    return new BuildDto(build, stats.get(id));
   }
 
   async findMany(projectId: string, take: number, skip: number, ciBuildId?: string): Promise<PaginatedBuildDto> {
