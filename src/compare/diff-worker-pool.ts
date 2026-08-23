@@ -7,10 +7,16 @@ import { computePixelmatchDiff, PixelmatchJobInput, PixelmatchJobOutput } from '
 
 const WORKER_FILE = join(__dirname, 'libs', 'pixelmatch', 'pixelmatch.worker.js');
 
+// consecutive worker failures after which the pool stops respawning
+const MAX_SPAWN_FAILURES = 3;
+// how many times a job may be handed to a worker before it is given up on
+const MAX_JOB_ATTEMPTS = 2;
+
 interface Job {
   input: PixelmatchJobInput;
   resolve: (output: PixelmatchJobOutput) => void;
   reject: (error: Error) => void;
+  attempts: number;
 }
 
 /**
@@ -31,13 +37,14 @@ export class DiffWorkerPool implements OnModuleDestroy {
   private readonly queueLimit = Number(process.env.DIFF_QUEUE_LIMIT) || 256;
   // The compiled worker file only exists in the built app (dist). Under
   // ts-jest / ts-node run the job inline instead.
-  private readonly inline = !existsSync(WORKER_FILE);
+  private inline = !existsSync(WORKER_FILE);
   private workers: Worker[] = [];
   private idle: Worker[] = [];
   private queue: Job[] = [];
   private inFlight = new Map<Worker, Job>();
   private started = false;
   private destroyed = false;
+  private spawnFailures = 0;
 
   async run(input: PixelmatchJobInput): Promise<PixelmatchJobOutput> {
     if (this.inline) {
@@ -51,7 +58,7 @@ export class DiffWorkerPool implements OnModuleDestroy {
     }
     this.start();
     return new Promise<PixelmatchJobOutput>((resolve, reject) => {
-      this.queue.push({ input, resolve, reject });
+      this.queue.push({ input, resolve, reject, attempts: 0 });
       this.dispatch();
     });
   }
@@ -70,7 +77,12 @@ export class DiffWorkerPool implements OnModuleDestroy {
     worker.on('message', (output: PixelmatchJobOutput & { error?: string }) => {
       const job = this.inFlight.get(worker);
       this.inFlight.delete(worker);
-      this.idle.push(worker);
+      // a message can arrive after the worker was dropped or the pool shut
+      // down; taking it back would hand it a job it will never answer
+      if (this.workers.includes(worker)) {
+        this.idle.push(worker);
+        this.spawnFailures = 0;
+      }
       if (job) {
         output.error ? job.reject(new Error(output.error)) : job.resolve(output);
       }
@@ -96,11 +108,46 @@ export class DiffWorkerPool implements OnModuleDestroy {
     const job = this.inFlight.get(worker);
     this.inFlight.delete(worker);
     if (job) {
-      job.reject(error);
+      // a worker dying takes its job down with it; give the job one more run
+      // rather than failing the upload waiting behind it
+      if (!this.destroyed && job.attempts < MAX_JOB_ATTEMPTS) {
+        job.attempts += 1;
+        this.queue.unshift(job);
+      } else {
+        job.reject(error);
+      }
     }
-    if (!this.destroyed) {
-      this.spawn();
-      this.dispatch();
+    if (this.destroyed) {
+      return;
+    }
+
+    // a worker script that fails to load fails the same way every time, so
+    // respawning on each error would spin. Fall back to comparing on this
+    // thread instead: slower, but the uploads still go through.
+    this.spawnFailures += 1;
+    if (this.spawnFailures >= MAX_SPAWN_FAILURES) {
+      this.inline = true;
+      this.logger.error(
+        `Image diff workers failed to run ${this.spawnFailures} times, comparing on the main thread from now on`
+      );
+      this.drainQueueInline();
+      return;
+    }
+
+    this.spawn();
+    this.dispatch();
+  }
+
+  // the pool gave up on workers: answer what is already queued here
+  private drainQueueInline(): void {
+    const queued = this.queue;
+    this.queue = [];
+    for (const job of queued) {
+      try {
+        job.resolve(computePixelmatchDiff(job.input));
+      } catch (error) {
+        job.reject(error instanceof Error ? error : new Error(String(error)));
+      }
     }
   }
 
