@@ -37,12 +37,31 @@ export class AWSS3Service implements Static {
   async getImage(fileName: string): Promise<PNGWithMetadata> {
     if (!fileName) return null;
     try {
+      // the comparison pipeline treats an unreadable image as a missing
+      // baseline, so storage failures stay contained here
+      const imageBuffer = await this.getImageBuffer(fileName);
+      if (!imageBuffer) return undefined;
+      return PNG.sync.read(imageBuffer);
+    } catch (ex) {
+      this.logger.error(`Error from read : Cannot get image: ${fileName}. ${ex}`);
+    }
+  }
+
+  async getImageBuffer(fileName: string): Promise<Buffer | null> {
+    if (!fileName) return null;
+    try {
       const command = new GetObjectCommand({ Bucket: this.AWS_S3_BUCKET_NAME, Key: fileName });
       const s3Response = await this.s3Client.send(command);
       const stream = s3Response.Body as Readable;
-      return PNG.sync.read(Buffer.concat(await stream.toArray()));
+      return Buffer.concat(await stream.toArray());
     } catch (ex) {
       this.logger.error(`Error from read : Cannot get image: ${fileName}. ${ex}`);
+      // only a missing object means "no image"; credentials, throttling and
+      // network failures have to stay errors instead of reading as absence
+      if (ex?.name === 'NoSuchKey' || ex?.$metadata?.httpStatusCode === 404) {
+        return null;
+      }
+      throw ex;
     }
   }
 

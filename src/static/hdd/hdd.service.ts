@@ -19,7 +19,19 @@ export class HddService implements Static {
 
   getImagePath(imageName: string): string {
     this.ensureDirectoryExistence(HDD_IMAGE_PATH);
-    return path.resolve(HDD_IMAGE_PATH, imageName);
+    const root = path.resolve(HDD_IMAGE_PATH);
+    const imagePath = path.resolve(root, imageName);
+    // image names reach here straight from the request, so a traversal value
+    // would otherwise read any file the process can see
+    // only a leading parent-directory step means the name climbs out: a file
+    // whose name merely starts with dots stays inside
+    const relativeToRoot = path.relative(root, imagePath);
+    const climbsOut =
+      relativeToRoot === '..' || relativeToRoot.startsWith(`..${path.sep}`) || path.isAbsolute(relativeToRoot);
+    if (!relativeToRoot || climbsOut) {
+      throw new Error(`Image name outside of the image directory: ${imageName}`);
+    }
+    return imagePath;
   }
 
   getImageUrl(imageName: string): Promise<string> {
@@ -44,6 +56,21 @@ export class HddService implements Static {
       return PNG.sync.read(readFileSync(this.getImagePath(imageName)));
     } catch (ex) {
       this.logger.error(`Cannot get image: ${imageName}. ${ex}`);
+    }
+  }
+
+  async getImageBuffer(imageName: string): Promise<Buffer | null> {
+    if (!imageName) return null;
+    try {
+      return readFileSync(this.getImagePath(imageName));
+    } catch (ex) {
+      this.logger.error(`Cannot get image: ${imageName}. ${ex}`);
+      // an absent file is the only case that means "no image"; a permission or
+      // I/O failure has to stay an error rather than read as a missing image
+      if (ex?.code === 'ENOENT') {
+        return null;
+      }
+      throw ex;
     }
   }
 
