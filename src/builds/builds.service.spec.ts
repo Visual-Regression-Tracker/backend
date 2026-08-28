@@ -23,6 +23,7 @@ const initService = async ({
   testRunDeleteMock = jest.fn(),
   testRunApproveMock = jest.fn(),
   testRunFindManyMock = jest.fn(),
+  testRunGroupByMock = jest.fn().mockResolvedValue([]),
   eventsBuildUpdatedMock = jest.fn(),
   eventsBuildCreatedMock = jest.fn(),
   eventBuildDeletedMock = jest.fn(),
@@ -46,6 +47,9 @@ const initService = async ({
             delete: buildDeleteMock,
             upsert: buildUpsertMock,
             count: buildCountMock,
+          },
+          testRun: {
+            groupBy: testRunGroupByMock,
           },
         },
       },
@@ -115,13 +119,24 @@ describe('BuildsService', () => {
 
   it('findOne', async () => {
     const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-    const testRunFindManyMock = jest.fn().mockResolvedValueOnce(build.testRuns);
+    const testRunGroupByMock = jest
+      .fn()
+      .mockResolvedValueOnce([
+        { buildId: 'someId', status: TestStatus.ok, _count: { _all: 2 } },
+        { buildId: 'someId', status: TestStatus.unresolved, _count: { _all: 1 } },
+      ])
+      .mockResolvedValueOnce([{ buildId: 'someId' }]);
     mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-    service = await initService({ buildFindUniqueMock, testRunFindManyMock });
+    service = await initService({ buildFindUniqueMock, testRunGroupByMock });
 
     const result = await service.findOne('someId');
 
-    expect(mocked(BuildDto)).toHaveBeenCalledWith({ ...build, testRuns: build.testRuns });
+    expect(mocked(BuildDto)).toHaveBeenCalledWith(build, {
+      passedCount: 2,
+      unresolvedCount: 1,
+      failedCount: 0,
+      merge: true,
+    });
     expect(result).toBe(buildDto);
   });
 

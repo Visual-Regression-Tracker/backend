@@ -8,11 +8,13 @@ import { OllamaController } from './libs/vlm/providers/ollama/ollama.controller'
 import { OllamaService } from './libs/vlm/providers/ollama/ollama.service';
 import { GeminiService } from './libs/vlm/providers/gemini/gemini.service';
 import { StaticModule } from '../static/static.module';
+import { DiffWorkerPool } from './diff-worker-pool';
 
 @Module({
   controllers: [OllamaController],
   providers: [
     CompareService,
+    DiffWorkerPool,
     PixelmatchService,
     LookSameService,
     OdiffService,

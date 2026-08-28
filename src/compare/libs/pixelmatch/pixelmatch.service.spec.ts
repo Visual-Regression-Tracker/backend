@@ -4,20 +4,28 @@ import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { mocked } from 'jest-mock';
 import { StaticService } from '../../../static/static.service';
+import { DiffWorkerPool } from '../../diff-worker-pool';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
 import { PixelmatchConfig } from './pixelmatch.types';
 
 jest.mock('pixelmatch');
 
-const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn(), deleteImageMock = jest.fn() }) => {
+const toBuffer = (png: PNG | undefined): Buffer | undefined => (png ? PNG.sync.write(png) : undefined);
+
+const initService = async ({
+  getImageBufferMock = jest.fn(),
+  saveImageMock = jest.fn(),
+  deleteImageMock = jest.fn(),
+}) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       PixelmatchService,
+      DiffWorkerPool,
       {
         provide: StaticService,
         useValue: {
-          getImage: getImageMock,
+          getImageBuffer: getImageBufferMock,
           saveImage: saveImageMock,
           deleteImage: deleteImageMock,
         },
@@ -54,8 +62,8 @@ describe('getDiff', () => {
   });
 
   it('no baseline', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(undefined).mockReturnValueOnce(image);
-    service = await initService({ getImageMock });
+    const getImageBufferMock = jest.fn().mockReturnValueOnce(undefined).mockReturnValueOnce(toBuffer(image));
+    service = await initService({ getImageBufferMock });
 
     const result = await service.getDiff(
       {
@@ -72,8 +80,8 @@ describe('getDiff', () => {
   });
 
   it('diff not found', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image);
-    service = await initService({ getImageMock });
+    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(image)).mockReturnValueOnce(toBuffer(image));
+    service = await initService({ getImageBufferMock });
 
     const result = await service.getDiff(
       {
@@ -94,8 +102,8 @@ describe('getDiff', () => {
       width: 10,
       height: 10,
     });
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
-    service = await initService({ getImageMock });
+    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(baseline)).mockReturnValueOnce(toBuffer(image));
+    service = await initService({ getImageBufferMock });
 
     const result = await service.getDiff(
       {
@@ -120,11 +128,11 @@ describe('getDiff', () => {
       width: 2,
       height: 4,
     });
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
+    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(baseline)).mockReturnValueOnce(toBuffer(image));
     const diffName = 'diff name';
     const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
     mocked(Pixelmatch).mockReturnValueOnce(5);
-    service = await initService({ saveImageMock, getImageMock });
+    service = await initService({ saveImageMock, getImageBufferMock });
 
     const result = await service.getDiff(
       {
@@ -181,9 +189,9 @@ describe('getDiff', () => {
       width: 100,
       height: 100,
     });
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
+    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(baseline)).mockReturnValueOnce(toBuffer(image));
     const saveImageMock = jest.fn();
-    service = await initService({ saveImageMock, getImageMock });
+    service = await initService({ saveImageMock, getImageBufferMock });
     const pixelMisMatchCount = 150;
     mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
 
@@ -218,14 +226,14 @@ describe('getDiff', () => {
       width: 100,
       height: 100,
     });
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
+    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(baseline)).mockReturnValueOnce(toBuffer(image));
     const pixelMisMatchCount = 200;
     mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
     const diffName = 'diff name';
     const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
     service = await initService({
       saveImageMock,
-      getImageMock,
+      getImageBufferMock,
     });
 
     const result = await service.getDiff(
