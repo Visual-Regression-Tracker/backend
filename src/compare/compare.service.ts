@@ -9,6 +9,8 @@ import { LookSameService } from './libs/looks-same/looks-same.service';
 import { OdiffService } from './libs/odiff/odiff.service';
 import { VlmService } from './libs/vlm/vlm.service';
 import { isHddStaticServiceConfigured } from '../static/utils';
+import { DiffWorkerPool } from './diff-worker-pool';
+import { SignatureJobInput, SignatureJobOutput } from './libs/pixelmatch/signature.core';
 
 @Injectable()
 export class CompareService {
@@ -19,7 +21,8 @@ export class CompareService {
     private readonly lookSameService: LookSameService,
     private readonly odiffService: OdiffService,
     private readonly vlmService: VlmService,
-    private readonly prismaService: PrismaService
+    private readonly prismaService: PrismaService,
+    private readonly diffWorkerPool: DiffWorkerPool
   ) {}
 
   async getDiff({ projectId, data }: { projectId: string; data: ImageCompareInput }): Promise<DiffResult> {
@@ -27,6 +30,16 @@ export class CompareService {
     const comparator = this.getComparator(project.imageComparison);
     const config = comparator.parseConfig(project.imageComparisonConfig);
     return comparator.getDiff(data, config);
+  }
+
+  /**
+   * Position-independent signature of what changed between a baseline and a
+   * screenshot, used to tell whether two screens carry the same change. Runs on
+   * the diff worker pool: decoding a pair of full-size screenshots takes long
+   * enough that doing it on the event loop stalls every other request.
+   */
+  async getChangeSignature(input: Omit<SignatureJobInput, 'kind'>): Promise<SignatureJobOutput> {
+    return this.diffWorkerPool.run({ kind: 'signature', ...input });
   }
 
   getComparator(imageComparison: ImageComparison): ImageComparator {

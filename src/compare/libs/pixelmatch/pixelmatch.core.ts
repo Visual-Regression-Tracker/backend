@@ -11,6 +11,7 @@ import { applyIgnoreAreas, scaleImageToSize } from '../../utils';
  * build ingestion. All input/output must stay structured-clone serializable.
  */
 export interface PixelmatchJobInput {
+  kind: 'diff';
   baseline: Buffer | Uint8Array;
   image: Buffer | Uint8Array;
   ignoreAreas: IgnoreAreaDto[];

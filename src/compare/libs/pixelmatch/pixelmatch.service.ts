@@ -36,6 +36,7 @@ export class PixelmatchService implements ImageComparator {
 
     // decode + pixelmatch + diff encode run off the event loop
     const output = await this.diffWorkerPool.run({
+      kind: 'diff',
       baseline: baselineBuffer,
       image: imageBuffer,
       ignoreAreas: data.ignoreAreas,
