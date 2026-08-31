@@ -84,8 +84,18 @@ function downscale(source: RawImage, maxDimension: number): RawImage {
  * dimensions, or no change outside the ignore areas.
  */
 export function computeChangeSignature(input: SignatureJobInput): SignatureJobOutput {
-  const baselineImage = PNG.sync.read(toBuffer(input.baseline));
-  const checkpointImage = PNG.sync.read(toBuffer(input.image));
+  // A corrupt or truncated screenshot is one candidate the reviewer cannot be
+  // offered, not a failed request: the siblings are signed in a single
+  // fan-out, so throwing here would take the whole variations dialog down.
+  let baselineImage: PNG;
+  let checkpointImage: PNG;
+  try {
+    baselineImage = PNG.sync.read(toBuffer(input.baseline));
+    checkpointImage = PNG.sync.read(toBuffer(input.image));
+  } catch {
+    return { signature: null };
+  }
+
   if (baselineImage.width !== checkpointImage.width || baselineImage.height !== checkpointImage.height) {
     return { signature: null };
   }

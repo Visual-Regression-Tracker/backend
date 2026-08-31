@@ -53,6 +53,17 @@ describe('computeChangeSignature', () => {
     expect(signatureOf(blank, blank)).toBeNull();
   });
 
+  // One unreadable screenshot must not reject the whole matching request: the
+  // siblings are signed in a single fan-out, so a throw here would take the
+  // variations dialog down with it rather than skipping that one candidate.
+  it('has no signature when the checkpoint cannot be decoded', () => {
+    expect(signatureOf(blank, Buffer.from('not a png'))).toBeNull();
+  });
+
+  it('has no signature when the baseline is truncated', () => {
+    expect(signatureOf(blank.subarray(0, 30), block(0, 0, RED))).toBeNull();
+  });
+
   it('concentrates on the color the changed pixels took in the new image', () => {
     const signature = signatureOf(blank, block(0, 0, RED));
 
