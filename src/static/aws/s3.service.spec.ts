@@ -173,12 +173,18 @@ describe('AWSS3Service', () => {
     it('keeps a URL alive well past the window it was signed in', async () => {
       const service = new AWSS3Service();
       (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
+      // The worst case, when the least life is left: minted at the last second
+      // of a window. Pinned rather than read live, or a run that straddles the
+      // hour boundary asks the clock on the far side of it and sees a shorter
+      // life than the URL actually has.
+      const lastSecondOfWindow = Date.parse('2026-09-01T10:59:59Z');
+      jest.spyOn(Date, 'now').mockReturnValue(lastSecondOfWindow);
 
       await service.getImageUrl('image.png');
 
       const { expiresIn, signingDate } = (getSignedUrl as jest.Mock).mock.calls.at(-1)[2];
       const livesUntil = signingDate.getTime() + expiresIn * 1000;
-      expect(livesUntil - Date.now()).toBeGreaterThanOrEqual(3600 * 1000);
+      expect(livesUntil - lastSecondOfWindow).toBeGreaterThanOrEqual(3600 * 1000);
     });
 
     // S3 answers with no cache headers of its own, so a stable URL alone still
