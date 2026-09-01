@@ -115,28 +115,83 @@ describe('AWSS3Service', () => {
   });
 
   describe('getImageUrl', () => {
+    // A browser caches by URL. Signing from the current instant produced a
+    // different URL on every request, so the bytes it had just downloaded
+    // could never be reused and every view of an image cost a fresh download.
+    const signingDateOfLastCall = (): Date => (getSignedUrl as jest.Mock).mock.calls.at(-1)[2].signingDate;
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     it('returns a signed URL for the requested object', async () => {
       const service = new AWSS3Service();
       (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
 
       const result = await service.getImageUrl('image.png');
 
-      expect(GetObjectCommand).toHaveBeenCalledWith({
-        Bucket: 'vrt-bucket',
-        Key: 'image.png',
-      });
-      expect(getSignedUrl).toHaveBeenCalledWith(
-        (service as any).s3Client,
-        {
-          input: {
-            Bucket: 'vrt-bucket',
-            Key: 'image.png',
-          },
-          type: 'get',
-        },
-        { expiresIn: 3600 }
-      );
       expect(result).toBe('https://signed-url');
+      expect(GetObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ Bucket: 'vrt-bucket', Key: 'image.png' })
+      );
+    });
+
+    it('hands out the same URL for an image asked for again soon after', async () => {
+      const service = new AWSS3Service();
+      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
+      const nowSpy = jest.spyOn(Date, 'now');
+
+      nowSpy.mockReturnValue(Date.parse('2026-09-01T10:00:05Z'));
+      await service.getImageUrl('image.png');
+      const first = signingDateOfLastCall();
+
+      nowSpy.mockReturnValue(Date.parse('2026-09-01T10:42:31Z'));
+      await service.getImageUrl('image.png');
+
+      // asserted to be a real instant first: two undefineds are also equal
+      expect(first).toBeInstanceOf(Date);
+      expect(signingDateOfLastCall()).toEqual(first);
+    });
+
+    it('moves on to a new URL once the window has passed', async () => {
+      const service = new AWSS3Service();
+      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
+      const nowSpy = jest.spyOn(Date, 'now');
+
+      nowSpy.mockReturnValue(Date.parse('2026-09-01T10:42:31Z'));
+      await service.getImageUrl('image.png');
+      const first = signingDateOfLastCall();
+
+      nowSpy.mockReturnValue(Date.parse('2026-09-01T11:00:01Z'));
+      await service.getImageUrl('image.png');
+
+      expect(signingDateOfLastCall()).not.toEqual(first);
+    });
+
+    // a URL handed out at the very end of a window must still be usable for a
+    // whole window afterwards, or the browser's cached copy outlives its URL
+    it('keeps a URL alive well past the window it was signed in', async () => {
+      const service = new AWSS3Service();
+      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
+
+      await service.getImageUrl('image.png');
+
+      const { expiresIn, signingDate } = (getSignedUrl as jest.Mock).mock.calls.at(-1)[2];
+      const livesUntil = signingDate.getTime() + expiresIn * 1000;
+      expect(livesUntil - Date.now()).toBeGreaterThanOrEqual(3600 * 1000);
+    });
+
+    // S3 answers with no cache headers of its own, so a stable URL alone still
+    // leaves the browser guessing whether it may keep the bytes
+    it('asks S3 to answer with a cache header', async () => {
+      const service = new AWSS3Service();
+      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
+
+      await service.getImageUrl('image.png');
+
+      expect(GetObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ ResponseCacheControl: expect.stringContaining('max-age=') })
+      );
     });
   });
 

@@ -4,6 +4,10 @@ import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { basename } from 'path';
 import { StaticService } from './static.service';
 
+// Shorter than the window a signed URL is minted for (URL_WINDOW_SECONDS), so a
+// cached redirect always still points at a URL that works.
+const REDIRECT_MAX_AGE_SECONDS = 3000;
+
 @ApiTags('images')
 @Controller('images')
 export class StaticController {
@@ -15,6 +19,13 @@ export class StaticController {
   async getUrlAndRedirect(@Param('fileName') fileName: string, @Res() res: Response) {
     try {
       const url = await this.staticService.getImageUrl(fileName);
+      // The redirect has to be reusable too, or the browser comes back here for
+      // a location on every single view — and a storage that signs its URLs
+      // hands back a different one each time, making the copy the browser
+      // already holds worthless. Kept well inside the signature's life so the
+      // redirect can never outlive what it points at. Private, because a signed
+      // URL is an access grant and has no business in a shared cache.
+      res.set('Cache-Control', `private, max-age=${REDIRECT_MAX_AGE_SECONDS}`);
       res.redirect(url);
     } catch (error) {
       this.logger.error('Error fetching file from S3:' + fileName, error);
