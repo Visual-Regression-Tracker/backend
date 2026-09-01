@@ -1,6 +1,6 @@
 import { mocked } from 'jest-mock';
 import { Test, TestingModule } from '@nestjs/testing';
-import { TestRunsService } from './test-runs.service';
+import { SIGNATURE_CONCURRENCY, TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../static/static.service';
 import { TestStatus, TestRun, TestVariation } from '@prisma/client';
@@ -44,6 +44,8 @@ const initService = async ({
   testVariationFindUniqueMock = jest.fn(),
   projectFindUniqueMock = jest.fn(),
   compareGetDiffMock = jest.fn(),
+  compareGetChangeSignatureMock = jest.fn(),
+  getImageBufferMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -76,6 +78,7 @@ const initService = async ({
         provide: StaticService,
         useValue: {
           getImage: getImageMock,
+          getImageBuffer: getImageBufferMock,
           saveImage: saveImageMock,
           deleteImage: deleteImageMock,
         },
@@ -106,6 +109,7 @@ const initService = async ({
         provide: CompareService,
         useValue: {
           getDiff: compareGetDiffMock,
+          getChangeSignature: compareGetChangeSignatureMock,
         },
       },
     ],
@@ -706,61 +710,181 @@ describe('TestRunsService', () => {
   });
 
   describe('getMatchingVariations', () => {
+    const SAME_PALETTE = [1, 0];
+    const OTHER_PALETTE = [0, 1];
+
+    // A sibling of the reviewed screen. imageName doubles as the run's identity
+    // in the signature mocks below, which see buffers rather than runs.
+    const sibling = (id: string, overrides: Partial<TestRun> = {}): TestRun =>
+      generateTestRun({
+        id,
+        status: TestStatus.unresolved,
+        name: 'Screen A',
+        baselineName: `${id}.baseline.png`,
+        imageName: `${id}.screenshot.png`,
+        customTags: id,
+        diffPercent: 12,
+        ...overrides,
+      });
+
+    // The pool takes PNG bytes, so the fake static service hands back the image
+    // name as its own content and the signature mock reads the name back out.
+    const initMatchingService = async ({
+      testRun,
+      siblings,
+      signatureOf,
+    }: {
+      testRun: TestRun;
+      siblings: TestRun[];
+      signatureOf: (imageName: string) => Promise<number[] | null> | number[] | null;
+    }) => {
+      const compareGetChangeSignatureMock = jest.fn().mockImplementation(async (input) => ({
+        signature: await signatureOf(input.image.toString()),
+      }));
+      const built = await initService({
+        testRunFindUniqueMock: jest.fn().mockResolvedValue({ ...testRun, testVariation: generateTestVariation() }),
+        testRunFindManyMock: jest.fn().mockResolvedValue(siblings),
+        projectFindUniqueMock: jest
+          .fn()
+          .mockResolvedValue({ bulkApproveVariations: true, bulkApproveGroupBy: 'customTags' }),
+        getImageBufferMock: jest.fn().mockImplementation(async (name: string) => Buffer.from(name)),
+        compareGetChangeSignatureMock,
+      });
+      return { service: built, compareGetChangeSignatureMock };
+    };
+
     it('matches same-palette, same-size siblings and skips different pattern / far larger change', async () => {
-      const testRun = generateTestRun({
-        id: 'target',
-        status: TestStatus.unresolved,
-        name: 'Screen A',
-        diffPercent: 12,
-      });
-      const matching = generateTestRun({
-        id: 'match',
-        status: TestStatus.unresolved,
-        name: 'Screen A',
-        customTags: 'locale-a',
-        diffPercent: 12,
-      });
-      const bigger = generateTestRun({
-        id: 'bigger',
-        status: TestStatus.unresolved,
-        name: 'Screen A',
-        customTags: 'locale-b',
-        diffPercent: 30,
-      });
-      const different = generateTestRun({
-        id: 'diff',
-        status: TestStatus.unresolved,
-        name: 'Screen A',
-        customTags: 'locale-c',
-        diffPercent: 12,
+      const testRun = sibling('target', { customTags: '' });
+      const matching = sibling('locale-a');
+      const bigger = sibling('locale-b', { diffPercent: 30 });
+      const different = sibling('locale-c');
+
+      const built = await initMatchingService({
+        testRun,
+        siblings: [matching, bigger, different],
+        signatureOf: (imageName) => (imageName.startsWith('locale-c') ? OTHER_PALETTE : SAME_PALETTE),
       });
 
-      const testRunFindUniqueMock = jest
-        .fn()
-        .mockResolvedValueOnce({ ...testRun, testVariation: generateTestVariation() });
-      const testRunFindManyMock = jest.fn().mockResolvedValueOnce([matching, bigger, different]);
-      const projectFindUniqueMock = jest
-        .fn()
-        .mockResolvedValueOnce({ bulkApproveVariations: true, bulkApproveGroupBy: 'customTags' });
-      service = await initService({ testRunFindUniqueMock, testRunFindManyMock, projectFindUniqueMock });
-
-      const referenceSignature = [1, 0];
-      service['getChangeSignature'] = jest
-        .fn()
-        .mockResolvedValueOnce(referenceSignature) // target
-        .mockResolvedValueOnce(referenceSignature) // matching sibling
-        .mockResolvedValueOnce(referenceSignature) // bigger sibling (same palette, 2.5x larger change)
-        .mockResolvedValueOnce([0, 1]); // different palette sibling
-
-      const result = await service.getMatchingVariations(testRun.id);
+      const result = await built.service.getMatchingVariations(testRun.id);
 
       expect(result.variations.map((variation) => variation.id)).toEqual([testRun.id, matching.id]);
-      expect(result.skipped.map((item) => ({ id: item.id, customTags: item.customTags, reason: item.reason }))).toEqual(
-        [
-          { id: bigger.id, customTags: 'locale-b', reason: 'different change size' },
-          { id: different.id, customTags: 'locale-c', reason: 'different change pattern' },
-        ]
-      );
+      expect(result.skipped.map((item) => ({ id: item.id, reason: item.reason }))).toEqual([
+        { id: bigger.id, reason: 'different change size' },
+        { id: different.id, reason: 'different change pattern' },
+      ]);
+    });
+
+    it('skips a far larger change without paying for its signature', async () => {
+      const testRun = sibling('target', { customTags: '' });
+      const bigger = sibling('locale-b', { diffPercent: 30 });
+
+      const built = await initMatchingService({
+        testRun,
+        siblings: [bigger],
+        signatureOf: () => SAME_PALETTE,
+      });
+
+      await built.service.getMatchingVariations(testRun.id);
+
+      const asked = built.compareGetChangeSignatureMock.mock.calls.map(([input]) => input.image.toString());
+      expect(asked).toEqual([testRun.imageName]);
+    });
+
+    it('says a sibling has no diff rather than blaming its change size', async () => {
+      const testRun = sibling('target', { customTags: '' });
+      const unchanged = sibling('locale-b', { diffPercent: 0 });
+
+      const built = await initMatchingService({
+        testRun,
+        siblings: [unchanged],
+        signatureOf: () => SAME_PALETTE,
+      });
+
+      const result = await built.service.getMatchingVariations(testRun.id);
+
+      expect(result.skipped.map((item) => item.reason)).toEqual(['no diff to match']);
+    });
+
+    it('asks for the siblings signatures at once rather than one after another', async () => {
+      const testRun = sibling('target', { customTags: '' });
+      const siblings = ['locale-a', 'locale-b', 'locale-c'].map((id) => sibling(id));
+
+      let inFlight = 0;
+      let peakInFlight = 0;
+      const built = await initMatchingService({
+        testRun,
+        siblings,
+        signatureOf: async () => {
+          inFlight += 1;
+          peakInFlight = Math.max(peakInFlight, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          inFlight -= 1;
+          return SAME_PALETTE;
+        },
+      });
+
+      await built.service.getMatchingVariations(testRun.id);
+
+      expect(peakInFlight).toBe(siblings.length + 1);
+    });
+
+    it('keeps the number of images being decoded at once bounded', async () => {
+      const testRun = sibling('target', { customTags: '' });
+      const siblings = Array.from({ length: SIGNATURE_CONCURRENCY * 3 }, (_, index) => sibling(`locale-${index}`));
+
+      let inFlight = 0;
+      let peakInFlight = 0;
+      const built = await initMatchingService({
+        testRun,
+        siblings,
+        signatureOf: async () => {
+          inFlight += 1;
+          peakInFlight = Math.max(peakInFlight, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          inFlight -= 1;
+          return SAME_PALETTE;
+        },
+      });
+
+      await built.service.getMatchingVariations(testRun.id);
+
+      expect(peakInFlight).toBe(SIGNATURE_CONCURRENCY);
+    });
+
+    it('reuses the signatures it already computed when the dialog is reopened', async () => {
+      const testRun = sibling('target', { customTags: '' });
+      const matching = sibling('locale-a');
+
+      const built = await initMatchingService({
+        testRun,
+        siblings: [matching],
+        signatureOf: () => SAME_PALETTE,
+      });
+
+      await built.service.getMatchingVariations(testRun.id);
+      const afterFirst = built.compareGetChangeSignatureMock.mock.calls.length;
+      const second = await built.service.getMatchingVariations(testRun.id);
+
+      expect(afterFirst).toBe(2);
+      expect(built.compareGetChangeSignatureMock).toHaveBeenCalledTimes(2);
+      expect(second.variations.map((variation) => variation.id)).toEqual([testRun.id, matching.id]);
+    });
+
+    it('recomputes a signature once the run gained an ignore area', async () => {
+      const testRun = sibling('target', { customTags: '' });
+      const matching = sibling('locale-a');
+
+      const built = await initMatchingService({
+        testRun,
+        siblings: [matching],
+        signatureOf: () => SAME_PALETTE,
+      });
+
+      await built.service.getMatchingVariations(testRun.id);
+      matching.ignoreAreas = JSON.stringify([{ x: 0, y: 0, width: 10, height: 10 }]);
+      await built.service.getMatchingVariations(testRun.id);
+
+      expect(built.compareGetChangeSignatureMock).toHaveBeenCalledTimes(3);
     });
   });
 });

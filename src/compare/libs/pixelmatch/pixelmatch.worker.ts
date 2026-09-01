@@ -1,9 +1,9 @@
 import { parentPort } from 'worker_threads';
-import { computePixelmatchDiff, PixelmatchJobInput } from './pixelmatch.core';
+import { runWorkerJob, WorkerJobInput } from './worker-job';
 
-parentPort.on('message', (input: PixelmatchJobInput) => {
+parentPort.on('message', (input: WorkerJobInput) => {
   try {
-    parentPort.postMessage(computePixelmatchDiff(input));
+    parentPort.postMessage(runWorkerJob(input));
   } catch (error) {
     parentPort.postMessage({ error: error instanceof Error ? error.message : String(error) });
   }

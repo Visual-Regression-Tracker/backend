@@ -1,6 +1,4 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
-import { PNG } from 'pngjs';
-import Pixelmatch from 'pixelmatch';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../static/static.service';
@@ -14,13 +12,15 @@ import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData } from '../utils';
 import { CompareService } from '../compare/compare.service';
 import { UpdateTestRunDto } from './dto/update-test.dto';
-import { applyIgnoreAreas, parseConfig } from '../compare/utils';
+import { parseConfig } from '../compare/utils';
 import { DEFAULT_CONFIG } from '../compare/libs/pixelmatch/pixelmatch.service';
 import { PixelmatchConfig } from '../compare/libs/pixelmatch/pixelmatch.types';
+import { signaturesMatch } from '../compare/libs/pixelmatch/signature.core';
 
 @Injectable()
 export class TestRunsService {
   private readonly logger: Logger = new Logger(TestRunsService.name);
+  private readonly signatureCache = new BoundedCache<Promise<number[] | null>>(SIGNATURE_CACHE_SIZE);
 
   constructor(
     @Inject(forwardRef(() => TestVariationsService))
@@ -202,7 +202,6 @@ export class TestRunsService {
       }
     }
 
-    const referenceSignature = await this.getChangeSignature(testRun, config);
     const siblings = await this.prismaService.testRun.findMany({
       where: {
         id: { not: testRun.id },
@@ -217,25 +216,57 @@ export class TestRunsService {
     const matching: TestRun[] = [];
     const skipped: SkippedSibling[] = [];
 
-    if (!referenceSignature) {
-      for (const sibling of siblings) {
-        skipped.push({ run: sibling, reason: 'no reference diff' });
+    // Comparing change sizes is free, computing a signature costs two decoded
+    // screenshots — so the cheap test goes first and takes those siblings out
+    // of the expensive pass entirely.
+    const candidates: TestRun[] = [];
+    for (const sibling of siblings) {
+      if (!sibling.diffPercent) {
+        // Nothing changed on this one, so there is no change to recognise —
+        // the same verdict the signature pass would have reached, for free.
+        skipped.push({ run: sibling, reason: 'no diff to match' });
+      } else if (!magnitudesSimilar(testRun.diffPercent, sibling.diffPercent)) {
+        skipped.push({ run: sibling, reason: 'different change size' });
+      } else {
+        candidates.push(sibling);
       }
-      return { testRun, matching, skipped };
     }
 
-    for (const sibling of siblings) {
-      const signature = await this.getChangeSignature(sibling, config);
+    // The reviewed run and every remaining sibling are signed in one bounded
+    // fan-out across the worker pool. Signing them one after another is what
+    // made this dialog take tens of seconds on a build with many locales.
+    const [referenceSignature, ...candidateSignatures] = await mapWithConcurrency(
+      [testRun, ...candidates],
+      SIGNATURE_CONCURRENCY,
+      (run) => this.getChangeSignature(run, config)
+    );
+
+    // Nothing to match against: every sibling goes to manual review, whatever
+    // the cheap pass made of it.
+    if (!referenceSignature) {
+      return {
+        testRun,
+        matching,
+        skipped: siblings.map((run) => ({ run, reason: 'no reference diff' })),
+      };
+    }
+
+    candidates.forEach((sibling, index) => {
+      const signature = candidateSignatures[index];
       if (!signature) {
         skipped.push({ run: sibling, reason: 'no diff to match' });
       } else if (!signaturesMatch(referenceSignature, signature)) {
         skipped.push({ run: sibling, reason: 'different change pattern' });
-      } else if (!magnitudesSimilar(testRun.diffPercent, sibling.diffPercent)) {
-        skipped.push({ run: sibling, reason: 'different change size' });
       } else {
         matching.push(sibling);
       }
-    }
+    });
+
+    // The cheap pass ran first, so restore the order the siblings came in —
+    // the dialog lists them as one group and its order should not depend on
+    // which test rejected a sibling.
+    const orderOf = new Map(siblings.map((sibling, index) => [sibling.id, index] as const));
+    skipped.sort((a, b) => orderOf.get(a.run.id) - orderOf.get(b.run.id));
 
     return { testRun, matching, skipped };
   }
@@ -260,28 +291,59 @@ export class TestRunsService {
 
   /**
    * Position-independent color signature of the change between a test run's
-   * baseline and image: a normalized histogram of the colors the changed pixels
-   * took in the new image. Null when there is no baseline, dimensions differ, or
-   * nothing changed.
+   * baseline and image. Null when there is no baseline, dimensions differ, or
+   * nothing changed. The bytes go to the worker pool undecoded — decoding is
+   * the expensive part and must not happen on the event loop.
+   *
+   * Memoized: a reviewer who reopens the variations dialog, or steps back to a
+   * screen already looked at, would otherwise pay for the same decodes again.
    */
   private async getChangeSignature(testRun: TestRun, config: PixelmatchConfig): Promise<number[] | null> {
     if (!testRun.baselineName) {
       return null;
     }
-    const baseline = await this.staticService.getImage(testRun.baselineName);
-    const image = await this.staticService.getImage(testRun.imageName);
-    if (!baseline || !image || baseline.width !== image.width || baseline.height !== image.height) {
+    const ignoreAreas = this.getAllIgnoteAreas(testRun);
+    // Image names are unique per upload, so only the ignore areas and the
+    // project's diff config can change a signature under a stable pair.
+    const key = [
+      testRun.baselineName,
+      testRun.imageName,
+      config.threshold,
+      config.ignoreAntialiasing,
+      JSON.stringify(ignoreAreas),
+    ].join('|');
+    const cached = this.signatureCache.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const pending = this.computeChangeSignature(testRun, ignoreAreas, config);
+    this.signatureCache.set(key, pending);
+    // A failed read must not be remembered as "no signature" forever.
+    pending.catch(() => this.signatureCache.delete(key));
+    return pending;
+  }
+
+  private async computeChangeSignature(
+    testRun: TestRun,
+    ignoreAreas: IgnoreAreaDto[],
+    config: PixelmatchConfig
+  ): Promise<number[] | null> {
+    const [baseline, image] = await Promise.all([
+      this.staticService.getImageBuffer(testRun.baselineName),
+      this.staticService.getImageBuffer(testRun.imageName),
+    ]);
+    if (!baseline || !image) {
       return null;
     }
-    // Apply ignore areas exactly as the diff does, so masked regions never count
-    // toward the change signature.
-    const ignoreAreas = this.getAllIgnoteAreas(testRun);
-    applyIgnoreAreas(baseline, ignoreAreas);
-    applyIgnoreAreas(image, ignoreAreas);
-    return changeColorSignature(baseline, image, {
+    const { signature } = await this.compareService.getChangeSignature({
+      baseline,
+      image,
+      ignoreAreas,
       threshold: config.threshold,
       includeAA: config.ignoreAntialiasing,
     });
+    return signature;
   }
 
   async setStatus(id: string, status: TestStatus): Promise<TestRun> {
@@ -555,108 +617,63 @@ function resolveGroupByAxis(value: string | null | undefined): string {
   return value && (GROUP_BY_AXES as readonly string[]).includes(value) ? value : 'customTags';
 }
 
-// Colors are quantized to this many levels per RGB channel, giving
-// COLOR_BUCKETS_PER_CHANNEL^3 histogram buckets.
-const COLOR_BUCKETS_PER_CHANNEL = 4;
-// Two changes are considered the same pattern when their color signatures'
-// cosine similarity is at least this value.
-const SIGNATURE_SIMILARITY_THRESHOLD = 0.9;
+// How many sibling screenshots may be in the worker pool at once for one
+// variations dialog. The pool queue is shared with build ingestion, and every
+// queued job holds two image buffers, so the fan-out stays bounded rather than
+// handing the pool a job per locale.
+export const SIGNATURE_CONCURRENCY = 8;
 
-// Longest side (px) images are downscaled to before computing the color
-// signature — keeps the histogram representative while cutting pixelmatch cost.
-const SIGNATURE_MAX_DIMENSION = 500;
+// Signatures kept across requests, keyed by the image pair and diff settings.
+// Roughly one build's worth of screens, at 64 floats each.
+const SIGNATURE_CACHE_SIZE = 2000;
 
-// Nearest-neighbour downscale so the longest side is at most maxDimension.
-// Returns the original when already small enough.
-function downscale(
-  source: { data: Buffer; width: number; height: number },
-  maxDimension: number
-): { data: Buffer; width: number; height: number } {
-  const scale = maxDimension / Math.max(source.width, source.height);
-  if (scale >= 1) {
-    return source;
+/**
+ * Insertion-ordered cache with a hard size limit: reviewing build after build
+ * would otherwise grow the signature memo without bound. Reinserting a key
+ * refreshes its position, so what the reviewer keeps coming back to survives.
+ */
+class BoundedCache<T> {
+  private readonly entries = new Map<string, T>();
+
+  constructor(private readonly limit: number) {}
+
+  get(key: string): T | undefined {
+    const value = this.entries.get(key);
+    if (value !== undefined) {
+      this.entries.delete(key);
+      this.entries.set(key, value);
+    }
+    return value;
   }
-  const width = Math.max(1, Math.round(source.width * scale));
-  const height = Math.max(1, Math.round(source.height * scale));
-  const data: Buffer = Buffer.alloc(width * height * 4);
-  for (let y = 0; y < height; y++) {
-    const sourceY = Math.min(source.height - 1, Math.floor(y / scale));
-    for (let x = 0; x < width; x++) {
-      const sourceX = Math.min(source.width - 1, Math.floor(x / scale));
-      const sourceIndex = (sourceY * source.width + sourceX) * 4;
-      const targetIndex = (y * width + x) * 4;
-      data[targetIndex] = source.data[sourceIndex];
-      data[targetIndex + 1] = source.data[sourceIndex + 1];
-      data[targetIndex + 2] = source.data[sourceIndex + 2];
-      data[targetIndex + 3] = source.data[sourceIndex + 3];
+
+  set(key: string, value: T): void {
+    this.entries.delete(key);
+    this.entries.set(key, value);
+    while (this.entries.size > this.limit) {
+      this.entries.delete(this.entries.keys().next().value);
     }
   }
-  return { data, width, height };
+
+  delete(key: string): void {
+    this.entries.delete(key);
+  }
 }
 
 /**
- * Position-independent signature of a change: a normalized histogram of the
- * colors that the changed pixels take in the new image. Because it ignores
- * *where* the change is, it is robust to per-locale layout shifts (a title
- * wrapping to a different number of lines, options moving down, etc.) while
- * still capturing *what* changed (a selection highlight, a recolored button).
+ * Runs `task` over every item with at most `limit` in flight, keeping the
+ * results in the items' order.
  */
-function changeColorSignature(
-  baselineImage: { data: Buffer; width: number; height: number },
-  checkpointImage: { data: Buffer; width: number; height: number },
-  options: { threshold: number; includeAA: boolean }
-): number[] | null {
-  // The signature is a coarse color histogram, so full resolution is wasteful —
-  // downscale first to make pixelmatch (CPU-bound, run per variation) much faster.
-  const baseline = downscale(baselineImage, SIGNATURE_MAX_DIMENSION);
-  const image = downscale(checkpointImage, SIGNATURE_MAX_DIMENSION);
-  const { width, height } = baseline;
-  const mask = new PNG({ width, height });
-  const changedPixels = Pixelmatch(baseline.data, image.data, mask.data, width, height, {
-    threshold: options.threshold,
-    includeAA: options.includeAA,
-    diffMask: true,
-  });
-  if (changedPixels === 0) {
-    return null;
-  }
-
-  const bucketSize = 256 / COLOR_BUCKETS_PER_CHANNEL;
-  const histogram = new Array(COLOR_BUCKETS_PER_CHANNEL ** 3).fill(0);
-  for (let i = 0; i < width * height; i++) {
-    if (mask.data[i * 4 + 3] === 0) {
-      continue;
+async function mapWithConcurrency<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await task(items[index]);
     }
-    const r = Math.min(COLOR_BUCKETS_PER_CHANNEL - 1, Math.floor(image.data[i * 4] / bucketSize));
-    const g = Math.min(COLOR_BUCKETS_PER_CHANNEL - 1, Math.floor(image.data[i * 4 + 1] / bucketSize));
-    const b = Math.min(COLOR_BUCKETS_PER_CHANNEL - 1, Math.floor(image.data[i * 4 + 2] / bucketSize));
-    histogram[r * COLOR_BUCKETS_PER_CHANNEL * COLOR_BUCKETS_PER_CHANNEL + g * COLOR_BUCKETS_PER_CHANNEL + b]++;
-  }
-
-  const total = histogram.reduce((sum, value) => sum + value, 0);
-  if (total === 0) {
-    return null;
-  }
-  return histogram.map((value) => value / total);
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  if (normA === 0 || normB === 0) {
-    return 0;
-  }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
-function signaturesMatch(a: number[], b: number[]): boolean {
-  return cosineSimilarity(a, b) >= SIGNATURE_SIMILARITY_THRESHOLD;
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 // Same palette but a much larger/smaller change area signals a different or
