@@ -174,7 +174,11 @@ describe('getDiff', () => {
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
     service = await initService({ getImageMock });
     service.compare = jest.fn().mockReturnValueOnce({ equal: false });
-    service.createDiff = jest.fn().mockReturnValueOnce('diff name');
+    service.createDiff = jest.fn().mockReturnValueOnce({
+      diffName: 'diff name',
+      diffPercent: 5,
+      pixelMisMatchCount: 20,
+    });
 
     const result = await service.getDiff(
       {
@@ -192,9 +196,44 @@ describe('getDiff', () => {
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName: 'diff name',
-      diffPercent: undefined,
-      pixelMisMatchCount: undefined,
+      diffPercent: 5,
+      pixelMisMatchCount: 20,
       isSameDimension: true,
     });
+  });
+});
+
+describe('createDiff', () => {
+  it('returns metrics from the generated Looks-Same diff', async () => {
+    const baseline = new PNG({ width: 2, height: 1 });
+    const image = new PNG({ width: 2, height: 1 });
+    baseline.data.fill(255);
+    image.data.fill(255);
+    image.data[0] = 0;
+
+    const saveImageMock = jest.fn().mockReturnValueOnce('diff name');
+    service = await initService({ saveImageMock });
+
+    const result = await service.createDiff(baseline, image, {
+      ...DEFAULT_CONFIG,
+      strict: true,
+      ignoreAntialiasing: false,
+    });
+
+    expect(result).toStrictEqual({
+      diffName: 'diff name',
+      diffPercent: 50,
+      pixelMisMatchCount: 1,
+    });
+    expect(saveImageMock).toHaveBeenCalledWith('diff', expect.any(Buffer));
+  });
+
+  it('rejects an equal result instead of silently omitting the artifact', async () => {
+    const image = new PNG({ width: 1, height: 1 });
+    service = await initService({});
+
+    await expect(service.createDiff(image, image, DEFAULT_CONFIG)).rejects.toThrow(
+      'Cannot create a diff image for an equal Looks-Same result'
+    );
   });
 });
