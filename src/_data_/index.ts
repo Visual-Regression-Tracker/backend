@@ -100,6 +100,8 @@ export const generateTestRun = (testRun?: Partial<TestRun>): TestRun => {
     merge: false,
     vlmDescription: null,
     changeSignature: null,
+    imageThumbnailName: null,
+    diffThumbnailName: null,
     ...testRun,
   };
 };

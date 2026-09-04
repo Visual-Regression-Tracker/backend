@@ -351,6 +351,8 @@ describe('TestRunsService', () => {
           diffPercent: null,
           vlmDescription: null,
           changeSignature: null,
+          imageThumbnailName: null,
+          diffThumbnailName: null,
         },
       });
       expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
@@ -419,6 +421,8 @@ describe('TestRunsService', () => {
           diffPercent: diff.diffPercent,
           vlmDescription: diff.vlmDescription,
           changeSignature: null,
+          imageThumbnailName: null,
+          diffThumbnailName: null,
         },
       });
       expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
@@ -743,6 +747,51 @@ describe('TestRunsService', () => {
         ...testRun,
         status: TestStatus.autoApproved,
       });
+    });
+  });
+
+  describe('thumbnails', () => {
+    it('stores the names the comparison saved them under', async () => {
+      const testRunUpdateMock = jest.fn().mockResolvedValueOnce(generateTestRun());
+      service = await initService({ testRunUpdateMock });
+
+      await service.saveDiffResult('some id', {
+        status: TestStatus.unresolved,
+        diffName: 'diff.png',
+        pixelMisMatchCount: 11,
+        diffPercent: 22,
+        isSameDimension: true,
+        imageThumbnailName: 'image.thumb.png',
+        diffThumbnailName: 'diff.thumb.png',
+      });
+
+      expect(testRunUpdateMock.mock.calls[0][0].data).toMatchObject({
+        imageThumbnailName: 'image.thumb.png',
+        diffThumbnailName: 'diff.thumb.png',
+      });
+    });
+
+    // two extra objects per run: left behind on delete they would outlive every
+    // build that ever referenced them, and nothing would ever collect them
+    it('removes them with the run they belong to', async () => {
+      const testRun = generateTestRun({
+        imageName: 'image.png',
+        diffName: 'diff.png',
+        imageThumbnailName: 'image.thumb.png',
+        diffThumbnailName: 'diff.thumb.png',
+      });
+      const deleteImageMock = jest.fn();
+      service = await initService({
+        testRunFindUniqueMock: jest.fn().mockResolvedValueOnce(testRun),
+        testRunDeleteMock: jest.fn().mockResolvedValueOnce(testRun),
+        deleteImageMock,
+      });
+
+      await service.delete(testRun.id);
+
+      expect(deleteImageMock.mock.calls.map(([name]) => name).sort()).toEqual(
+        ['diff.png', 'diff.thumb.png', 'image.png', 'image.thumb.png'].sort()
+      );
     });
   });
 

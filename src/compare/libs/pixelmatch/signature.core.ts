@@ -1,7 +1,8 @@
 import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { applyIgnoreAreas } from '../../utils';
+import { RawImage } from '../../utils';
+import { applyIgnoreAreas, downscale } from '../../utils';
 
 /**
  * CPU-bound part of "do these two screens carry the same change?": PNG decode,
@@ -38,40 +39,9 @@ const SIGNATURE_MAX_DIMENSION = 500;
 // cosine similarity is at least this value.
 export const SIGNATURE_SIMILARITY_THRESHOLD = 0.9;
 
-interface RawImage {
-  data: Buffer;
-  width: number;
-  height: number;
-}
-
 // postMessage turns Buffers into Uint8Array views over their own ArrayBuffer.
 function toBuffer(data: Buffer | Uint8Array): Buffer {
   return Buffer.isBuffer(data) ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-}
-
-// Nearest-neighbour downscale so the longest side is at most maxDimension.
-// Returns the original when already small enough.
-function downscale(source: RawImage, maxDimension: number): RawImage {
-  const scale = maxDimension / Math.max(source.width, source.height);
-  if (scale >= 1) {
-    return source;
-  }
-  const width = Math.max(1, Math.round(source.width * scale));
-  const height = Math.max(1, Math.round(source.height * scale));
-  const data: Buffer = Buffer.alloc(width * height * 4);
-  for (let y = 0; y < height; y++) {
-    const sourceY = Math.min(source.height - 1, Math.floor(y / scale));
-    for (let x = 0; x < width; x++) {
-      const sourceX = Math.min(source.width - 1, Math.floor(x / scale));
-      const sourceIndex = (sourceY * source.width + sourceX) * 4;
-      const targetIndex = (y * width + x) * 4;
-      data[targetIndex] = source.data[sourceIndex];
-      data[targetIndex + 1] = source.data[sourceIndex + 1];
-      data[targetIndex + 2] = source.data[sourceIndex + 2];
-      data[targetIndex + 3] = source.data[sourceIndex + 3];
-    }
-  }
-  return { data, width, height };
 }
 
 /**
