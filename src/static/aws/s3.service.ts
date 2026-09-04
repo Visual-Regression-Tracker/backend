@@ -23,8 +23,18 @@ export class AWSS3Service implements Static {
   private s3Client: S3Client;
 
   constructor() {
-    this.s3Client = new S3Client();
-    this.logger.log('AWS S3 service is being used for file storage.');
+    // S3-compatible storage — MinIO, Ceph, Garage — is normally addressed
+    // path-style (host/bucket/key), while AWS uses virtual-host style
+    // (bucket.host/key) and the SDK assumes that. It has no environment
+    // variable for the switch, so without this a self-hosted deployment cannot
+    // point VRT at its own storage, and neither can anyone standing up a
+    // production-shaped stack locally. The endpoint itself the SDK does read
+    // from AWS_ENDPOINT_URL.
+    const forcePathStyle = process.env.AWS_S3_FORCE_PATH_STYLE === 'true';
+    this.s3Client = new S3Client(forcePathStyle ? { forcePathStyle } : {});
+    this.logger.log(
+      `AWS S3 service is being used for file storage${forcePathStyle ? ' (path-style addressing)' : ''}.`
+    );
   }
 
   async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {

@@ -8,8 +8,9 @@ import { generateNewImageName } from '../utils';
 const mockSend = jest.fn();
 
 jest.mock('@aws-sdk/client-s3', () => ({
-  S3Client: jest.fn().mockImplementation(() => ({
+  S3Client: jest.fn().mockImplementation((config) => ({
     send: mockSend,
+    config,
   })),
   PutObjectCommand: jest.fn().mockImplementation((input) => ({ input, type: 'put' })),
   GetObjectCommand: jest.fn().mockImplementation((input) => ({ input, type: 'get' })),
@@ -230,6 +231,36 @@ describe('AWSS3Service', () => {
       await expect(service.deleteImage('image.png')).resolves.toBe(false);
 
       expect(loggerSpy).toHaveBeenCalledWith('Failed to delete file at AWS S3 for image image.png:', error);
+    });
+  });
+
+  // S3-compatible storage — MinIO, Ceph, Garage — is normally reached
+  // path-style (host/bucket/key); AWS itself uses virtual-host style
+  // (bucket.host/key) and the SDK assumes that. Without a way to switch, a
+  // self-hosted deployment cannot point VRT at its own storage, and neither
+  // can anyone trying to reproduce a production setup locally.
+  describe('S3-compatible storage', () => {
+    const originalPathStyle = process.env.AWS_S3_FORCE_PATH_STYLE;
+
+    afterEach(() => {
+      process.env.AWS_S3_FORCE_PATH_STYLE = originalPathStyle;
+      if (originalPathStyle === undefined) delete process.env.AWS_S3_FORCE_PATH_STYLE;
+    });
+
+    it('addresses the bucket path-style when asked to', () => {
+      process.env.AWS_S3_FORCE_PATH_STYLE = 'true';
+
+      const service = new AWSS3Service();
+
+      expect((service as any).s3Client.config).toMatchObject({ forcePathStyle: true });
+    });
+
+    it('leaves the SDK to its own addressing by default', () => {
+      delete process.env.AWS_S3_FORCE_PATH_STYLE;
+
+      const service = new AWSS3Service();
+
+      expect((service as any).s3Client.config?.forcePathStyle).toBeFalsy();
     });
   });
 });
