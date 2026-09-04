@@ -65,7 +65,15 @@ export class PixelmatchService implements ImageComparator {
       isSameDimension: output.isSameDimension,
       pixelMisMatchCount: output.pixelMisMatchCount,
       diffPercent: output.diffPercent,
-      ...(output.signature ? { changeSignature: output.signature } : {}),
+      ...(output.signature
+        ? {
+            changeSignature: {
+              threshold: config.threshold,
+              includeAA: config.ignoreAntialiasing,
+              signature: output.signature,
+            },
+          }
+        : {}),
     };
 
     if (result.diffPercent > data.diffTollerancePercent) {

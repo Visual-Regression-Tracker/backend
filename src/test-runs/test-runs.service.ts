@@ -4,7 +4,7 @@ import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Baseline, Prisma, TestRun, TestStatus, TestVariation } from '@prisma/client';
-import { DiffResult } from './diffResult';
+import { DiffResult, StampedSignature } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
@@ -303,7 +303,7 @@ export class TestRunsService {
    * build does not pay for the same decodes twice.
    */
   private async getChangeSignature(testRun: TestRun, config: PixelmatchConfig): Promise<number[] | null> {
-    const stored = parseStoredSignature(testRun.changeSignature, this.logger);
+    const stored = parseStoredSignature(testRun.changeSignature, config, this.logger);
     if (stored) {
       return stored;
     }
@@ -689,16 +689,30 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, task: (item: 
 }
 
 /**
- * The signature stored on a run, or null when there is none to read. Bad JSON
- * is not worth failing a review over: the caller falls back to computing it.
+ * The signature stored on a run, if it is still usable. Null — meaning
+ * "recompute" — when there is none, when it cannot be read, or when the
+ * project's comparison settings have moved on since it was written.
+ *
+ * That last case is the point. Comparing a signature taken at one threshold
+ * against a sibling's taken at another quietly makes grouping worse, and the
+ * reviewer has no way to tell why. The in-memory memo has always keyed on the
+ * same settings; this is the stored equivalent.
  */
-function parseStoredSignature(stored: string | null | undefined, logger: Logger): number[] | null {
+function parseStoredSignature(
+  stored: string | null | undefined,
+  config: PixelmatchConfig,
+  logger: Logger
+): number[] | null {
   if (!stored) {
     return null;
   }
   try {
-    const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+    const parsed: StampedSignature = JSON.parse(stored);
+    if (!Array.isArray(parsed?.signature) || parsed.signature.length === 0) {
+      return null;
+    }
+    const sameConfig = parsed.threshold === config.threshold && parsed.includeAA === config.ignoreAntialiasing;
+    return sameConfig ? parsed.signature : null;
   } catch (error) {
     logger.warn(`Ignoring unreadable stored change signature: ${error}`);
     return null;

@@ -309,7 +309,13 @@ describe('change signature', () => {
     const result = await compare(service);
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ kind: 'diff', withSignature: true }));
-    expect(result.changeSignature).toEqual([0.25, 0.75]);
+    // stamped with the settings it was computed under, so a stored one can be
+    // discarded when the project's config moves on
+    expect(result.changeSignature).toEqual({
+      threshold: DEFAULT_CONFIG.threshold,
+      includeAA: DEFAULT_CONFIG.ignoreAntialiasing,
+      signature: [0.25, 0.75],
+    });
   });
 
   it('leaves it out when the comparison produced none', async () => {

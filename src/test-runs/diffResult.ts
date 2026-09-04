@@ -1,5 +1,17 @@
 import { TestStatus } from '@prisma/client';
 
+/**
+ * A signature and the comparison settings it was computed under. A signature
+ * only means anything under its own threshold, so comparing one taken at a
+ * different setting quietly makes grouping worse — the settings travel with it
+ * so a stored one can be discarded when the project's config moves on.
+ */
+export interface StampedSignature {
+  threshold: number;
+  includeAA: boolean;
+  signature: number[];
+}
+
 export interface DiffResult {
   status: TestStatus;
   diffName: string;
@@ -14,10 +26,11 @@ export interface DiffResult {
   vlmDescription?: string;
   /**
    * Position-independent colour signature of the change, produced by the same
-   * pass that produced the diff. Stored on the run so the variations dialog can
-   * group a screen's locales without decoding their screenshots all over again.
-   * Absent when nothing changed, when the dimensions differ, or when the
-   * comparison was not pixelmatch.
+   * pass that produced the diff, carrying the settings it was produced under.
+   * Stored on the run so the variations dialog can group a screen's locales
+   * without decoding their screenshots all over again. Absent when nothing
+   * changed, when the dimensions differ, or when the comparison was not
+   * pixelmatch.
    */
-  changeSignature?: number[];
+  changeSignature?: StampedSignature;
 }

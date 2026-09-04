@@ -368,11 +368,11 @@ describe('TestRunsService', () => {
         pixelMisMatchCount: 11,
         diffPercent: 22,
         isSameDimension: true,
-        changeSignature: [0.25, 0.75],
+        changeSignature: { threshold: 0.1, includeAA: true, signature: [0.25, 0.75] },
       });
 
       expect(testRunUpdateMock.mock.calls[0][0].data).toMatchObject({
-        changeSignature: JSON.stringify([0.25, 0.75]),
+        changeSignature: JSON.stringify({ threshold: 0.1, includeAA: true, signature: [0.25, 0.75] }),
       });
     });
 
@@ -815,7 +815,10 @@ describe('TestRunsService', () => {
     // decoded once at ingest, never again to group a screen at review time.
     it('groups from the signatures stored at ingest, without decoding anything', async () => {
       const signed = (id: string, signature: number[], overrides = {}) =>
-        sibling(id, { changeSignature: JSON.stringify(signature), ...overrides });
+        sibling(id, {
+          changeSignature: JSON.stringify({ threshold: 0.1, includeAA: true, signature }),
+          ...overrides,
+        });
       const testRun = signed('target', SAME_PALETTE, { customTags: '' });
       const matching = signed('locale-a', SAME_PALETTE);
       const different = signed('locale-c', OTHER_PALETTE);
@@ -835,10 +838,35 @@ describe('TestRunsService', () => {
       expect(result.skipped.map((item) => item.reason)).toEqual(['different change pattern']);
     });
 
+    // A signature only means anything under the threshold it was computed with.
+    // The in-memory memo has always keyed on that; the stored one has to too,
+    // or changing a project's comparison config silently mixes signatures from
+    // two different settings and grouping quietly gets worse.
+    it('recomputes when the project config has moved on since ingest', async () => {
+      const stale = JSON.stringify({ threshold: 0.9, includeAA: false, signature: SAME_PALETTE });
+      const testRun = sibling('target', { customTags: '', changeSignature: stale });
+      const matching = sibling('locale-a', { changeSignature: stale });
+
+      const built = await initMatchingService({
+        testRun,
+        siblings: [matching],
+        signatureOf: () => SAME_PALETTE,
+      });
+
+      const result = await built.service.getMatchingVariations(testRun.id);
+
+      const asked = built.compareGetChangeSignatureMock.mock.calls.map(([input]) => input.image.toString());
+      expect(asked.sort()).toEqual([testRun.imageName, matching.imageName].sort());
+      expect(result.variations.map((variation) => variation.id)).toEqual([testRun.id, matching.id]);
+    });
+
     // builds ingested before the column existed, and runs compared by something
     // other than pixelmatch, still have to group
     it('falls back to computing for a run with nothing stored', async () => {
-      const testRun = sibling('target', { customTags: '', changeSignature: JSON.stringify(SAME_PALETTE) });
+      const testRun = sibling('target', {
+        customTags: '',
+        changeSignature: JSON.stringify({ threshold: 0.1, includeAA: true, signature: SAME_PALETTE }),
+      });
       const unsigned = sibling('locale-a');
 
       const built = await initMatchingService({
