@@ -794,6 +794,26 @@ describe('TestRunsService', () => {
       );
     });
 
+    // Deleting before the replacement exists means a failed comparison leaves
+    // the row pointing at files that are gone — the reviewer opens the run and
+    // sees broken pictures, with nothing to recover from.
+    it('keeps the previous ones when the comparison fails', async () => {
+      const testRun = generateTestRun({
+        diffName: 'old-diff.png',
+        imageThumbnailName: 'old-image.thumb.png',
+        diffThumbnailName: 'old-diff.thumb.png',
+      });
+      const deleteImageMock = jest.fn();
+      service = await initService({
+        deleteImageMock,
+        compareGetDiffMock: jest.fn().mockRejectedValueOnce(new Error('storage is down')),
+      });
+
+      await expect(service.calculateDiff('projectId', testRun)).rejects.toThrow('storage is down');
+
+      expect(deleteImageMock).not.toHaveBeenCalled();
+    });
+
     // two extra objects per run: left behind on delete they would outlive every
     // build that ever referenced them, and nothing would ever collect them
     it('removes them with the run they belong to', async () => {
