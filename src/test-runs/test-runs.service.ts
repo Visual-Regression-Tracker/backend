@@ -292,13 +292,21 @@ export class TestRunsService {
   /**
    * Position-independent color signature of the change between a test run's
    * baseline and image. Null when there is no baseline, dimensions differ, or
-   * nothing changed. The bytes go to the worker pool undecoded — decoding is
-   * the expensive part and must not happen on the event loop.
+   * nothing changed.
    *
-   * Memoized: a reviewer who reopens the variations dialog, or steps back to a
-   * screen already looked at, would otherwise pay for the same decodes again.
+   * Normally this was written at ingest, beside the diff that had already
+   * decoded both screenshots, and grouping a screen costs nothing but the row
+   * it is read from. The rest of this is the fallback for runs that carry no
+   * stored signature — ingested before the column existed, or compared by
+   * something other than pixelmatch: their bytes go to the worker pool
+   * undecoded, and the result is memoized so reopening the dialog on an old
+   * build does not pay for the same decodes twice.
    */
   private async getChangeSignature(testRun: TestRun, config: PixelmatchConfig): Promise<number[] | null> {
+    const stored = parseStoredSignature(testRun.changeSignature, this.logger);
+    if (stored) {
+      return stored;
+    }
     if (!testRun.baselineName) {
       return null;
     }
@@ -368,6 +376,10 @@ export class TestRunsService {
           diffPercent: diffResult && diffResult.diffPercent,
           status: diffResult ? diffResult.status : TestStatus.new,
           vlmDescription: diffResult && diffResult?.vlmDescription,
+          // Always written, never merged: a recomputed diff — after the
+          // reviewer edits the ignore areas, say — must not leave the previous
+          // signature behind describing a change that no longer exists.
+          changeSignature: diffResult?.changeSignature ? JSON.stringify(diffResult.changeSignature) : null,
         },
       })
       .then((testRun) => {
@@ -674,6 +686,23 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, task: (item: 
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return results;
+}
+
+/**
+ * The signature stored on a run, or null when there is none to read. Bad JSON
+ * is not worth failing a review over: the caller falls back to computing it.
+ */
+function parseStoredSignature(stored: string | null | undefined, logger: Logger): number[] | null {
+  if (!stored) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+  } catch (error) {
+    logger.warn(`Ignoring unreadable stored change signature: ${error}`);
+    return null;
+  }
 }
 
 // Same palette but a much larger/smaller change area signals a different or

@@ -2,6 +2,7 @@ import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { applyIgnoreAreas, scaleImageToSize } from '../../utils';
+import { signatureOfDecoded } from './signature.core';
 
 /**
  * CPU-bound part of the pixelmatch comparison, extracted so it can run inside
@@ -20,6 +21,13 @@ export interface PixelmatchJobInput {
   allowDiffDimensions: boolean;
   diffTolerancePercent: number;
   saveDiff: boolean;
+  /**
+   * Also produce the change signature the variations dialog matches on. Free
+   * here next to the diff — the images are decoded already — and computed once
+   * at ingest so reviewing never has to fetch and decode a build's screenshots
+   * again just to group them.
+   */
+  withSignature?: boolean;
 }
 
 export interface PixelmatchJobOutput {
@@ -28,6 +36,9 @@ export interface PixelmatchJobOutput {
   pixelMisMatchCount?: number;
   diffPercent?: number;
   diffBuffer?: Buffer | Uint8Array;
+  // absent when not asked for, when the screenshots are identical, or when
+  // their dimensions differ and there is nothing meaningful to sign
+  signature?: number[];
 }
 
 // postMessage turns Buffers into Uint8Array views over their own ArrayBuffer.
@@ -74,5 +85,23 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
     diffBuffer = PNG.sync.write(diff);
   }
 
-  return { equal: false, isSameDimension, pixelMisMatchCount, diffPercent, diffBuffer };
+  // Same source images, same ignore areas, same threshold as the standalone
+  // signature job — sharing signatureOfDecoded is what keeps the two answers
+  // identical, so a stored signature still matches one computed on the fly.
+  const signature =
+    input.withSignature && isSameDimension
+      ? signatureOfDecoded(baselineIgnored, imageIgnored, {
+          threshold: input.threshold,
+          includeAA: input.includeAA,
+        })
+      : null;
+
+  return {
+    equal: false,
+    isSameDimension,
+    pixelMisMatchCount,
+    diffPercent,
+    diffBuffer,
+    ...(signature ? { signature } : {}),
+  };
 }

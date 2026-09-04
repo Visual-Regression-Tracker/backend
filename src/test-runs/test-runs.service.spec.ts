@@ -350,9 +350,45 @@ describe('TestRunsService', () => {
           pixelMisMatchCount: null,
           diffPercent: null,
           vlmDescription: null,
+          changeSignature: null,
         },
       });
       expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
+    });
+
+    // Written here, next to the diff that decoded the screenshots anyway, so
+    // the variations dialog never has to decode them again.
+    it('stores the change signature the comparison produced', async () => {
+      const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
+      service = await initService({ testRunUpdateMock });
+
+      await service.saveDiffResult('some id', {
+        status: TestStatus.unresolved,
+        diffName: 'diff image name',
+        pixelMisMatchCount: 11,
+        diffPercent: 22,
+        isSameDimension: true,
+        changeSignature: [0.25, 0.75],
+      });
+
+      expect(testRunUpdateMock.mock.calls[0][0].data).toMatchObject({
+        changeSignature: JSON.stringify([0.25, 0.75]),
+      });
+    });
+
+    it('stores no signature when the comparison produced none', async () => {
+      const testRunUpdateMock = jest.fn().mockResolvedValueOnce(testRun);
+      service = await initService({ testRunUpdateMock });
+
+      await service.saveDiffResult('some id', {
+        status: TestStatus.ok,
+        diffName: null,
+        pixelMisMatchCount: 0,
+        diffPercent: 0,
+        isSameDimension: true,
+      });
+
+      expect(testRunUpdateMock.mock.calls[0][0].data).toMatchObject({ changeSignature: null });
     });
 
     it('with results', async () => {
@@ -382,6 +418,7 @@ describe('TestRunsService', () => {
           pixelMisMatchCount: diff.pixelMisMatchCount,
           diffPercent: diff.diffPercent,
           vlmDescription: diff.vlmDescription,
+          changeSignature: null,
         },
       });
       expect(eventTestRunUpdatedMock).toHaveBeenCalledWith(testRun);
@@ -772,6 +809,49 @@ describe('TestRunsService', () => {
         { id: bigger.id, reason: 'different change size' },
         { id: different.id, reason: 'different change pattern' },
       ]);
+    });
+
+    // The whole point of storing it: a build's screenshots are fetched and
+    // decoded once at ingest, never again to group a screen at review time.
+    it('groups from the signatures stored at ingest, without decoding anything', async () => {
+      const signed = (id: string, signature: number[], overrides = {}) =>
+        sibling(id, { changeSignature: JSON.stringify(signature), ...overrides });
+      const testRun = signed('target', SAME_PALETTE, { customTags: '' });
+      const matching = signed('locale-a', SAME_PALETTE);
+      const different = signed('locale-c', OTHER_PALETTE);
+
+      const built = await initMatchingService({
+        testRun,
+        siblings: [matching, different],
+        signatureOf: () => {
+          throw new Error('should not be computing a signature');
+        },
+      });
+
+      const result = await built.service.getMatchingVariations(testRun.id);
+
+      expect(built.compareGetChangeSignatureMock).not.toHaveBeenCalled();
+      expect(result.variations.map((variation) => variation.id)).toEqual([testRun.id, matching.id]);
+      expect(result.skipped.map((item) => item.reason)).toEqual(['different change pattern']);
+    });
+
+    // builds ingested before the column existed, and runs compared by something
+    // other than pixelmatch, still have to group
+    it('falls back to computing for a run with nothing stored', async () => {
+      const testRun = sibling('target', { customTags: '', changeSignature: JSON.stringify(SAME_PALETTE) });
+      const unsigned = sibling('locale-a');
+
+      const built = await initMatchingService({
+        testRun,
+        siblings: [unsigned],
+        signatureOf: () => SAME_PALETTE,
+      });
+
+      const result = await built.service.getMatchingVariations(testRun.id);
+
+      const asked = built.compareGetChangeSignatureMock.mock.calls.map(([input]) => input.image.toString());
+      expect(asked).toEqual([unsigned.imageName]);
+      expect(result.variations.map((variation) => variation.id)).toEqual([testRun.id, unsigned.id]);
     });
 
     it('skips a far larger change without paying for its signature', async () => {

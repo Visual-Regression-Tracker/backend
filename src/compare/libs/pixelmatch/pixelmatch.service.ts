@@ -45,6 +45,12 @@ export class PixelmatchService implements ImageComparator {
       allowDiffDimensions: config.allowDiffDimensions,
       diffTolerancePercent: data.diffTollerancePercent,
       saveDiff: data.saveDiffAsFile,
+      // Asked for on every comparison, not only when the project has bulk
+      // approve of variations switched on: the pass costs little beside the
+      // full-size diff that has already been paid for, and computing it lazily
+      // would leave every run ingested before the flag was turned on without
+      // one — which is exactly the build someone then tries to review.
+      withSignature: true,
     });
 
     if (output.equal) {
@@ -59,6 +65,7 @@ export class PixelmatchService implements ImageComparator {
       isSameDimension: output.isSameDimension,
       pixelMisMatchCount: output.pixelMisMatchCount,
       diffPercent: output.diffPercent,
+      ...(output.signature ? { changeSignature: output.signature } : {}),
     };
 
     if (result.diffPercent > data.diffTollerancePercent) {
