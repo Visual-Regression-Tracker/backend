@@ -91,8 +91,12 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
   });
   const diffPercent = (pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
 
+  // A build is mostly runs that pass, so anything produced for a diff that is
+  // about to be thrown away is work nobody ever sees the result of.
+  const keepingTheDiff = diffPercent > input.diffTolerancePercent && input.saveDiff;
+
   let diffBuffer: Buffer;
-  if (diffPercent > input.diffTolerancePercent && input.saveDiff) {
+  if (keepingTheDiff) {
     diffBuffer = PNG.sync.write(diff);
   }
 
@@ -107,9 +111,10 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
         })
       : null;
 
-  const thumbnails = input.withThumbnails
-    ? { imageThumbnail: encodeThumbnail(imageIgnored), diffThumbnail: encodeThumbnail(diff) }
-    : {};
+  const thumbnails =
+    input.withThumbnails && keepingTheDiff
+      ? { imageThumbnail: encodeThumbnail(imageIgnored), diffThumbnail: encodeThumbnail(diff) }
+      : {};
 
   return {
     equal: false,

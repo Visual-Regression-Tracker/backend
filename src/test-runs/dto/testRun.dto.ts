@@ -9,7 +9,9 @@ export class TestRunDto {
   @ApiProperty()
   imageName: string;
   // small copies for the card grids; null on runs ingested before these existed
+  @ApiPropertyOptional()
   imageThumbnailName?: string;
+  @ApiPropertyOptional()
   diffThumbnailName?: string;
   @ApiProperty()
   diffName: string;
