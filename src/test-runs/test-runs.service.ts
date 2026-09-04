@@ -393,7 +393,12 @@ export class TestRunsService {
   }
 
   async calculateDiff(projectId: string, testRun: TestRun): Promise<TestRun> {
+    // The recomputed result replaces all three names on the row, so the old
+    // pictures go together: leaving the thumbnails behind would strand two
+    // more objects on every ignore-area edit.
     this.staticService.deleteImage(testRun.diffName);
+    this.staticService.deleteImage(testRun.imageThumbnailName);
+    this.staticService.deleteImage(testRun.diffThumbnailName);
     const diffResult = await this.compareService.getDiff({
       projectId,
       data: {

@@ -771,6 +771,29 @@ describe('TestRunsService', () => {
       });
     });
 
+    // Recalculating replaces the names on the row, so whatever they pointed at
+    // before has to go with the old diff — otherwise every ignore-area edit
+    // leaves two more objects nothing references.
+    it('removes the previous ones when the diff is recalculated', async () => {
+      const testRun = generateTestRun({
+        diffName: 'old-diff.png',
+        imageThumbnailName: 'old-image.thumb.png',
+        diffThumbnailName: 'old-diff.thumb.png',
+      });
+      const deleteImageMock = jest.fn();
+      service = await initService({
+        deleteImageMock,
+        compareGetDiffMock: jest.fn().mockResolvedValueOnce({ status: TestStatus.ok }),
+        testRunUpdateMock: jest.fn().mockResolvedValueOnce(testRun),
+      });
+
+      await service.calculateDiff('projectId', testRun);
+
+      expect(deleteImageMock.mock.calls.map(([name]) => name).sort()).toEqual(
+        ['old-diff.png', 'old-diff.thumb.png', 'old-image.thumb.png'].sort()
+      );
+    });
+
     // two extra objects per run: left behind on delete they would outlive every
     // build that ever referenced them, and nothing would ever collect them
     it('removes them with the run they belong to', async () => {
