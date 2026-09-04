@@ -51,7 +51,11 @@ export class PixelmatchService implements ImageComparator {
       // would leave every run ingested before the flag was turned on without
       // one — which is exactly the build someone then tries to review.
       withSignature: true,
-      withThumbnails: true,
+      // Only when the caller is keeping the diff. shouldAutoApprove compares
+      // against past baselines with this off and throws the result away —
+      // making thumbnails for those would burn the CPU and, worse, store two
+      // objects per attempt that nothing ever references or deletes.
+      withThumbnails: data.saveDiffAsFile,
     });
 
     if (output.equal) {
@@ -86,7 +90,8 @@ export class PixelmatchService implements ImageComparator {
       // as ordinary images so they follow the same storage, the same deletion
       // and the same URLs as everything else, with no naming convention for
       // the UI to guess at.
-      if (output.imageThumbnail && output.diffThumbnail) {
+      // tied to the diff actually landing, not merely to being over tolerance
+      if (result.diffName && output.imageThumbnail && output.diffThumbnail) {
         const [imageThumbnailName, diffThumbnailName] = await Promise.all([
           this.staticService.saveImage('screenshot', Buffer.from(output.imageThumbnail)),
           this.staticService.saveImage('diff', Buffer.from(output.diffThumbnail)),
