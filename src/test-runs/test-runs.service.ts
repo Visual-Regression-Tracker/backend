@@ -4,7 +4,7 @@ import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Baseline, Prisma, TestRun, TestStatus, TestVariation } from '@prisma/client';
-import { DiffResult } from './diffResult';
+import { DiffResult, StampedSignature } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
@@ -292,13 +292,21 @@ export class TestRunsService {
   /**
    * Position-independent color signature of the change between a test run's
    * baseline and image. Null when there is no baseline, dimensions differ, or
-   * nothing changed. The bytes go to the worker pool undecoded — decoding is
-   * the expensive part and must not happen on the event loop.
+   * nothing changed.
    *
-   * Memoized: a reviewer who reopens the variations dialog, or steps back to a
-   * screen already looked at, would otherwise pay for the same decodes again.
+   * Normally this was written at ingest, beside the diff that had already
+   * decoded both screenshots, and grouping a screen costs nothing but the row
+   * it is read from. The rest of this is the fallback for runs that carry no
+   * stored signature — ingested before the column existed, or compared by
+   * something other than pixelmatch: their bytes go to the worker pool
+   * undecoded, and the result is memoized so reopening the dialog on an old
+   * build does not pay for the same decodes twice.
    */
   private async getChangeSignature(testRun: TestRun, config: PixelmatchConfig): Promise<number[] | null> {
+    const stored = parseStoredSignature(testRun.changeSignature, config, this.logger);
+    if (stored) {
+      return stored;
+    }
     if (!testRun.baselineName) {
       return null;
     }
@@ -368,6 +376,10 @@ export class TestRunsService {
           diffPercent: diffResult && diffResult.diffPercent,
           status: diffResult ? diffResult.status : TestStatus.new,
           vlmDescription: diffResult && diffResult?.vlmDescription,
+          // Always written, never merged: a recomputed diff — after the
+          // reviewer edits the ignore areas, say — must not leave the previous
+          // signature behind describing a change that no longer exists.
+          changeSignature: diffResult?.changeSignature ? JSON.stringify(diffResult.changeSignature) : null,
         },
       })
       .then((testRun) => {
@@ -674,6 +686,37 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, task: (item: 
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return results;
+}
+
+/**
+ * The signature stored on a run, if it is still usable. Null — meaning
+ * "recompute" — when there is none, when it cannot be read, or when the
+ * project's comparison settings have moved on since it was written.
+ *
+ * That last case is the point. Comparing a signature taken at one threshold
+ * against a sibling's taken at another quietly makes grouping worse, and the
+ * reviewer has no way to tell why. The in-memory memo has always keyed on the
+ * same settings; this is the stored equivalent.
+ */
+function parseStoredSignature(
+  stored: string | null | undefined,
+  config: PixelmatchConfig,
+  logger: Logger
+): number[] | null {
+  if (!stored) {
+    return null;
+  }
+  try {
+    const parsed: StampedSignature = JSON.parse(stored);
+    if (!Array.isArray(parsed?.signature) || parsed.signature.length === 0) {
+      return null;
+    }
+    const sameConfig = parsed.threshold === config.threshold && parsed.includeAA === config.ignoreAntialiasing;
+    return sameConfig ? parsed.signature : null;
+  } catch (error) {
+    logger.warn(`Ignoring unreadable stored change signature: ${error}`);
+    return null;
+  }
 }
 
 // Same palette but a much larger/smaller change area signals a different or
