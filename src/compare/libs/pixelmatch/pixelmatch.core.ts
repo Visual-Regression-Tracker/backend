@@ -3,6 +3,7 @@ import Pixelmatch from 'pixelmatch';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { applyIgnoreAreas, scaleImageToSize } from '../../utils';
 import { signatureOfDecoded } from './signature.core';
+import { encodeThumbnail } from './thumbnail.core';
 
 /**
  * CPU-bound part of the pixelmatch comparison, extracted so it can run inside
@@ -28,6 +29,12 @@ export interface PixelmatchJobInput {
    * again just to group them.
    */
   withSignature?: boolean;
+  /**
+   * Also return small PNGs of the checkpoint and of the diff. The grids draw
+   * these a hundred-odd pixels wide; sending the full-size files and letting
+   * CSS shrink them is what made opening the variations dialog cost megabytes.
+   */
+  withThumbnails?: boolean;
 }
 
 export interface PixelmatchJobOutput {
@@ -39,6 +46,10 @@ export interface PixelmatchJobOutput {
   // absent when not asked for, when the screenshots are identical, or when
   // their dimensions differ and there is nothing meaningful to sign
   signature?: number[];
+  // absent when not asked for, or when the screenshots matched and there is
+  // nothing to show
+  imageThumbnail?: Buffer | Uint8Array;
+  diffThumbnail?: Buffer | Uint8Array;
 }
 
 // postMessage turns Buffers into Uint8Array views over their own ArrayBuffer.
@@ -96,6 +107,10 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
         })
       : null;
 
+  const thumbnails = input.withThumbnails
+    ? { imageThumbnail: encodeThumbnail(imageIgnored), diffThumbnail: encodeThumbnail(diff) }
+    : {};
+
   return {
     equal: false,
     isSameDimension,
@@ -103,5 +118,6 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
     diffPercent,
     diffBuffer,
     ...(signature ? { signature } : {}),
+    ...thumbnails,
   };
 }

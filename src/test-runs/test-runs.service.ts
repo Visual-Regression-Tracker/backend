@@ -383,6 +383,10 @@ export class TestRunsService {
           // reviewer edits the ignore areas, say — must not leave the previous
           // signature behind describing a change that no longer exists.
           changeSignature: diffResult?.changeSignature ? JSON.stringify(diffResult.changeSignature) : null,
+          // Overwritten together with the diff they were made from, so a
+          // recomputed comparison never leaves a picture of the old change.
+          imageThumbnailName: diffResult?.imageThumbnailName ?? null,
+          diffThumbnailName: diffResult?.diffThumbnailName ?? null,
         },
       })
       .then((testRun) => {
@@ -465,6 +469,10 @@ export class TestRunsService {
     await Promise.all([
       this.staticService.deleteImage(testRun.diffName),
       this.staticService.deleteImage(testRun.imageName),
+      // left behind, these would outlive every build that referenced them and
+      // nothing would ever collect them
+      this.staticService.deleteImage(testRun.imageThumbnailName),
+      this.staticService.deleteImage(testRun.diffThumbnailName),
     ]);
 
     try {

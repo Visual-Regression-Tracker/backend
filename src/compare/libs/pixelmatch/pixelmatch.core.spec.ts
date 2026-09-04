@@ -1,6 +1,7 @@
 import { PNG } from 'pngjs';
 import { computePixelmatchDiff } from './pixelmatch.core';
 import { computeChangeSignature } from './signature.core';
+import { THUMBNAIL_MAX_DIMENSION } from './thumbnail.core';
 
 const WIDTH = 60;
 const HEIGHT = 60;
@@ -34,7 +35,7 @@ const block = (left: number, top: number, rgb: [number, number, number]): Buffer
 const blank = png(() => undefined);
 const RED: [number, number, number] = [255, 0, 0];
 
-const diffJob = (baseline: Buffer, image: Buffer, withSignature: boolean) =>
+const diffJob = (baseline: Buffer, image: Buffer, withSignature: boolean, withThumbnails = false) =>
   computePixelmatchDiff({
     kind: 'diff',
     baseline,
@@ -46,6 +47,7 @@ const diffJob = (baseline: Buffer, image: Buffer, withSignature: boolean) =>
     diffTolerancePercent: 0,
     saveDiff: false,
     withSignature,
+    withThumbnails,
   });
 
 describe('computePixelmatchDiff with a signature', () => {
@@ -83,5 +85,30 @@ describe('computePixelmatchDiff with a signature', () => {
 
     expect(result.equal).toBe(false);
     expect(result.pixelMisMatchCount).toBe(144);
+  });
+});
+
+describe('computePixelmatchDiff with thumbnails', () => {
+  // Made here from the pixels the diff has already decoded and already drawn,
+  // so a thumbnail costs a resize rather than a second read of the screenshot.
+  it('returns a small picture of both the checkpoint and the diff', () => {
+    const result = diffJob(blank, block(10, 10, RED), false, true);
+
+    const image = PNG.sync.read(Buffer.from(result.imageThumbnail));
+    const diff = PNG.sync.read(Buffer.from(result.diffThumbnail));
+    expect(Math.max(image.width, image.height)).toBeLessThanOrEqual(THUMBNAIL_MAX_DIMENSION);
+    expect(Math.max(diff.width, diff.height)).toBeLessThanOrEqual(THUMBNAIL_MAX_DIMENSION);
+  });
+
+  it('makes none when they were not asked for', () => {
+    const result = diffJob(blank, block(10, 10, RED), false, false);
+
+    expect(result.imageThumbnail).toBeUndefined();
+    expect(result.diffThumbnail).toBeUndefined();
+  });
+
+  // nothing to show and nothing to shrink
+  it('makes none when the screenshots are identical', () => {
+    expect(diffJob(blank, blank, false, true).imageThumbnail).toBeUndefined();
   });
 });

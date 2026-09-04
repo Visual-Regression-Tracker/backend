@@ -51,6 +51,7 @@ export class PixelmatchService implements ImageComparator {
       // would leave every run ingested before the flag was turned on without
       // one — which is exactly the build someone then tries to review.
       withSignature: true,
+      withThumbnails: true,
     });
 
     if (output.equal) {
@@ -79,6 +80,23 @@ export class PixelmatchService implements ImageComparator {
     if (result.diffPercent > data.diffTollerancePercent) {
       if (output.diffBuffer) {
         result.diffName = await this.staticService.saveImage('diff', Buffer.from(output.diffBuffer));
+      }
+      // Kept to the same condition as the diff itself: a thumbnail of a diff
+      // that was never saved would point at a file that does not exist. Stored
+      // as ordinary images so they follow the same storage, the same deletion
+      // and the same URLs as everything else, with no naming convention for
+      // the UI to guess at.
+      if (output.imageThumbnail && output.diffThumbnail) {
+        const [imageThumbnailName, diffThumbnailName] = await Promise.all([
+          this.staticService.saveImage('screenshot', Buffer.from(output.imageThumbnail)),
+          this.staticService.saveImage('diff', Buffer.from(output.diffThumbnail)),
+        ]);
+        // only when both came back: a result carrying one half of a pair, or a
+        // key set to undefined, is worse than none at all
+        if (imageThumbnailName && diffThumbnailName) {
+          result.imageThumbnailName = imageThumbnailName;
+          result.diffThumbnailName = diffThumbnailName;
+        }
       }
       result.status = TestStatus.unresolved;
     } else {

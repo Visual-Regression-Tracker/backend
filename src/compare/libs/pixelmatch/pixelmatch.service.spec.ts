@@ -169,7 +169,9 @@ describe('getDiff', () => {
         threshold: 0.1,
       }
     );
-    expect(saveImageMock).toHaveBeenCalledTimes(1);
+    // the full-size diff first, then the two thumbnails made beside it
+    expect(saveImageMock.mock.calls[0][0]).toBe('diff');
+    expect(saveImageMock).toHaveBeenCalledTimes(3);
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName,
@@ -247,7 +249,9 @@ describe('getDiff', () => {
       DEFAULT_CONFIG
     );
 
-    expect(saveImageMock).toHaveBeenCalledTimes(1);
+    // the full-size diff first, then the two thumbnails made beside it
+    expect(saveImageMock.mock.calls[0][0]).toBe('diff');
+    expect(saveImageMock).toHaveBeenCalledTimes(3);
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName,
@@ -316,6 +320,41 @@ describe('change signature', () => {
       includeAA: DEFAULT_CONFIG.ignoreAntialiasing,
       signature: [0.25, 0.75],
     });
+  });
+
+  it('saves the thumbnails and reports the names they went under', async () => {
+    const saveImage = jest.fn().mockResolvedValueOnce('image.thumb.png').mockResolvedValueOnce('diff.thumb.png');
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PixelmatchService,
+        {
+          provide: DiffWorkerPool,
+          useValue: {
+            run: jest.fn().mockResolvedValue({
+              equal: false,
+              isSameDimension: true,
+              pixelMisMatchCount: 10,
+              diffPercent: 5,
+              imageThumbnail: Buffer.from('small image'),
+              diffThumbnail: Buffer.from('small diff'),
+            }),
+          },
+        },
+        {
+          provide: StaticService,
+          useValue: {
+            getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('png')),
+            saveImage,
+            deleteImage: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    const result = await compare(module.get<PixelmatchService>(PixelmatchService));
+
+    expect(result.imageThumbnailName).toBe('image.thumb.png');
+    expect(result.diffThumbnailName).toBe('diff.thumb.png');
   });
 
   it('leaves it out when the comparison produced none', async () => {
