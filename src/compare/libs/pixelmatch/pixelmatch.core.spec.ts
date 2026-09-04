@@ -35,7 +35,13 @@ const block = (left: number, top: number, rgb: [number, number, number]): Buffer
 const blank = png(() => undefined);
 const RED: [number, number, number] = [255, 0, 0];
 
-const diffJob = (baseline: Buffer, image: Buffer, withSignature: boolean, withThumbnails = false) =>
+const diffJob = (
+  baseline: Buffer,
+  image: Buffer,
+  withSignature: boolean,
+  withThumbnails = false,
+  { saveDiff = true, diffTolerancePercent = 0 } = {}
+) =>
   computePixelmatchDiff({
     kind: 'diff',
     baseline,
@@ -44,8 +50,8 @@ const diffJob = (baseline: Buffer, image: Buffer, withSignature: boolean, withTh
     threshold: 0.1,
     includeAA: false,
     allowDiffDimensions: false,
-    diffTolerancePercent: 0,
-    saveDiff: false,
+    diffTolerancePercent,
+    saveDiff,
     withSignature,
     withThumbnails,
   });
@@ -105,6 +111,22 @@ describe('computePixelmatchDiff with thumbnails', () => {
 
     expect(result.imageThumbnail).toBeUndefined();
     expect(result.diffThumbnail).toBeUndefined();
+  });
+
+  // A build is mostly runs that pass. Resizing two images for each of those,
+  // when the diff they belong to is thrown away seconds later, is work nobody
+  // ever sees the result of.
+  it('makes none when the change is under tolerance', () => {
+    const result = diffJob(blank, block(10, 10, RED), false, true, { diffTolerancePercent: 90 });
+
+    expect(result.imageThumbnail).toBeUndefined();
+    expect(result.diffThumbnail).toBeUndefined();
+  });
+
+  it('makes none when the caller is not keeping the diff', () => {
+    const result = diffJob(blank, block(10, 10, RED), false, true, { saveDiff: false });
+
+    expect(result.imageThumbnail).toBeUndefined();
   });
 
   // nothing to show and nothing to shrink
