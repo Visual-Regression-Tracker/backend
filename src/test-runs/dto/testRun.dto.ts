@@ -8,6 +8,11 @@ export class TestRunDto {
   buildId: string;
   @ApiProperty()
   imageName: string;
+  // small copies for the card grids; null on runs ingested before these existed
+  @ApiPropertyOptional()
+  imageThumbnailName?: string;
+  @ApiPropertyOptional()
+  diffThumbnailName?: string;
   @ApiProperty()
   diffName: string;
   @ApiProperty()
@@ -51,6 +56,8 @@ export class TestRunDto {
     this.id = testRun.id;
     this.buildId = testRun.buildId;
     this.imageName = testRun.imageName;
+    this.imageThumbnailName = testRun.imageThumbnailName;
+    this.diffThumbnailName = testRun.diffThumbnailName;
     this.diffName = testRun.diffName;
     this.diffPercent = testRun.diffPercent;
     this.diffTollerancePercent = testRun.diffTollerancePercent;

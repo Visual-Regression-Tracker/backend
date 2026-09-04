@@ -99,6 +99,9 @@ export const generateTestRun = (testRun?: Partial<TestRun>): TestRun => {
     branchName: 'develop',
     merge: false,
     vlmDescription: null,
+    changeSignature: null,
+    imageThumbnailName: null,
+    diffThumbnailName: null,
     ...testRun,
   };
 };
