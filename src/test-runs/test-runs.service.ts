@@ -4,7 +4,7 @@ import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Baseline, Prisma, TestRun, TestStatus, TestVariation } from '@prisma/client';
-import { DiffResult } from './diffResult';
+import { DiffResult, StampedSignature } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
@@ -15,7 +15,7 @@ import { UpdateTestRunDto } from './dto/update-test.dto';
 import { parseConfig } from '../compare/utils';
 import { DEFAULT_CONFIG } from '../compare/libs/pixelmatch/pixelmatch.service';
 import { PixelmatchConfig } from '../compare/libs/pixelmatch/pixelmatch.types';
-import { signaturesMatch } from '../compare/libs/pixelmatch/signature.core';
+import { signaturesMatch, SIGNATURE_LENGTH } from '../compare/libs/pixelmatch/signature.core';
 
 @Injectable()
 export class TestRunsService {
@@ -292,13 +292,21 @@ export class TestRunsService {
   /**
    * Position-independent color signature of the change between a test run's
    * baseline and image. Null when there is no baseline, dimensions differ, or
-   * nothing changed. The bytes go to the worker pool undecoded — decoding is
-   * the expensive part and must not happen on the event loop.
+   * nothing changed.
    *
-   * Memoized: a reviewer who reopens the variations dialog, or steps back to a
-   * screen already looked at, would otherwise pay for the same decodes again.
+   * Normally this was written at ingest, beside the diff that had already
+   * decoded both screenshots, and grouping a screen costs nothing but the row
+   * it is read from. The rest of this is the fallback for runs that carry no
+   * stored signature — ingested before the column existed, or compared by
+   * something other than pixelmatch: their bytes go to the worker pool
+   * undecoded, and the result is memoized so reopening the dialog on an old
+   * build does not pay for the same decodes twice.
    */
   private async getChangeSignature(testRun: TestRun, config: PixelmatchConfig): Promise<number[] | null> {
+    const stored = parseStoredSignature(testRun.changeSignature, config, this.logger);
+    if (stored) {
+      return stored;
+    }
     if (!testRun.baselineName) {
       return null;
     }
@@ -358,7 +366,10 @@ export class TestRunsService {
     return this.findOne(id);
   }
 
-  async saveDiffResult(id: string, diffResult: DiffResult): Promise<TestRun> {
+  // Nullable because it genuinely is: a comparison that produced nothing at all
+  // clears the row back to "new". The body has always handled that; the
+  // signature just did not say so.
+  async saveDiffResult(id: string, diffResult: DiffResult | null): Promise<TestRun> {
     return this.prismaService.testRun
       .update({
         where: { id },
@@ -368,6 +379,14 @@ export class TestRunsService {
           diffPercent: diffResult && diffResult.diffPercent,
           status: diffResult ? diffResult.status : TestStatus.new,
           vlmDescription: diffResult && diffResult?.vlmDescription,
+          // Always written, never merged: a recomputed diff — after the
+          // reviewer edits the ignore areas, say — must not leave the previous
+          // signature behind describing a change that no longer exists.
+          changeSignature: diffResult?.changeSignature ? JSON.stringify(diffResult.changeSignature) : null,
+          // Overwritten together with the diff they were made from, so a
+          // recomputed comparison never leaves a picture of the old change.
+          imageThumbnailName: diffResult?.imageThumbnailName ?? null,
+          diffThumbnailName: diffResult?.diffThumbnailName ?? null,
         },
       })
       .then((testRun) => {
@@ -377,7 +396,17 @@ export class TestRunsService {
   }
 
   async calculateDiff(projectId: string, testRun: TestRun): Promise<TestRun> {
-    this.staticService.deleteImage(testRun.diffName);
+    // The recomputed result replaces all three names on the row, so the old
+    // pictures go with it — leaving the thumbnails behind would strand two more
+    // objects on every ignore-area edit.
+    //
+    // They go *after* the new result is persisted, not before. Deleting first
+    // meant a comparison that failed left the row pointing at files that were
+    // already gone: the reviewer opens the run and finds broken pictures, with
+    // nothing to fall back on. Deleting late can only ever leak bytes, which is
+    // the cheaper of the two failures by a distance.
+    const previous = [testRun.diffName, testRun.imageThumbnailName, testRun.diffThumbnailName];
+
     const diffResult = await this.compareService.getDiff({
       projectId,
       data: {
@@ -388,7 +417,10 @@ export class TestRunsService {
         saveDiffAsFile: true,
       },
     });
-    return this.saveDiffResult(testRun.id, diffResult);
+    const saved = await this.saveDiffResult(testRun.id, diffResult);
+
+    previous.forEach((name) => this.staticService.deleteImage(name));
+    return saved;
   }
 
   async create({
@@ -450,6 +482,10 @@ export class TestRunsService {
     await Promise.all([
       this.staticService.deleteImage(testRun.diffName),
       this.staticService.deleteImage(testRun.imageName),
+      // left behind, these would outlive every build that referenced them and
+      // nothing would ever collect them
+      this.staticService.deleteImage(testRun.imageThumbnailName),
+      this.staticService.deleteImage(testRun.diffThumbnailName),
     ]);
 
     try {
@@ -674,6 +710,44 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, task: (item: 
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return results;
+}
+
+/**
+ * The signature stored on a run, if it is still usable. Null — meaning
+ * "recompute" — when there is none, when it cannot be read, or when the
+ * project's comparison settings have moved on since it was written.
+ *
+ * That last case is the point. Comparing a signature taken at one threshold
+ * against a sibling's taken at another quietly makes grouping worse, and the
+ * reviewer has no way to tell why. The in-memory memo has always keyed on the
+ * same settings; this is the stored equivalent.
+ */
+function parseStoredSignature(
+  stored: string | null | undefined,
+  config: PixelmatchConfig,
+  logger: Logger
+): number[] | null {
+  if (!stored) {
+    return null;
+  }
+  try {
+    const parsed: StampedSignature = JSON.parse(stored);
+    // Shape first: a histogram of the wrong length, or one carrying anything
+    // that is not a number, compares against a current signature to produce a
+    // score that looks fine and means nothing. Recomputing is always safe.
+    const wellFormed =
+      Array.isArray(parsed?.signature) &&
+      parsed.signature.length === SIGNATURE_LENGTH &&
+      parsed.signature.every((value) => typeof value === 'number' && Number.isFinite(value));
+    if (!wellFormed) {
+      return null;
+    }
+    const sameConfig = parsed.threshold === config.threshold && parsed.includeAA === config.ignoreAntialiasing;
+    return sameConfig ? parsed.signature : null;
+  } catch (error) {
+    logger.warn(`Ignoring unreadable stored change signature: ${error}`);
+    return null;
+  }
 }
 
 // Same palette but a much larger/smaller change area signals a different or
