@@ -122,4 +122,27 @@ describe('Users (e2e)', () => {
     expect(res.body.apiKey).toBe(user.apiKey);
     expect(res.body.token).not.toBeNull();
   });
+
+  it('PATCH /assignRole - editor cannot promote themselves to admin', async () => {
+    const password = '123456';
+    user = await usersService.create(generateUser(password));
+    await usersService.assignRole({ id: user.id, role: 'editor' });
+    const loggedUser = await usersService.login({ email: user.email, password });
+
+    await requestWithAuth(app, 'patch', '/users/assignRole', loggedUser.token)
+      .send({ id: user.id, role: 'admin' })
+      .expect(403);
+
+    const notPromoted = await usersService.findOne(user.id);
+    expect(notPromoted.role).toBe('editor');
+  });
+
+  it('GET /all - 403 for editor', async () => {
+    const password = '123456';
+    user = await usersService.create(generateUser(password));
+    await usersService.assignRole({ id: user.id, role: 'editor' });
+    const loggedUser = await usersService.login({ email: user.email, password });
+
+    await requestWithAuth(app, 'get', '/users/all', loggedUser.token).send().expect(403);
+  });
 });

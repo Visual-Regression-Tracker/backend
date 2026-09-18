@@ -18,21 +18,15 @@ export class RoleGuard implements CanActivate {
     }
 
     const user = await this.getUser(context);
-    return this.checkPermission(user);
+    return this.checkPermission(user, roles);
   }
 
-  checkPermission = (user: User): boolean => {
-    switch (user.role) {
-      case Role.admin: {
-        return true;
-      }
-      case Role.editor: {
-        // check project permissions later
-        return true;
-      }
-      default:
-        return false;
+  checkPermission = (user: User, roles: Role[]): boolean => {
+    if (!user) {
+      return false;
     }
+
+    return roles.includes(user.role);
   };
 
   getUser = async (context: ExecutionContext): Promise<User> => {
