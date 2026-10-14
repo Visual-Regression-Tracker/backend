@@ -5,6 +5,7 @@ import { StaticService } from '../static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Baseline, Prisma, TestRun, TestStatus, TestVariation } from '@prisma/client';
 import { DiffResult } from './diffResult';
+import { RefreshSummaryDto } from './dto/refresh-summary.dto';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { TestVariationsService } from '../test-variations/test-variations.service';
@@ -376,6 +377,78 @@ export class TestRunsService {
       });
   }
 
+  /**
+   * Re-compares a run against the baseline its variation carries *now*.
+   *
+   * A run is compared once, when the screenshot arrives, against whatever the
+   * baseline was at that moment, and that baseline is then frozen into the run.
+   * When a baseline is approved afterwards — on the main branch, or merged into
+   * it — every run already taken against the old one keeps showing a difference
+   * that has since been accepted, and nothing re-reads it.
+   *
+   * Only a run still awaiting a decision is touched. An approved, auto-approved
+   * or rejected run records a decision somebody made, and a refresh must not
+   * quietly take it back.
+   */
+  async refresh(id: string): Promise<RefreshResult> {
+    const testRun = await this.findOne(id);
+    if (!testRun || !REFRESHABLE_STATUSES.includes(testRun.status)) {
+      return { outcome: 'skipped', testRun };
+    }
+
+    const testVariation = await this.testVariationService.find({
+      projectId: testRun.projectId,
+      branchName: testRun.branchName,
+      ...getTestVariationUniqueData(testRun),
+    });
+    if (!testVariation) {
+      return { outcome: 'skipped', testRun };
+    }
+
+    // Most of a build is in this state whenever the whole of it is refreshed,
+    // and comparing a run against the baseline it already holds would be a
+    // second ingest for no change at all.
+    if (testVariation.baselineName === testRun.baselineName) {
+      return { outcome: 'unchanged', testRun };
+    }
+
+    // The run has to carry the baseline it was compared against: the dialog
+    // reads baselineName to show the two images side by side, and approve reads
+    // baselineBranchName to decide whether a feature-branch variation is owed.
+    const rebased = await this.prismaService.testRun.update({
+      where: { id },
+      data: {
+        baselineName: testVariation.baselineName,
+        baselineBranchName: testVariation.branchName,
+        testVariation: { connect: { id: testVariation.id } },
+      },
+    });
+
+    return { outcome: 'compared', testRun: await this.calculateDiff(testVariation.projectId, rebased) };
+  }
+
+  /**
+   * Refreshes a selection, or a whole build. Bounded, because a build is
+   * hundreds of screens and each refresh is a full diff: handed to the pool all
+   * at once they would hold a build's worth of decoded images in memory and
+   * starve the ingest the pool is shared with.
+   */
+  async refreshMany(ids: string[]): Promise<RefreshSummaryDto> {
+    this.logger.log(`Refreshing ${ids.length} test runs against their current baselines`);
+    const results = await mapWithConcurrency(ids, REFRESH_CONCURRENCY, (id) => this.refresh(id));
+
+    return results.reduce<RefreshSummaryDto>(
+      (summary, result) => ({
+        compared: summary.compared + (result.outcome === 'compared' ? 1 : 0),
+        unchanged: summary.unchanged + (result.outcome === 'unchanged' ? 1 : 0),
+        skipped: summary.skipped + (result.outcome === 'skipped' ? 1 : 0),
+        resolved:
+          summary.resolved + (result.outcome === 'compared' && result.testRun?.status === TestStatus.ok ? 1 : 0),
+      }),
+      { compared: 0, unchanged: 0, skipped: 0, resolved: 0 }
+    );
+  }
+
   async calculateDiff(projectId: string, testRun: TestRun): Promise<TestRun> {
     this.staticService.deleteImage(testRun.diffName);
     const diffResult = await this.compareService.getDiff({
@@ -622,6 +695,22 @@ function resolveGroupByAxis(value: string | null | undefined): string {
 // queued job holds two image buffers, so the fan-out stays bounded rather than
 // handing the pool a job per locale.
 export const SIGNATURE_CONCURRENCY = 8;
+
+// How many runs a refresh compares at once. Lower than the signature fan-out
+// because each of these is a full diff that also writes an image, and a whole
+// build may be refreshed in one click.
+export const REFRESH_CONCURRENCY = 4;
+
+export type RefreshOutcome = 'compared' | 'unchanged' | 'skipped';
+
+export interface RefreshResult {
+  outcome: RefreshOutcome;
+  testRun?: TestRun;
+}
+
+// What a refresh may touch: a run still waiting for a decision, including one
+// that currently passes — its baseline may have moved under it too.
+const REFRESHABLE_STATUSES: TestStatus[] = [TestStatus.new, TestStatus.unresolved, TestStatus.ok];
 
 // Signatures kept across requests, keyed by the image pair and diff settings.
 // Roughly one build's worth of screens, at 64 floats each.

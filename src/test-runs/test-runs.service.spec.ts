@@ -1,6 +1,6 @@
 import { mocked } from 'jest-mock';
 import { Test, TestingModule } from '@nestjs/testing';
-import { SIGNATURE_CONCURRENCY, TestRunsService } from './test-runs.service';
+import { RefreshOutcome, SIGNATURE_CONCURRENCY, TestRunsService } from './test-runs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../static/static.service';
 import { TestStatus, TestRun, TestVariation } from '@prisma/client';
@@ -885,6 +885,114 @@ describe('TestRunsService', () => {
       await built.service.getMatchingVariations(testRun.id);
 
       expect(built.compareGetChangeSignatureMock).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('refresh', () => {
+    const variationFor = (testRun: TestRun, baselineName: string) =>
+      generateTestVariation({
+        id: 'variation-id',
+        projectId: testRun.projectId,
+        branchName: 'master',
+        baselineName,
+      });
+
+    it('re-compares against the baseline the variation carries now', async () => {
+      const testRun = generateTestRun({ status: TestStatus.unresolved, baselineName: 'stale.png' });
+      const testVariation = variationFor(testRun, 'approved-since.png');
+      const testRunFindUniqueMock = jest.fn().mockResolvedValueOnce(testRun);
+      const testVariationFindMock = jest.fn().mockResolvedValueOnce(testVariation);
+      const refreshed = { ...testRun, baselineName: 'approved-since.png' };
+      const testRunUpdateMock = jest.fn().mockResolvedValueOnce(refreshed);
+      service = await initService({ testRunFindUniqueMock, testVariationFindMock, testRunUpdateMock });
+      service.calculateDiff = jest.fn().mockResolvedValueOnce(refreshed);
+
+      const result = await service.refresh(testRun.id);
+
+      expect(testVariationFindMock).toHaveBeenCalledWith({
+        projectId: testRun.projectId,
+        branchName: testRun.branchName,
+        ...getTestVariationUniqueData(testRun),
+      });
+      // the run has to carry the baseline it was compared against, or the
+      // image on screen and the record of it would disagree
+      expect(testRunUpdateMock).toHaveBeenCalledWith({
+        where: { id: testRun.id },
+        data: {
+          baselineName: 'approved-since.png',
+          baselineBranchName: testVariation.branchName,
+          testVariation: { connect: { id: testVariation.id } },
+        },
+      });
+      expect(service.calculateDiff).toHaveBeenCalledWith(testVariation.projectId, refreshed);
+      expect(result).toEqual({ outcome: 'compared', testRun: refreshed });
+    });
+
+    it('leaves a run whose baseline has not moved alone', async () => {
+      // the whole build is refreshed at once and most of it will be in this
+      // state, so re-running the comparison would be a second ingest for nothing
+      const testRun = generateTestRun({ status: TestStatus.unresolved, baselineName: 'current.png' });
+      const testRunFindUniqueMock = jest.fn().mockResolvedValueOnce(testRun);
+      const testVariationFindMock = jest.fn().mockResolvedValueOnce(variationFor(testRun, 'current.png'));
+      const testRunUpdateMock = jest.fn();
+      service = await initService({ testRunFindUniqueMock, testVariationFindMock, testRunUpdateMock });
+      service.calculateDiff = jest.fn();
+
+      const result = await service.refresh(testRun.id);
+
+      expect(testRunUpdateMock).not.toHaveBeenCalled();
+      expect(service.calculateDiff).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('unchanged');
+    });
+
+    it.each([TestStatus.approved, TestStatus.autoApproved, TestStatus.failed])(
+      'does not reopen a %s run',
+      async (status) => {
+        // an approved or rejected run records a decision somebody made; a
+        // refresh must not quietly take it back
+        const testRun = generateTestRun({ status, baselineName: 'stale.png' });
+        const testRunFindUniqueMock = jest.fn().mockResolvedValueOnce(testRun);
+        const testVariationFindMock = jest.fn();
+        service = await initService({ testRunFindUniqueMock, testVariationFindMock });
+        service.calculateDiff = jest.fn();
+
+        const result = await service.refresh(testRun.id);
+
+        expect(testVariationFindMock).not.toHaveBeenCalled();
+        expect(service.calculateDiff).not.toHaveBeenCalled();
+        expect(result.outcome).toBe('skipped');
+      }
+    );
+
+    it('skips a run whose variation is gone', async () => {
+      const testRun = generateTestRun({ status: TestStatus.unresolved });
+      const testRunFindUniqueMock = jest.fn().mockResolvedValueOnce(testRun);
+      const testVariationFindMock = jest.fn().mockResolvedValueOnce(null);
+      service = await initService({ testRunFindUniqueMock, testVariationFindMock });
+      service.calculateDiff = jest.fn();
+
+      const result = await service.refresh(testRun.id);
+
+      expect(service.calculateDiff).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('skipped');
+    });
+
+    it('counts what it did across a whole build', async () => {
+      service = await initService({});
+      const outcomes: Record<string, RefreshOutcome> = {
+        a: 'compared',
+        b: 'compared',
+        c: 'unchanged',
+        d: 'skipped',
+      };
+      service.refresh = jest.fn().mockImplementation(async (id: string) => ({
+        outcome: outcomes[id],
+        testRun: generateTestRun({ id, status: id === 'a' ? TestStatus.ok : TestStatus.unresolved }),
+      }));
+
+      const result = await service.refreshMany(['a', 'b', 'c', 'd']);
+
+      expect(result).toEqual({ compared: 2, unchanged: 1, skipped: 1, resolved: 1 });
     });
   });
 });

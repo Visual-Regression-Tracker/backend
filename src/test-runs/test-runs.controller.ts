@@ -31,6 +31,7 @@ import { TestRunsService } from './test-runs.service';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { TestRunDto } from './dto/testRun.dto';
+import { RefreshSummaryDto } from './dto/refresh-summary.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto';
 import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipart.dto';
@@ -110,6 +111,24 @@ export class TestRunsController {
     for (const id of ids) {
       await this.testRunsService.setStatus(id, TestStatus.failed);
     }
+  }
+
+  @Post('refresh')
+  @ApiOperation({
+    summary: 'Re-compare runs against the baseline their variation carries now',
+    description:
+      'A run is compared once, when its screenshot arrives, against whatever the baseline was at that moment. ' +
+      'A baseline approved afterwards leaves every earlier run showing a difference that has since been accepted. ' +
+      'This compares them again and reports what moved. Runs already approved or rejected are left alone, and so ' +
+      'are runs whose baseline has not changed — the status is recomputed, never decided.',
+  })
+  @ApiOkResponse({ type: RefreshSummaryDto })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
+  async refresh(@Body() ids: string[]): Promise<RefreshSummaryDto> {
+    this.logger.debug(`Going to refresh ${ids.length} TestRuns`);
+    return this.testRunsService.refreshMany(ids);
   }
 
   @Post('delete')
