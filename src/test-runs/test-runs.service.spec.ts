@@ -925,7 +925,11 @@ describe('TestRunsService', () => {
         },
       });
       expect(service.calculateDiff).toHaveBeenCalledWith(testVariation.projectId, refreshed);
-      expect(result).toEqual({ outcome: 'compared', testRun: refreshed });
+      expect(result).toEqual({
+        outcome: 'compared',
+        previousStatus: TestStatus.unresolved,
+        testRun: refreshed,
+      });
     });
 
     it('leaves a run whose baseline has not moved alone', async () => {
@@ -977,22 +981,45 @@ describe('TestRunsService', () => {
       expect(result.outcome).toBe('skipped');
     });
 
+    it('leaves a merge build alone', async () => {
+      // a merge build is a deliberate snapshot of one branch's baselines put up
+      // for review against another's. Re-pointing its runs at whatever variation
+      // resolves now would change what is being reviewed half-way through, and
+      // the merge itself is one click to run again.
+      const testRun = generateTestRun({ status: TestStatus.unresolved, merge: true, baselineName: 'stale.png' });
+      const testRunFindUniqueMock = jest.fn().mockResolvedValueOnce(testRun);
+      const testVariationFindMock = jest.fn();
+      service = await initService({ testRunFindUniqueMock, testVariationFindMock });
+      service.calculateDiff = jest.fn();
+
+      const result = await service.refresh(testRun.id);
+
+      expect(testVariationFindMock).not.toHaveBeenCalled();
+      expect(service.calculateDiff).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('skipped');
+    });
+
     it('counts what it did across a whole build', async () => {
       service = await initService({});
-      const outcomes: Record<string, RefreshOutcome> = {
-        a: 'compared',
-        b: 'compared',
-        c: 'unchanged',
-        d: 'skipped',
+      // what each run was before the refresh and what it became after it: the
+      // two together are the only way to tell a screen that has just been put
+      // right from one that was already right, or from one that has just broken
+      const plan: Record<string, [RefreshOutcome, TestStatus, TestStatus]> = {
+        a: ['compared', TestStatus.unresolved, TestStatus.ok],
+        b: ['compared', TestStatus.ok, TestStatus.unresolved],
+        c: ['compared', TestStatus.unresolved, TestStatus.unresolved],
+        d: ['compared', TestStatus.ok, TestStatus.ok],
+        e: ['unchanged', TestStatus.unresolved, TestStatus.unresolved],
+        f: ['skipped', TestStatus.approved, TestStatus.approved],
       };
-      service.refresh = jest.fn().mockImplementation(async (id: string) => ({
-        outcome: outcomes[id],
-        testRun: generateTestRun({ id, status: id === 'a' ? TestStatus.ok : TestStatus.unresolved }),
-      }));
+      service.refresh = jest.fn().mockImplementation(async (id: string) => {
+        const [outcome, previousStatus, status] = plan[id];
+        return { outcome, previousStatus, testRun: generateTestRun({ id, status }) };
+      });
 
-      const result = await service.refreshMany(['a', 'b', 'c', 'd']);
+      const result = await service.refreshMany(['a', 'b', 'c', 'd', 'e', 'f']);
 
-      expect(result).toEqual({ compared: 2, unchanged: 1, skipped: 1, resolved: 1 });
+      expect(result).toEqual({ compared: 4, unchanged: 1, skipped: 1, resolved: 1, reopened: 1 });
     });
   });
 });

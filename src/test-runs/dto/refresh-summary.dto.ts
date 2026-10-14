@@ -14,6 +14,9 @@ export class RefreshSummaryDto {
   @ApiProperty({ description: 'Runs not eligible: already approved or rejected, or their variation is gone' })
   skipped: number;
 
-  @ApiProperty({ description: 'Of those compared, how many no longer differ from their baseline' })
+  @ApiProperty({ description: 'Of those compared, how many were differing and no longer do' })
   resolved: number;
+
+  @ApiProperty({ description: 'Of those compared, how many were passing and now differ from the newer baseline' })
+  reopened: number;
 }

@@ -396,6 +396,15 @@ export class TestRunsService {
       return { outcome: 'skipped', testRun };
     }
 
+    // A merge build is a deliberate snapshot: one branch's baselines put up for
+    // review against another's, and its destination variation is chosen when
+    // the merge is started rather than resolved the ordinary way. Re-pointing
+    // its runs would change what is being reviewed half-way through, and the
+    // merge itself is one click to run again.
+    if (testRun.merge) {
+      return { outcome: 'skipped', testRun };
+    }
+
     const testVariation = await this.testVariationService.find({
       projectId: testRun.projectId,
       branchName: testRun.branchName,
@@ -409,7 +418,7 @@ export class TestRunsService {
     // and comparing a run against the baseline it already holds would be a
     // second ingest for no change at all.
     if (testVariation.baselineName === testRun.baselineName) {
-      return { outcome: 'unchanged', testRun };
+      return { outcome: 'unchanged', testRun, previousStatus: testRun.status };
     }
 
     // The run has to carry the baseline it was compared against: the dialog
@@ -424,7 +433,11 @@ export class TestRunsService {
       },
     });
 
-    return { outcome: 'compared', testRun: await this.calculateDiff(testVariation.projectId, rebased) };
+    return {
+      outcome: 'compared',
+      previousStatus: testRun.status,
+      testRun: await this.calculateDiff(testVariation.projectId, rebased),
+    };
   }
 
   /**
@@ -438,14 +451,25 @@ export class TestRunsService {
     const results = await mapWithConcurrency(ids, REFRESH_CONCURRENCY, (id) => this.refresh(id));
 
     return results.reduce<RefreshSummaryDto>(
-      (summary, result) => ({
-        compared: summary.compared + (result.outcome === 'compared' ? 1 : 0),
-        unchanged: summary.unchanged + (result.outcome === 'unchanged' ? 1 : 0),
-        skipped: summary.skipped + (result.outcome === 'skipped' ? 1 : 0),
-        resolved:
-          summary.resolved + (result.outcome === 'compared' && result.testRun?.status === TestStatus.ok ? 1 : 0),
-      }),
-      { compared: 0, unchanged: 0, skipped: 0, resolved: 0 }
+      (summary, result) => {
+        const compared = result.outcome === 'compared';
+        const was = result.previousStatus;
+        const now = result.testRun?.status;
+
+        return {
+          compared: summary.compared + (compared ? 1 : 0),
+          unchanged: summary.unchanged + (result.outcome === 'unchanged' ? 1 : 0),
+          skipped: summary.skipped + (result.outcome === 'skipped' ? 1 : 0),
+          // a screen that was already passing and still is has not been put
+          // right by anything, and must not be counted as if it had
+          resolved: summary.resolved + (compared && was !== TestStatus.ok && now === TestStatus.ok ? 1 : 0),
+          // the other direction: the baseline moved and this screen no longer
+          // matches it. Truthful, and the reviewer has to be told rather than
+          // left to find it
+          reopened: summary.reopened + (compared && was === TestStatus.ok && now !== TestStatus.ok ? 1 : 0),
+        };
+      },
+      { compared: 0, unchanged: 0, skipped: 0, resolved: 0, reopened: 0 }
     );
   }
 
@@ -706,6 +730,9 @@ export type RefreshOutcome = 'compared' | 'unchanged' | 'skipped';
 export interface RefreshResult {
   outcome: RefreshOutcome;
   testRun?: TestRun;
+  // what the run was before, so a screen just put right can be told apart from
+  // one that was already right — and from one that has just broken
+  previousStatus?: TestStatus;
 }
 
 // What a refresh may touch: a run still waiting for a decision, including one
