@@ -392,7 +392,7 @@ export class TestRunsService {
    */
   async refresh(id: string): Promise<RefreshResult> {
     const testRun = await this.findOne(id);
-    if (!testRun || !REFRESHABLE_STATUSES.includes(testRun.status)) {
+    if (!testRun || !REFRESHABLE_STATUSES.has(testRun.status)) {
       return { outcome: 'skipped', testRun };
     }
 
@@ -710,7 +710,7 @@ export interface RefreshResult {
 
 // What a refresh may touch: a run still waiting for a decision, including one
 // that currently passes — its baseline may have moved under it too.
-const REFRESHABLE_STATUSES: TestStatus[] = [TestStatus.new, TestStatus.unresolved, TestStatus.ok];
+const REFRESHABLE_STATUSES = new Set<TestStatus>([TestStatus.new, TestStatus.unresolved, TestStatus.ok]);
 
 // Signatures kept across requests, keyed by the image pair and diff settings.
 // Roughly one build's worth of screens, at 64 floats each.
