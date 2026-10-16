@@ -57,6 +57,7 @@
     "looks-same": "^10.0.1",
     "odiff-bin": "^2.6.1",
     "ollama": "^0.6.4",
+    "openid-client": "^5.7.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
