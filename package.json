@@ -22,7 +22,8 @@
     "test:debug": "node --experimental-vm-modules --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --projects src --runInBand",
     "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test",
     "test:acceptance": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_acceptance",
-    "test:ldap": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_ldap"
+    "test:ldap": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_ldap",
+    "test:oidc": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_oidc"
   },
   "engines": {
     "node": ">=20"
