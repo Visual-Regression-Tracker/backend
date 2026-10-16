@@ -75,3 +75,17 @@ the handshake, but cross-replica event delivery still requires `REDIS_URL`.
     -H 'content-type: application/json' \
     --data-raw '{"email":"developer.one@ldapmock.local","password":"password"}'
     ```
+
+## Local OIDC test server
+
+- Run `docker compose -f docker-compose.yml -f docker-compose.oidc.yml up` (see [docker docs for multiple-compose-files - merge](https://docs.docker.com/compose/multiple-compose-files/merge/))
+- The issuer (`host.docker.internal:8090`) must be reachable from both the api container and the browser. On macOS/Windows Docker Desktop this works out of the box; on Linux add `127.0.0.1 host.docker.internal` to `/etc/hosts`.
+- Open `http://localhost:8080/login` and click **Login with SSO** (or set `REACT_APP_OIDC_AUTO_REDIRECT=true` to redirect straight away).
+- Mock users: username `admin` (role `admin`), any other username (role `editor`). The password is ignored. See `oauth2-mock-server-config.json`.
+- Optional: inspect/trigger the flow manually via the debugger at `http://host.docker.internal:8090/default/debugger`.
+- Verify the OIDC endpoints (api must run with OIDC enabled) and run the integration tests:
+    ```sh
+    curl -i 'http://localhost:4200/users/oidc/enabled'
+    curl -i 'http://localhost:4200/users/oidc/login'
+    npm run test:oidc
+    ```

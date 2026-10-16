@@ -3,15 +3,23 @@ import { ConfigService } from '@nestjs/config';
 import { UsersFactoryService } from './users.factory';
 import { DbUsersService } from './db/dbusers.service';
 import { LdapUsersService } from './ldap/ldapusers.service';
+import { OidcUsersService } from './oidc/oidcusers.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { Client } from 'ldapts';
 jest.mock('ldapts');
 
 describe('UsersFactoryService', () => {
   let service: UsersFactoryService;
   let configService: ConfigService;
+
+  const withFlags = (flags: { oidc?: boolean; ldap?: boolean }) => {
+    jest.spyOn(configService, 'get').mockImplementation((key: string, defaultValue?: unknown) => {
+      if (key === 'OIDC_ENABLED') return flags.oidc ? 'true' : 'false';
+      if (key === 'LDAP_ENABLED') return flags.ldap ? 'true' : 'false';
+      return defaultValue;
+    });
+    jest.spyOn(configService, 'getOrThrow').mockReturnValue('mockedValue');
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -44,16 +52,27 @@ describe('UsersFactoryService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should return DbUsersService when LDAP_ENABLED is false', () => {
-    jest.spyOn(configService, 'get').mockReturnValue('false');
+  it('should return DbUsersService when neither OIDC_ENABLED nor LDAP_ENABLED is true', () => {
+    withFlags({});
     const result = service.getUsersService();
     expect(result).toBeInstanceOf(DbUsersService);
   });
 
   it('should return LdapUsersService when LDAP_ENABLED is true', () => {
-    jest.spyOn(configService, 'get').mockReturnValue('true');
-    jest.spyOn(configService, 'getOrThrow').mockReturnValue('mockedValue');
+    withFlags({ ldap: true });
     const result = service.getUsersService();
     expect(result).toBeInstanceOf(LdapUsersService);
+  });
+
+  it('should return OidcUsersService when OIDC_ENABLED is true', () => {
+    withFlags({ oidc: true });
+    const result = service.getUsersService();
+    expect(result).toBeInstanceOf(OidcUsersService);
+  });
+
+  it('should prefer OidcUsersService when both OIDC_ENABLED and LDAP_ENABLED are true', () => {
+    withFlags({ oidc: true, ldap: true });
+    const result = service.getUsersService();
+    expect(result).toBeInstanceOf(OidcUsersService);
   });
 });
