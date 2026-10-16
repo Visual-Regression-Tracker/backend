@@ -22,7 +22,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --projects src --runInBand",
     "test:e2e": "jest --projects test",
     "test:acceptance": "jest --projects test_acceptance",
-    "test:ldap": "jest --projects test_ldap"
+    "test:ldap": "jest --projects test_ldap",
+    "test:oidc": "jest --projects test_oidc"
   },
   "engines": {
     "node": ">=20"

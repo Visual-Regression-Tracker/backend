@@ -1,0 +1,37 @@
+services:
+  api:
+    environment:
+      OIDC_ENABLED: 'true'
+      # Issuer must be reachable both from the api container and the browser.
+      # On macOS/Windows Docker Desktop host.docker.internal works out of the box,
+      # on Linux add `127.0.0.1 host.docker.internal` to /etc/hosts.
+      OIDC_ISSUER_URL: 'http://host.docker.internal:8090/default'
+      OIDC_CLIENT_ID: 'vrt-client'
+      OIDC_CLIENT_SECRET: 'vrt-secret'
+      OIDC_REDIRECT_URI: 'http://localhost:4200/users/oidc/callback'
+      OIDC_SCOPES: 'openid profile email'
+      OIDC_ATTRIBUTE_MAIL: 'email'
+      OIDC_ATTRIBUTE_FIRST_NAME: 'given_name'
+      OIDC_ATTRIBUTE_LAST_NAME: 'family_name'
+      OIDC_ROLE_CLAIM: 'groups'
+      OIDC_ADMIN_VALUES: 'vrt-admin'
+      OIDC_DEFAULT_ROLE: 'editor'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      oidcmock:
+        condition: service_started
+  oidcmock:
+    container_name: oidcmock
+    # See https://github.com/navikt/mock-oauth2-server
+    # Interactive login: http://host.docker.internal:8090/default/debugger
+    # Default users: 'admin' (role admin) and any other username (role editor).
+    image: ghcr.io/navikt/mock-oauth2-server:6.1.0
+    hostname: host.docker.internal
+    restart: always
+    environment:
+      JSON_CONFIG_PATH: '/config/oidc-config.json'
+    volumes:
+      - ./oauth2-mock-server-config.json:/config/oidc-config.json:ro
+    ports:
+      - "8090:8080"

@@ -1,0 +1,30 @@
+{
+  "interactiveLogin": true,
+  "tokenCallbacks": [
+    {
+      "issuerId": "default",
+      "requestMappings": [
+        {
+          "requestParam": "subject",
+          "match": "admin",
+          "claims": {
+            "email": "admin@oidcmock.local",
+            "given_name": "Ada",
+            "family_name": "Admin",
+            "groups": ["vrt-admin"]
+          }
+        },
+        {
+          "requestParam": "subject",
+          "match": ".*",
+          "claims": {
+            "email": "editor@oidcmock.local",
+            "given_name": "Ed",
+            "family_name": "Editor",
+            "groups": ["vrt-editor"]
+          }
+        }
+      ]
+    }
+  ]
+}
