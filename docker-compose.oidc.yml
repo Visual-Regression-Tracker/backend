@@ -16,6 +16,7 @@ services:
       OIDC_ROLE_CLAIM: 'groups'
       OIDC_ADMIN_VALUES: 'vrt-admin'
       OIDC_DEFAULT_ROLE: 'editor'
+      OIDC_REQUIRE_VERIFIED_EMAIL: 'true'
     depends_on:
       postgres:
         condition: service_healthy

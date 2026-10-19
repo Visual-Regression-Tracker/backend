@@ -10,6 +10,7 @@ import { AssignRoleDto } from './dto/assign-role.dto';
 import { randomUUID } from 'crypto';
 import { UserDto } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
+import { OidcUsersService } from './oidc/oidcusers.service';
 
 const user: User = {
   id: '1',
@@ -187,5 +188,54 @@ describe('UsersService with DbUserService implementation', () => {
     // Assert
     expect(prismaUserCreateMock).toHaveBeenCalled();
     expect(result).toBeInstanceOf(UserDto);
+  });
+
+  it('reports OIDC as disabled for the DB implementation', () => {
+    expect(service.isOidcEnabled()).toBe(false);
+  });
+
+  it('rejects OIDC helpers when OIDC is disabled', async () => {
+    await expect(service.oidcGetAuthorizationUrl()).rejects.toThrow('OIDC is not enabled.');
+  });
+});
+
+describe('UsersService with OidcUsersService implementation', () => {
+  let service: UsersService;
+  let oidcUsersService: OidcUsersService;
+
+  beforeEach(async () => {
+    oidcUsersService = Object.assign(Object.create(OidcUsersService.prototype), {
+      getAuthorizationUrl: jest.fn(),
+      handleCallback: jest.fn(),
+      buildFrontendRedirect: jest.fn(),
+    }) as OidcUsersService;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: UsersFactoryService, useValue: { getUsersService: () => oidcUsersService } },
+        { provide: PrismaService, useValue: {} },
+        { provide: AuthService, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get<UsersService>(UsersService);
+  });
+
+  it('reports OIDC as enabled', () => {
+    expect(service.isOidcEnabled()).toBe(true);
+  });
+
+  it('delegates authorization url, callback and redirect building', async () => {
+    const authorization = { url: 'https://idp/authorize', state: 'state', codeVerifier: 'verifier' };
+    (oidcUsersService.getAuthorizationUrl as jest.Mock).mockResolvedValue(authorization);
+    (oidcUsersService.handleCallback as jest.Mock).mockResolvedValue({ token: 'jwt' });
+    (oidcUsersService.buildFrontendRedirect as jest.Mock).mockReturnValue('redirect-url');
+
+    await expect(service.oidcGetAuthorizationUrl()).resolves.toEqual(authorization);
+    await expect(
+      service.oidcHandleCallback({ code: 'code' }, { state: 'state', codeVerifier: 'verifier' })
+    ).resolves.toEqual({ token: 'jwt' });
+    expect(service.oidcBuildFrontendRedirect('jwt')).toBe('redirect-url');
   });
 });

@@ -40,15 +40,15 @@ describe('Oidc', () => {
       password: 'password',
     };
 
-    await axios.post('/users/login', loginData).catch((error) => {
-      expect(error.response.status).toBe(400);
-      expect(error.response.data.message).toContain('Password login is disabled.');
-    });
+    const response = await axios.post('/users/login', loginData, { validateStatus: () => true });
+
+    expect(response.status).toBe(400);
+    expect(response.data.message).toContain('Password login is disabled.');
   });
 
   test('GET /users/me requires authentication', async () => {
-    await axios.get('/users/me').catch((error) => {
-      expect(error.response.status).toBe(401);
-    });
+    const response = await axios.get('/users/me', { validateStatus: () => true });
+
+    expect(response.status).toBe(401);
   });
 });

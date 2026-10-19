@@ -25,13 +25,14 @@ type OIDCConfig = {
   adminValues: string[];
   defaultRole: Role;
   tlsNoVerify: boolean;
+  requireVerifiedEmail: boolean;
 };
 
 export class OidcUsersService implements Users {
   private readonly logger: Logger = new Logger(OidcUsersService.name);
   private readonly oidcConfig: OIDCConfig;
   private readonly appFrontendUrl: string;
-  private client: OidcClient | null = null;
+  private clientPromise: Promise<OidcClient> | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -58,29 +59,62 @@ export class OidcUsersService implements Users {
           ? Role.admin
           : Role.editor,
       tlsNoVerify: this.configService.get<string>('OIDC_TLS_NO_VERIFY', 'false').toLowerCase() === 'true',
+      requireVerifiedEmail:
+        this.configService.get<string>('OIDC_REQUIRE_VERIFIED_EMAIL', 'true').toLowerCase() === 'true',
     };
     this.appFrontendUrl = this.configService
       .get<string>('APP_FRONTEND_URL', 'http://localhost:8080')
       .replace(/\/+$/, '');
 
     if (this.oidcConfig.tlsNoVerify) {
-      this.logger.warn('OIDC TLS certificate verification is disabled');
-      custom.setHttpOptionsDefaults({ agent: new HttpsAgent({ rejectUnauthorized: false }) });
+      this.logger.warn('OIDC TLS certificate verification is disabled for the configured issuer only');
     }
   }
 
-  private async getClient(): Promise<OidcClient> {
-    if (this.client) {
-      return this.client;
+  /**
+   * Restricts the insecure HTTPS agent to the configured issuer, so a TLS
+   * bypass never applies to unrelated openid-client requests.
+   */
+  private getHttpOptions(): ((url: URL, options: Record<string, unknown>) => Record<string, unknown>) | null {
+    if (!this.oidcConfig.tlsNoVerify) {
+      return null;
     }
+    const insecureAgent = new HttpsAgent({ rejectUnauthorized: false });
+    const issuerOrigin = new URL(this.oidcConfig.issuerUrl).origin;
+    return (url, options) => (url.origin === issuerOrigin ? { ...options, agent: insecureAgent } : options);
+  }
+
+  private async discoverClient(): Promise<OidcClient> {
+    const httpOptions = this.getHttpOptions();
+    if (httpOptions) {
+      // Static discovery cannot be scoped per instance; the provider itself
+      // only bypasses verification for the configured issuer origin.
+      Issuer[custom.http_options] = httpOptions as never;
+    }
+
     const issuer = await Issuer.discover(this.oidcConfig.issuerUrl);
-    this.client = new issuer.Client({
+    const client = new issuer.Client({
       client_id: this.oidcConfig.clientId,
       client_secret: this.oidcConfig.clientSecret,
       redirect_uris: [this.oidcConfig.redirectUri],
       response_types: ['code'],
     });
-    return this.client;
+
+    if (httpOptions) {
+      client[custom.http_options] = httpOptions as never;
+    }
+    return client;
+  }
+
+  private getClient(): Promise<OidcClient> {
+    if (!this.clientPromise) {
+      this.clientPromise = this.discoverClient().catch((error) => {
+        // Allow a later request to retry discovery after a transient failure.
+        this.clientPromise = null;
+        throw error;
+      });
+    }
+    return this.clientPromise;
   }
 
   /**
@@ -144,6 +178,14 @@ export class OidcUsersService implements Users {
       throw new HttpException('OIDC login failed.', HttpStatus.BAD_REQUEST);
     }
 
+    // Never trust an email address the identity provider marks as unverified:
+    // it could otherwise be used to take over an existing VRT account. Can be
+    // disabled for providers that do not emit a reliable email_verified claim.
+    if (this.oidcConfig.requireVerifiedEmail && claims.email_verified !== true) {
+      this.logger.warn(`OIDC login rejected: email '${email}' is not verified by the identity provider`);
+      throw new HttpException('OIDC login failed.', HttpStatus.BAD_REQUEST);
+    }
+
     const role = this.resolveRole(claims);
 
     let user = await this.prismaService.user.findUnique({ where: { email } });
@@ -199,10 +241,11 @@ export class OidcUsersService implements Users {
   }
 
   async update(id: string, userDto: UpdateUserDto): Promise<UserLoginResponseDto> {
+    // The email is the account key for OIDC users, so it is owned by the
+    // identity provider and must not be changed here.
     const user = await this.prismaService.user.update({
       where: { id },
       data: {
-        email: userDto.email,
         firstName: userDto.firstName,
         lastName: userDto.lastName,
       },

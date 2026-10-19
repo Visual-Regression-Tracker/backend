@@ -88,7 +88,15 @@ export class UsersController {
       if (!state || !codeVerifier) {
         throw new Error('Missing or malformed OIDC state cookie.');
       }
-      const { token } = await this.usersService.oidcHandleCallback(req.query as Record<string, string>, {
+      // Repeated query keys produce arrays; keep only scalar strings so the
+      // callback sees a plain parameter map.
+      const params: Record<string, string> = {};
+      for (const [key, value] of Object.entries(req.query)) {
+        if (typeof value === 'string') {
+          params[key] = value;
+        }
+      }
+      const { token } = await this.usersService.oidcHandleCallback(params, {
         state,
         codeVerifier,
       });

@@ -9,6 +9,7 @@
           "match": "admin",
           "claims": {
             "email": "admin@oidcmock.local",
+            "email_verified": true,
             "given_name": "Ada",
             "family_name": "Admin",
             "groups": ["vrt-admin"]
@@ -19,6 +20,7 @@
           "match": ".*",
           "claims": {
             "email": "editor@oidcmock.local",
+            "email_verified": true,
             "given_name": "Ed",
             "family_name": "Editor",
             "groups": ["vrt-editor"]
