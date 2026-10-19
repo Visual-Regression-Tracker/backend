@@ -327,8 +327,10 @@ describe('OidcUsersService', () => {
       expect(result.token).toBe('vrt-jwt');
     });
 
-    it('treats password changes as a no-op', async () => {
-      await expect(service.changePassword(user, 'newPassword')).resolves.toBe(true);
+    it('rejects password changes', async () => {
+      await expect(service.changePassword(user, 'newPassword')).rejects.toThrow(
+        'Password changes are disabled. Use SSO to change your password.'
+      );
     });
     it('rejects password login', async () => {
       await expect(service.login({ email: 'a@b.com', password: 'x' })).rejects.toThrow('Password login is disabled.');

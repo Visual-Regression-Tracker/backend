@@ -256,7 +256,7 @@ export class OidcUsersService implements Users {
 
   async changePassword(user: User, newPassword: string): Promise<boolean> {
     this.logger.warn(`${user.email} tried to change password - this is not supported for OIDC users`);
-    return true;
+    throw new HttpException('Password changes are disabled. Use SSO to change your password.', HttpStatus.BAD_REQUEST);
   }
 
   async login(userLoginRequestDto: UserLoginRequestDto): Promise<UserLoginResponseDto> {
