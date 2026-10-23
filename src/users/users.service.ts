@@ -8,9 +8,10 @@ import { UpdateUserDto } from './dto/user-update.dto';
 import { AuthService } from '../auth/auth.service';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
-import { Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { UsersFactoryService } from './users.factory';
 import { Users } from './users.interface';
+import { OidcUsersService } from './oidc/oidcusers.service';
 
 @Injectable()
 export class UsersService {
@@ -39,6 +40,32 @@ export class UsersService {
 
   async login(userLoginRequestDto: UserLoginRequestDto) {
     return this.usersService.login(userLoginRequestDto);
+  }
+
+  isOidcEnabled(): boolean {
+    return this.usersService instanceof OidcUsersService;
+  }
+
+  async oidcGetAuthorizationUrl(): Promise<{ url: string; state: string; codeVerifier: string }> {
+    return this.oidcUsersService.getAuthorizationUrl();
+  }
+
+  async oidcHandleCallback(
+    params: Record<string, string>,
+    checks: { state: string; codeVerifier: string }
+  ): Promise<UserLoginResponseDto> {
+    return this.oidcUsersService.handleCallback(params, checks);
+  }
+
+  oidcBuildFrontendRedirect(token?: string, error?: string): string {
+    return this.oidcUsersService.buildFrontendRedirect(token, error);
+  }
+
+  private get oidcUsersService(): OidcUsersService {
+    if (!(this.usersService instanceof OidcUsersService)) {
+      throw new HttpException('OIDC is not enabled.', HttpStatus.NOT_FOUND);
+    }
+    return this.usersService;
   }
 
   async findOne(id: string): Promise<User> {

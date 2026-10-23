@@ -22,7 +22,8 @@
     "test:debug": "node --experimental-vm-modules --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --projects src --runInBand",
     "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test",
     "test:acceptance": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_acceptance",
-    "test:ldap": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_ldap"
+    "test:ldap": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_ldap",
+    "test:oidc": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_oidc"
   },
   "engines": {
     "node": ">=20"
@@ -57,6 +58,7 @@
     "looks-same": "^10.0.1",
     "odiff-bin": "^2.6.1",
     "ollama": "^0.6.4",
+    "openid-client": "^5.7.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
