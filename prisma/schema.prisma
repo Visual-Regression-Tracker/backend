@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
 }
 
@@ -72,6 +72,13 @@ model TestRun {
   ignoreAreas           String         @default("[]")
   tempIgnoreAreas       String         @default("[]")
   vlmDescription        String?
+  // Position-independent colour signature of this run's change, as JSON, so the
+  // variations dialog can group a screen's locales without fetching and
+  // decoding every sibling's screenshots at review time. Written once, next to
+  // the diff that already decoded them. Null on runs that predate this, that
+  // have no diff, or that were compared by something other than pixelmatch —
+  // those fall back to computing it on demand.
+  changeSignature       String?
   baseline              Baseline?
   build                 Build          @relation(fields: [buildId], references: [id])
   project               Project?       @relation(fields: [projectId], references: [id])

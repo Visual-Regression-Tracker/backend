@@ -30,6 +30,12 @@ export interface SignatureJobOutput {
 // COLOR_BUCKETS_PER_CHANNEL^3 histogram buckets.
 const COLOR_BUCKETS_PER_CHANNEL = 4;
 
+// How many buckets a signature has. Exported so a stored one can be checked
+// against the shape this build produces: comparing signatures of two different
+// lengths yields a similarity score computed over undefined entries — a number,
+// and a meaningless one.
+export const SIGNATURE_LENGTH = COLOR_BUCKETS_PER_CHANNEL ** 3;
+
 // Longest side (px) images are downscaled to before computing the color
 // signature — keeps the histogram representative while cutting pixelmatch cost.
 const SIGNATURE_MAX_DIMENSION = 500;
@@ -106,17 +112,31 @@ export function computeChangeSignature(input: SignatureJobInput): SignatureJobOu
   applyIgnoreAreas(baselineImage, input.ignoreAreas);
   applyIgnoreAreas(checkpointImage, input.ignoreAreas);
 
+  return { signature: signatureOfDecoded(baselineImage, checkpointImage, input) };
+}
+
+/**
+ * The signature of a pair that is already decoded, of equal size, and with its
+ * ignore areas blanked. Split out so the diff can produce a signature from the
+ * images it has just decoded rather than paying for a second decode — the two
+ * must not drift apart, so there is only ever one implementation.
+ */
+export function signatureOfDecoded(
+  baselineImage: RawImage,
+  checkpointImage: RawImage,
+  options: { threshold: number; includeAA: boolean }
+): number[] | null {
   const baseline = downscale(baselineImage, SIGNATURE_MAX_DIMENSION);
   const image = downscale(checkpointImage, SIGNATURE_MAX_DIMENSION);
   const { width, height } = baseline;
   const mask = new PNG({ width, height });
   const changedPixels = Pixelmatch(baseline.data, image.data, mask.data, width, height, {
-    threshold: input.threshold,
-    includeAA: input.includeAA,
+    threshold: options.threshold,
+    includeAA: options.includeAA,
     diffMask: true,
   });
   if (changedPixels === 0) {
-    return { signature: null };
+    return null;
   }
 
   const bucketSize = 256 / COLOR_BUCKETS_PER_CHANNEL;
@@ -133,9 +153,9 @@ export function computeChangeSignature(input: SignatureJobInput): SignatureJobOu
 
   const total = histogram.reduce((sum, value) => sum + value, 0);
   if (total === 0) {
-    return { signature: null };
+    return null;
   }
-  return { signature: histogram.map((value) => value / total) };
+  return histogram.map((value) => value / total);
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
