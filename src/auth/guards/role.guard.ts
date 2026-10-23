@@ -12,38 +12,30 @@ export class RoleGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const roles = this.reflector.get<Role[]>('roles', context.getHandler());
-    if (!roles) {
+    const requiredRoles = this.reflector.getAllAndOverride<Role[]>('roles', [context.getHandler(), context.getClass()]);
+
+    if (!requiredRoles || requiredRoles.length === 0) {
       return true;
     }
 
     const user = await this.getUser(context);
-    return this.checkPermission(user);
+    return !!user && requiredRoles.includes(user.role);
   }
 
-  checkPermission = (user: User): boolean => {
-    switch (user.role) {
-      case Role.admin: {
-        return true;
-      }
-      case Role.editor: {
-        // check project permissions later
-        return true;
-      }
-      default:
-        return false;
-    }
-  };
-
-  getUser = async (context: ExecutionContext): Promise<User> => {
+  private getUser = async (context: ExecutionContext): Promise<User | null> => {
     const request: Request = context.switchToHttp().getRequest();
 
     if (request.user) {
       return request.user as User;
     }
 
+    const apiKey = request.header('apiKey');
+    if (!apiKey) {
+      return null;
+    }
+
     return this.prismaService.user.findUnique({
-      where: { apiKey: request.header('apiKey') },
+      where: { apiKey },
     });
   };
 }
