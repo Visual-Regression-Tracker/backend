@@ -383,6 +383,10 @@ export class TestRunsService {
           // reviewer edits the ignore areas, say — must not leave the previous
           // signature behind describing a change that no longer exists.
           changeSignature: diffResult?.changeSignature ? JSON.stringify(diffResult.changeSignature) : null,
+          // Overwritten together with the diff they were made from, so a
+          // recomputed comparison never leaves a picture of the old change.
+          imageThumbnailName: diffResult?.imageThumbnailName ?? null,
+          diffThumbnailName: diffResult?.diffThumbnailName ?? null,
         },
       })
       .then((testRun) => {
@@ -392,7 +396,17 @@ export class TestRunsService {
   }
 
   async calculateDiff(projectId: string, testRun: TestRun): Promise<TestRun> {
-    this.staticService.deleteImage(testRun.diffName);
+    // The recomputed result replaces all three names on the row, so the old
+    // pictures go with it — leaving the thumbnails behind would strand two more
+    // objects on every ignore-area edit.
+    //
+    // They go *after* the new result is persisted, not before. Deleting first
+    // meant a comparison that failed left the row pointing at files that were
+    // already gone: the reviewer opens the run and finds broken pictures, with
+    // nothing to fall back on. Deleting late can only ever leak bytes, which is
+    // the cheaper of the two failures by a distance.
+    const previous = [testRun.diffName, testRun.imageThumbnailName, testRun.diffThumbnailName];
+
     const diffResult = await this.compareService.getDiff({
       projectId,
       data: {
@@ -403,7 +417,10 @@ export class TestRunsService {
         saveDiffAsFile: true,
       },
     });
-    return this.saveDiffResult(testRun.id, diffResult);
+    const saved = await this.saveDiffResult(testRun.id, diffResult);
+
+    previous.forEach((name) => this.staticService.deleteImage(name));
+    return saved;
   }
 
   async create({
@@ -465,6 +482,10 @@ export class TestRunsService {
     await Promise.all([
       this.staticService.deleteImage(testRun.diffName),
       this.staticService.deleteImage(testRun.imageName),
+      // left behind, these would outlive every build that referenced them and
+      // nothing would ever collect them
+      this.staticService.deleteImage(testRun.imageThumbnailName),
+      this.staticService.deleteImage(testRun.diffThumbnailName),
     ]);
 
     try {
