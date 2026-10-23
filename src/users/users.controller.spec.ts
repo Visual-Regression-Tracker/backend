@@ -74,7 +74,41 @@ describe('Users Controller', () => {
     expect(res.redirect).toHaveBeenCalledWith('http://localhost:8080/login#error=oidc_login_failed');
   });
 
+  it('redirects to the frontend with an error when the state cookie is malformed', async () => {
+    usersService.isOidcEnabled.mockReturnValue(true);
+    usersService.oidcBuildFrontendRedirect.mockReturnValue('http://localhost:8080/login#error=oidc_login_failed');
+    const res = { clearCookie: jest.fn(), redirect: jest.fn(), status: jest.fn().mockReturnThis(), send: jest.fn() };
+
+    await controller.oidcCallback({ headers: { cookie: 'oidc_state=%E0%A4%A' }, query: {} } as never, res as never);
+
+    expect(usersService.oidcHandleCallback).not.toHaveBeenCalled();
+    expect(res.redirect).toHaveBeenCalledWith('http://localhost:8080/login#error=oidc_login_failed');
+  });
+
+  it('redirects to the frontend with an error when the identity provider is unreachable', async () => {
+    usersService.isOidcEnabled.mockReturnValue(true);
+    usersService.oidcGetAuthorizationUrl.mockRejectedValue(new Error('discovery down'));
+    usersService.oidcBuildFrontendRedirect.mockReturnValue('http://localhost:8080/login#error=oidc_login_failed');
+    const res = { cookie: jest.fn(), redirect: jest.fn() };
+
+    await controller.oidcLogin(res as never);
+
+    expect(res.cookie).not.toHaveBeenCalled();
+    expect(res.redirect).toHaveBeenCalledWith('http://localhost:8080/login#error=oidc_login_failed');
+  });
+
+  it('returns 404 on login when OIDC is disabled', async () => {
+    usersService.isOidcEnabled.mockReturnValue(false);
+    const res = { cookie: jest.fn(), redirect: jest.fn(), status: jest.fn().mockReturnThis(), send: jest.fn() };
+
+    await controller.oidcLogin(res as never);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(usersService.oidcGetAuthorizationUrl).not.toHaveBeenCalled();
+  });
+
   it('redirects to the identity provider and stores the PKCE state cookie', async () => {
+    usersService.isOidcEnabled.mockReturnValue(true);
     usersService.oidcGetAuthorizationUrl.mockResolvedValue({
       url: 'https://idp.example.com/authorize',
       state: 'state',

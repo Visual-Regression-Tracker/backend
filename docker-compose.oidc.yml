@@ -17,6 +17,10 @@ services:
       OIDC_ADMIN_VALUES: 'vrt-admin'
       OIDC_DEFAULT_ROLE: 'editor'
       OIDC_REQUIRE_VERIFIED_EMAIL: 'true'
+    # Docker Desktop provides host.docker.internal; on Linux map it to the host
+    # so the api container reaches the mock IdP through the published port.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,4 +39,4 @@ services:
     volumes:
       - ./oauth2-mock-server-config.json:/config/oidc-config.json:ro
     ports:
-      - "8090:8080"
+      - '8090:8080'

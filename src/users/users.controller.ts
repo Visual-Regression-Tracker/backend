@@ -64,7 +64,22 @@ export class UsersController {
 
   @Get('oidc/login')
   async oidcLogin(@Res() res: Response): Promise<void> {
-    const { url, state, codeVerifier } = await this.usersService.oidcGetAuthorizationUrl();
+    if (!this.usersService.isOidcEnabled()) {
+      res.status(HttpStatus.NOT_FOUND).send('OIDC is not enabled.');
+      return;
+    }
+
+    let authorization: { url: string; state: string; codeVerifier: string };
+    try {
+      authorization = await this.usersService.oidcGetAuthorizationUrl();
+    } catch (e) {
+      // The browser navigated here directly, so send it back to the login page
+      // instead of showing a raw JSON error (e.g. when discovery fails).
+      this.logger.warn(`OIDC login failed: ${e?.message ?? e}`);
+      res.redirect(this.usersService.oidcBuildFrontendRedirect(undefined, 'oidc_login_failed'));
+      return;
+    }
+    const { url, state, codeVerifier } = authorization;
     res.cookie(OIDC_STATE_COOKIE, `${state}.${codeVerifier}`, {
       httpOnly: true,
       sameSite: 'lax',
@@ -82,9 +97,10 @@ export class UsersController {
       return;
     }
 
-    const [state, codeVerifier] = (readCookie(req, OIDC_STATE_COOKIE) ?? '').split('.');
     let target = this.usersService.oidcBuildFrontendRedirect(undefined, 'oidc_login_failed');
     try {
+      // Inside the try: decodeURIComponent throws on a malformed cookie value.
+      const [state, codeVerifier] = (readCookie(req, OIDC_STATE_COOKIE) ?? '').split('.');
       if (!state || !codeVerifier) {
         throw new Error('Missing or malformed OIDC state cookie.');
       }

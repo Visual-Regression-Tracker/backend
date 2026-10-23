@@ -138,6 +138,30 @@ describe('OidcUsersService', () => {
       expect(provider(new URL('https://idp.example.com/token'), {}).agent).toBeInstanceOf(HttpsAgent);
       expect(provider(new URL('https://other.example.com/token'), {})).toEqual({});
     });
+
+    it('applies the insecure TLS agent to the discovered issuer for JWKS requests', async () => {
+      const issuer: Record<string, unknown> = {
+        Client: class {
+          authorizationUrl = mockAuthorizationUrl;
+        },
+      };
+      mockDiscover.mockResolvedValue(issuer);
+      const tlsConfigService = {
+        get: jest.fn((key: string, defaultValue?: string) =>
+          key === 'OIDC_TLS_NO_VERIFY' ? 'true' : configService.get(key, defaultValue)
+        ),
+        getOrThrow: configService.getOrThrow,
+      } as unknown as ConfigService;
+      const tlsService = new OidcUsersService(tlsConfigService, prismaService, authService);
+
+      await tlsService.getAuthorizationUrl();
+
+      const provider = issuer[custom.http_options as unknown as string] as (
+        url: URL,
+        options: object
+      ) => Record<string, unknown>;
+      expect(provider(new URL('https://idp.example.com/jwks'), {}).agent).toBeInstanceOf(HttpsAgent);
+    });
   });
 
   describe('buildFrontendRedirect', () => {
@@ -248,7 +272,7 @@ describe('OidcUsersService', () => {
 
       await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
 
-      expect(mockUserinfo).toHaveBeenCalledWith('access-token');
+      expect(mockUserinfo).toHaveBeenCalledWith(expect.objectContaining({ access_token: 'access-token' }));
       expect(create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ email: 'from.userinfo@example.com' }) })
       );
@@ -298,6 +322,29 @@ describe('OidcUsersService', () => {
       await expect(service.handleCallback({ code: 'code', state: 'mock-state' }, checks)).rejects.toThrow(
         'OIDC login failed.'
       );
+    });
+
+    it('accepts an email_verified claim serialized as a string', async () => {
+      mockCallback.mockResolvedValue({
+        claims: () => ({ email: 'test@example.com', email_verified: 'true', groups: ['editor'] }),
+      });
+      findUnique.mockResolvedValue(user);
+
+      const result = await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+
+      expect(result.token).toBe('vrt-jwt');
+    });
+
+    it('keeps the role of an existing user when the role claim is missing', async () => {
+      mockCallback.mockResolvedValue({
+        claims: () => ({ email: 'test@example.com', email_verified: true }),
+      });
+      findUnique.mockResolvedValue({ ...user, role: Role.admin });
+
+      const result = await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+
+      expect(update).not.toHaveBeenCalled();
+      expect(result.token).toBe('vrt-jwt');
     });
 
     it('leaves an existing user unchanged when the role already matches', async () => {

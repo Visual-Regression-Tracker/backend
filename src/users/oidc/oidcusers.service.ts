@@ -93,6 +93,11 @@ export class OidcUsersService implements Users {
     }
 
     const issuer = await Issuer.discover(this.oidcConfig.issuerUrl);
+    if (httpOptions) {
+      // The JWKS used to validate the ID token is fetched through the issuer
+      // instance, which does not inherit the static option set above.
+      issuer[custom.http_options] = httpOptions as never;
+    }
     const client = new issuer.Client({
       client_id: this.oidcConfig.clientId,
       client_secret: this.oidcConfig.clientSecret,
@@ -166,7 +171,9 @@ export class OidcUsersService implements Users {
     const claims: Record<string, unknown> = { ...tokenSet.claims() };
     if (tokenSet.access_token && !this.claimToString(claims, this.oidcConfig.attributeMail)) {
       try {
-        Object.assign(claims, await client.userinfo(tokenSet.access_token));
+        // Passing the whole token set makes openid-client verify that the
+        // userinfo `sub` matches the ID token before the claims are merged.
+        Object.assign(claims, await client.userinfo(tokenSet));
       } catch (e) {
         this.logger.warn(`OIDC userinfo request failed: ${e}`);
       }
@@ -181,18 +188,26 @@ export class OidcUsersService implements Users {
     // Never trust an email address the identity provider marks as unverified:
     // it could otherwise be used to take over an existing VRT account. Can be
     // disabled for providers that do not emit a reliable email_verified claim.
-    if (this.oidcConfig.requireVerifiedEmail && claims.email_verified !== true) {
+    // Some providers serialize the claim as the string "true".
+    const emailVerified = claims.email_verified === true || claims.email_verified === 'true';
+    if (this.oidcConfig.requireVerifiedEmail && !emailVerified) {
       this.logger.warn(`OIDC login rejected: email '${email}' is not verified by the identity provider`);
       throw new HttpException('OIDC login failed.', HttpStatus.BAD_REQUEST);
     }
 
     const role = this.resolveRole(claims);
+    // Without the role claim (e.g. a missing scope or mapper) the provider says
+    // nothing about the role, so keep existing users' roles instead of
+    // demoting every admin to the default role.
+    const hasRoleClaim = claims[this.oidcConfig.roleClaim] != null;
 
     let user = await this.prismaService.user.findUnique({ where: { email } });
 
     if (!user) {
       this.logger.log(`'${email}' authenticated via OIDC but not found in VRT database. Creating user.`);
       user = await this.createUserFromClaims(claims, email, role);
+    } else if (!hasRoleClaim) {
+      this.logger.warn(`Claim '${this.oidcConfig.roleClaim}' not found for '${email}'. Keeping role '${user.role}'.`);
     } else if (user.role !== role) {
       this.logger.log(`Updating role of '${email}' from '${user.role}' to '${role}' based on OIDC claims.`);
       user = await this.prismaService.user.update({ where: { id: user.id }, data: { role } });
