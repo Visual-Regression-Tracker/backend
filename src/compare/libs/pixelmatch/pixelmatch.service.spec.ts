@@ -169,7 +169,9 @@ describe('getDiff', () => {
         threshold: 0.1,
       }
     );
-    expect(saveImageMock).toHaveBeenCalledTimes(1);
+    // the full-size diff first, then the two thumbnails made beside it
+    expect(saveImageMock.mock.calls[0][0]).toBe('diff');
+    expect(saveImageMock).toHaveBeenCalledTimes(3);
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName,
@@ -247,7 +249,9 @@ describe('getDiff', () => {
       DEFAULT_CONFIG
     );
 
-    expect(saveImageMock).toHaveBeenCalledTimes(1);
+    // the full-size diff first, then the two thumbnails made beside it
+    expect(saveImageMock.mock.calls[0][0]).toBe('diff');
+    expect(saveImageMock).toHaveBeenCalledTimes(3);
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName,
@@ -282,14 +286,14 @@ describe('change signature', () => {
     return { service: module.get<PixelmatchService>(PixelmatchService), run };
   };
 
-  const compare = (service: PixelmatchService) =>
+  const compare = (service: PixelmatchService, saveDiffAsFile = false) =>
     service.getDiff(
       {
         baseline: 'baseline.png',
         image: 'image.png',
         ignoreAreas: [],
         diffTollerancePercent: 0,
-        saveDiffAsFile: false,
+        saveDiffAsFile,
       },
       DEFAULT_CONFIG
     );
@@ -316,6 +320,60 @@ describe('change signature', () => {
       includeAA: DEFAULT_CONFIG.ignoreAntialiasing,
       signature: [0.25, 0.75],
     });
+  });
+
+  const initSaving = async (output: Record<string, unknown>) => {
+    const saveImage = jest
+      .fn()
+      .mockResolvedValueOnce('diff.png')
+      .mockResolvedValueOnce('image.thumb.png')
+      .mockResolvedValueOnce('diff.thumb.png');
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PixelmatchService,
+        { provide: DiffWorkerPool, useValue: { run: jest.fn().mockResolvedValue(output) } },
+        {
+          provide: StaticService,
+          useValue: {
+            getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('png')),
+            saveImage,
+            deleteImage: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+    return { service: module.get<PixelmatchService>(PixelmatchService), saveImage };
+  };
+
+  const overTolerance = {
+    equal: false,
+    isSameDimension: true,
+    pixelMisMatchCount: 10,
+    diffPercent: 5,
+    imageThumbnail: Buffer.from('small image'),
+    diffThumbnail: Buffer.from('small diff'),
+  };
+
+  it('saves the thumbnails and reports the names they went under', async () => {
+    const { service } = await initSaving({ ...overTolerance, diffBuffer: Buffer.from('the diff') });
+
+    const result = await compare(service, true);
+
+    expect(result.imageThumbnailName).toBe('image.thumb.png');
+    expect(result.diffThumbnailName).toBe('diff.thumb.png');
+  });
+
+  // shouldAutoApprove compares against past baselines with saveDiffAsFile off
+  // and throws the result away. Storing thumbnails for those comparisons would
+  // leave two objects per attempt that nothing ever references or deletes.
+  it('stores nothing when the caller is not keeping the diff', async () => {
+    const { service, saveImage } = await initSaving(overTolerance);
+
+    const result = await compare(service, false);
+
+    expect(saveImage).not.toHaveBeenCalled();
+    expect(result.imageThumbnailName).toBeUndefined();
+    expect(result.diffThumbnailName).toBeUndefined();
   });
 
   it('leaves it out when the comparison produced none', async () => {

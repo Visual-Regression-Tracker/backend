@@ -33,4 +33,11 @@ export interface DiffResult {
    * pixelmatch.
    */
   changeSignature?: StampedSignature;
+  /**
+   * Names the small copies of the checkpoint and the diff were saved under, for
+   * the card grids to draw instead of the full-size files. Absent when the
+   * comparison produced no diff, or was not pixelmatch.
+   */
+  imageThumbnailName?: string;
+  diffThumbnailName?: string;
 }
