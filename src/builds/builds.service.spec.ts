@@ -17,6 +17,7 @@ const initService = async ({
   buildCreateMock = jest.fn(),
   buildUpdateMock = jest.fn(),
   buildFindUniqueMock = jest.fn(),
+  buildFindFirstMock = jest.fn(),
   buildDeleteMock = jest.fn(),
   buildUpsertMock = jest.fn(),
   buildCountMock = jest.fn(),
@@ -44,6 +45,7 @@ const initService = async ({
             create: buildCreateMock,
             update: buildUpdateMock,
             findUnique: buildFindUniqueMock,
+            findFirst: buildFindFirstMock,
             delete: buildDeleteMock,
             upsert: buildUpsertMock,
             count: buildCountMock,
@@ -155,7 +157,7 @@ describe('BuildsService', () => {
     expect(buildFindManyMock).toHaveBeenCalledWith({
       take: 10,
       skip: 20,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       where: { projectId },
     });
     expect(result).toEqual({
@@ -183,7 +185,7 @@ describe('BuildsService', () => {
     expect(buildFindManyMock).toHaveBeenCalledWith({
       take: 10,
       skip: 0,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       where,
     });
   });
@@ -201,8 +203,97 @@ describe('BuildsService', () => {
     expect(buildFindManyMock).toHaveBeenCalledWith({
       take: 10,
       skip: 0,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       where: { projectId },
+    });
+  });
+
+  describe('findMany around a build', () => {
+    const aroundBuildId = '7428548b-863f-40e8-b26d-2187cc98afa1';
+    const createdAt = new Date('2026-09-01T10:00:00.000Z');
+    const projectId = 'someId';
+
+    it('returns the page that holds the build rather than the one asked for', async () => {
+      const buildFindFirstMock = jest.fn().mockResolvedValueOnce({ id: aroundBuildId, createdAt });
+      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
+      // 35 builds sit ahead of it, then the total
+      const buildCountMock = jest.fn().mockResolvedValueOnce(35).mockResolvedValueOnce(50);
+      mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
+      service = await initService({ buildFindFirstMock, buildFindManyMock, buildCountMock });
+
+      const result = await service.findMany(projectId, 10, 0, undefined, aroundBuildId);
+
+      expect(buildFindFirstMock).toHaveBeenCalledWith({
+        where: { projectId, id: aroundBuildId },
+        select: { id: true, createdAt: true },
+      });
+      expect(buildCountMock).toHaveBeenNthCalledWith(1, {
+        where: {
+          projectId,
+          OR: [{ createdAt: { gt: createdAt } }, { createdAt, id: { gt: aroundBuildId } }],
+        },
+      });
+      // the fourth page of ten starts at 30, and 35 is on it
+      expect(buildFindManyMock).toHaveBeenCalledWith({
+        take: 10,
+        skip: 30,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        where: { projectId },
+      });
+      expect(result.skip).toBe(30);
+    });
+
+    it('counts only what the search left, so the page matches the list on screen', async () => {
+      const buildFindFirstMock = jest.fn().mockResolvedValueOnce({ id: aroundBuildId, createdAt });
+      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
+      const buildCountMock = jest.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(4);
+      mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
+      service = await initService({ buildFindFirstMock, buildFindManyMock, buildCountMock });
+
+      await service.findMany(projectId, 2, 0, 'Onboarding', aroundBuildId);
+
+      const ciBuildId = { contains: 'Onboarding', mode: Prisma.QueryMode.insensitive };
+      expect(buildFindFirstMock).toHaveBeenCalledWith({
+        where: { projectId, ciBuildId, id: aroundBuildId },
+        select: { id: true, createdAt: true },
+      });
+      expect(buildCountMock).toHaveBeenNthCalledWith(1, {
+        where: {
+          projectId,
+          ciBuildId,
+          OR: [{ createdAt: { gt: createdAt } }, { createdAt, id: { gt: aroundBuildId } }],
+        },
+      });
+      expect(buildFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ skip: 2 }));
+    });
+
+    it('falls back to the page asked for when the build is not in the list', async () => {
+      // deleted, another project's, or filtered out by the search: a stale link
+      // should still open the list rather than fail
+      const buildFindFirstMock = jest.fn().mockResolvedValueOnce(null);
+      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
+      const buildCountMock = jest.fn().mockResolvedValueOnce(50);
+      mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
+      service = await initService({ buildFindFirstMock, buildFindManyMock, buildCountMock });
+
+      const result = await service.findMany(projectId, 10, 20, undefined, aroundBuildId);
+
+      expect(buildCountMock).toHaveBeenCalledTimes(1);
+      expect(buildFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ skip: 20 }));
+      expect(result.skip).toBe(20);
+    });
+
+    it('does not divide by a page of no size', async () => {
+      const buildFindFirstMock = jest.fn().mockResolvedValueOnce({ id: aroundBuildId, createdAt });
+      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
+      const buildCountMock = jest.fn().mockResolvedValueOnce(0);
+      mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
+      service = await initService({ buildFindFirstMock, buildFindManyMock, buildCountMock });
+
+      const result = await service.findMany(projectId, 0, 0, undefined, aroundBuildId);
+
+      expect(result.skip).toBe(0);
+      expect(buildFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ skip: 0 }));
     });
   });
 
@@ -275,7 +366,7 @@ describe('BuildsService', () => {
         where: { projectId },
         take: undefined,
         skip: 1,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       expect(removeMock).toHaveBeenCalledTimes(2);
       expect(removeMock).toHaveBeenCalledWith(build1.id);

@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
 }
 
@@ -72,6 +72,20 @@ model TestRun {
   ignoreAreas           String         @default("[]")
   tempIgnoreAreas       String         @default("[]")
   vlmDescription        String?
+  // Position-independent colour signature of this run's change, as JSON, so the
+  // variations dialog can group a screen's locales without fetching and
+  // decoding every sibling's screenshots at review time. Written once, next to
+  // the diff that already decoded them. Null on runs that predate this, that
+  // have no diff, or that were compared by something other than pixelmatch —
+  // those fall back to computing it on demand.
+  changeSignature       String?
+  // Small copies of the checkpoint and of the diff, made at ingest from the
+  // pixels the comparison had already decoded. The card grids draw pictures a
+  // hundred-odd pixels wide, and pulling the full-size files for that cost
+  // megabytes per screen. Null on runs ingested before this, which fall back to
+  // the full-size file.
+  imageThumbnailName    String?
+  diffThumbnailName     String?
   baseline              Baseline?
   build                 Build          @relation(fields: [buildId], references: [id])
   project               Project?       @relation(fields: [projectId], references: [id])
