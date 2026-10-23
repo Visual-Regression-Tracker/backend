@@ -5,6 +5,7 @@ import { Agent as HttpsAgent } from 'node:https';
 import { AuthService } from '../../auth/auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OidcUsersService } from './oidcusers.service';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 const mockAuthorizationUrl = jest.fn();
 const mockCallback = jest.fn();
@@ -359,6 +360,30 @@ describe('OidcUsersService', () => {
       await claimService.handleCallback({ code: 'code', state: 'mock-state' }, checks);
 
       expect(update).toHaveBeenCalledWith({ where: { id: user.id }, data: { role: Role.admin } });
+    });
+
+    it('uses the user a concurrent first login created', async () => {
+      mockCallback.mockResolvedValue({
+        claims: () => ({ email: 'race@example.com', email_verified: true }),
+      });
+      findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ ...user, email: 'race@example.com' });
+      create.mockRejectedValue(new PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: '5' }));
+
+      const result = await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+
+      expect(findUnique).toHaveBeenCalledTimes(2);
+      expect(result.token).toBe('vrt-jwt');
+    });
+
+    it('rethrows a unique violation that is not a concurrent login', async () => {
+      mockCallback.mockResolvedValue({
+        claims: () => ({ email: 'race@example.com', email_verified: true }),
+      });
+      findUnique.mockResolvedValue(null);
+      const error = new PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: '5' });
+      create.mockRejectedValue(error);
+
+      await expect(service.handleCallback({ code: 'code', state: 'mock-state' }, checks)).rejects.toBe(error);
     });
 
     it('keeps the role of an existing user when the role claim is missing', async () => {

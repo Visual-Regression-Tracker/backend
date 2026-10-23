@@ -3,7 +3,7 @@ import { Client as OidcClient, Issuer, generators, custom, TokenSet } from 'open
 import { CreateUserDto } from '../dto/user-create.dto';
 import { UserLoginResponseDto } from '../dto/user-login-response.dto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Role, User } from '@prisma/client';
+import { Prisma, Role, User } from '@prisma/client';
 import { UpdateUserDto } from '../dto/user-update.dto';
 import { AuthService } from '../../auth/auth.service';
 import { UserLoginRequestDto } from '../dto/user-login-request.dto';
@@ -207,7 +207,7 @@ export class OidcUsersService implements Users {
 
     if (!user) {
       this.logger.log(`'${email}' authenticated via OIDC but not found in VRT database. Creating user.`);
-      user = await this.createUserFromClaims(claims, email, role);
+      user = await this.createUserFromClaimsOrFindConcurrent(claims, email, role);
     } else if (!hasRoleClaim) {
       this.logger.warn(`Claim '${this.oidcConfig.roleClaim}' not found for '${email}'. Keeping role '${user.role}'.`);
     } else if (user.role !== role) {
@@ -217,6 +217,31 @@ export class OidcUsersService implements Users {
 
     const token = this.authService.signToken(user);
     return new UserLoginResponseDto(user, token);
+  }
+
+  /**
+   * Two first logins for the same email (e.g. two tabs) can both miss the
+   * lookup; the losing insert hits the unique email constraint, so use the
+   * user the other request created. Other unique violations (apiKey) still
+   * surface because the lookup then finds nothing.
+   */
+  private async createUserFromClaimsOrFindConcurrent(
+    claims: Record<string, unknown>,
+    email: string,
+    role: Role
+  ): Promise<User> {
+    try {
+      return await this.createUserFromClaims(claims, email, role);
+    } catch (e) {
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') {
+        throw e;
+      }
+      const user = await this.prismaService.user.findUnique({ where: { email } });
+      if (!user) {
+        throw e;
+      }
+      return user;
+    }
   }
 
   private async createUserFromClaims(claims: Record<string, unknown>, email: string, role: Role): Promise<User> {
