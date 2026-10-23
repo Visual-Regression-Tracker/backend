@@ -3,7 +3,9 @@ import { Worker } from 'worker_threads';
 import { availableParallelism } from 'os';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { computePixelmatchDiff, PixelmatchJobInput, PixelmatchJobOutput } from './libs/pixelmatch/pixelmatch.core';
+import { PixelmatchJobInput, PixelmatchJobOutput } from './libs/pixelmatch/pixelmatch.core';
+import { SignatureJobInput, SignatureJobOutput } from './libs/pixelmatch/signature.core';
+import { runWorkerJob, WorkerJobInput, WorkerJobOutput } from './libs/pixelmatch/worker-job';
 
 const WORKER_FILE = join(__dirname, 'libs', 'pixelmatch', 'pixelmatch.worker.js');
 
@@ -13,17 +15,18 @@ const MAX_SPAWN_FAILURES = 3;
 const MAX_JOB_ATTEMPTS = 2;
 
 interface Job {
-  input: PixelmatchJobInput;
-  resolve: (output: PixelmatchJobOutput) => void;
+  input: WorkerJobInput;
+  resolve: (output: WorkerJobOutput) => void;
   reject: (error: Error) => void;
   attempts: number;
 }
 
 /**
- * Fixed pool of worker threads for CPU-bound image diffing. Keeps the event
- * loop free during build ingestion so the API stays responsive while
- * screenshots are compared. Pool size: DIFF_WORKERS_COUNT env var, defaulting
- * to cores - 1 (capped) so the main thread always has a core left.
+ * Fixed pool of worker threads for CPU-bound image work — diffing a screenshot
+ * against its baseline, and the change signatures the variations dialog
+ * compares. Keeps the event loop free so the API stays responsive while
+ * screenshots are decoded and compared. Pool size: DIFF_WORKERS_COUNT env var,
+ * defaulting to cores - 1 (capped) so the main thread always has a core left.
  */
 @Injectable()
 export class DiffWorkerPool implements OnModuleDestroy {
@@ -46,9 +49,11 @@ export class DiffWorkerPool implements OnModuleDestroy {
   private destroyed = false;
   private spawnFailures = 0;
 
-  async run(input: PixelmatchJobInput): Promise<PixelmatchJobOutput> {
+  async run(input: PixelmatchJobInput): Promise<PixelmatchJobOutput>;
+  async run(input: SignatureJobInput): Promise<SignatureJobOutput>;
+  async run(input: WorkerJobInput): Promise<WorkerJobOutput> {
     if (this.inline) {
-      return computePixelmatchDiff(input);
+      return runWorkerJob(input);
     }
     if (this.destroyed) {
       throw new Error('Image diff worker pool is shut down');
@@ -57,7 +62,7 @@ export class DiffWorkerPool implements OnModuleDestroy {
       throw new Error(`Image diff queue is full (${this.queueLimit} jobs)`);
     }
     this.start();
-    return new Promise<PixelmatchJobOutput>((resolve, reject) => {
+    return new Promise<WorkerJobOutput>((resolve, reject) => {
       this.queue.push({ input, resolve, reject, attempts: 0 });
       this.dispatch();
     });
@@ -74,7 +79,7 @@ export class DiffWorkerPool implements OnModuleDestroy {
 
   private spawn(): void {
     const worker = new Worker(WORKER_FILE);
-    worker.on('message', (output: PixelmatchJobOutput & { error?: string }) => {
+    worker.on('message', (output: WorkerJobOutput & { error?: string }) => {
       const job = this.inFlight.get(worker);
       this.inFlight.delete(worker);
       // a message can arrive after the worker was dropped or the pool shut
@@ -144,7 +149,7 @@ export class DiffWorkerPool implements OnModuleDestroy {
     this.queue = [];
     for (const job of queued) {
       try {
-        job.resolve(computePixelmatchDiff(job.input));
+        job.resolve(runWorkerJob(job.input));
       } catch (error) {
         job.reject(error instanceof Error ? error : new Error(String(error)));
       }

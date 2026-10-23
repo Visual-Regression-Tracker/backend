@@ -12,6 +12,10 @@ import { Readable } from 'stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { generateNewImageName } from '../utils';
 
+// How long one pre-signed URL is reused before a new one is minted. Also the
+// lifetime S3 is asked to advertise on the object itself.
+export const URL_WINDOW_SECONDS = 3600;
+
 export class AWSS3Service implements Static {
   private readonly logger: Logger = new Logger(AWSS3Service.name);
   private readonly AWS_S3_BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME;
@@ -87,12 +91,34 @@ export class AWSS3Service implements Static {
     }
   }
 
+  /**
+   * A pre-signed URL for the object, stable for the length of a window.
+   *
+   * A browser caches by URL. Signing from the current instant gave every
+   * request a different URL, so the bytes it had just downloaded could never be
+   * reused: reopening a screen, or stepping back one, paid for the whole image
+   * again. Signing from the start of a fixed window instead makes every request
+   * inside that window produce the very same URL, which a cache can hit.
+   *
+   * The signature is given twice the window to live, so a URL handed out at the
+   * last second of one window is still good for a whole window afterwards.
+   *
+   * `ResponseCacheControl` makes S3 answer with a cache header of its own —
+   * without it a stable URL still leaves the browser guessing, since the bucket
+   * sets none. An image name is unique per upload and its bytes never change,
+   * so the only thing bounding the lifetime is the signature.
+   */
   async getImageUrl(imageName: string): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: `${this.AWS_S3_BUCKET_NAME}`,
       Key: imageName,
+      ResponseCacheControl: `private, max-age=${URL_WINDOW_SECONDS}`,
     });
-    return getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
+    const windowMs = URL_WINDOW_SECONDS * 1000;
+    return getSignedUrl(this.s3Client, command, {
+      expiresIn: URL_WINDOW_SECONDS * 2,
+      signingDate: new Date(Math.floor(Date.now() / windowMs) * windowMs),
+    });
   }
 
   async deleteImage(imageName: string): Promise<boolean> {
