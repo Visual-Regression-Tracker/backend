@@ -335,6 +335,32 @@ describe('OidcUsersService', () => {
       expect(result.token).toBe('vrt-jwt');
     });
 
+    it.each([
+      ['a dotted path into nested claims', 'realm_access.roles', { realm_access: { roles: ['vrt-admin'] } }],
+      [
+        'an exact claim name containing dots',
+        'https://vrt.example.com/roles',
+        { 'https://vrt.example.com/roles': ['vrt-admin'] },
+      ],
+    ])('reads the role claim via %s', async (_label, roleClaim, roleClaims) => {
+      const claimConfigService = {
+        get: jest.fn((key: string, defaultValue?: string) =>
+          key === 'OIDC_ROLE_CLAIM' ? roleClaim : configService.get(key, defaultValue)
+        ),
+        getOrThrow: configService.getOrThrow,
+      } as unknown as ConfigService;
+      const claimService = new OidcUsersService(claimConfigService, prismaService, authService);
+      mockCallback.mockResolvedValue({
+        claims: () => ({ email: 'test@example.com', email_verified: true, ...roleClaims }),
+      });
+      findUnique.mockResolvedValue(user);
+      update.mockResolvedValue({ ...user, role: Role.admin });
+
+      await claimService.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+
+      expect(update).toHaveBeenCalledWith({ where: { id: user.id }, data: { role: Role.admin } });
+    });
+
     it('keeps the role of an existing user when the role claim is missing', async () => {
       mockCallback.mockResolvedValue({
         claims: () => ({ email: 'test@example.com', email_verified: true }),

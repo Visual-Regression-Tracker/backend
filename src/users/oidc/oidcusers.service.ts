@@ -199,7 +199,7 @@ export class OidcUsersService implements Users {
     // Without the role claim (e.g. a missing scope or mapper) the provider says
     // nothing about the role, so keep existing users' roles instead of
     // demoting every admin to the default role.
-    const hasRoleClaim = claims[this.oidcConfig.roleClaim] != null;
+    const hasRoleClaim = this.readRoleClaim(claims) != null;
 
     let user = await this.prismaService.user.findUnique({ where: { email } });
 
@@ -241,8 +241,27 @@ export class OidcUsersService implements Users {
     return value.toString();
   }
 
+  /**
+   * Reads the role claim either by its exact name (which may itself contain
+   * dots, e.g. namespaced claims like 'https://example.com/roles') or as a
+   * dotted path into nested claims (e.g. Keycloak's 'realm_access.roles').
+   */
+  private readRoleClaim(claims: Record<string, unknown>): unknown {
+    const name = this.oidcConfig.roleClaim;
+    if (claims[name] != null) {
+      return claims[name];
+    }
+    return name
+      .split('.')
+      .reduce<unknown>(
+        (value, key) =>
+          value != null && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined,
+        claims
+      );
+  }
+
   private resolveRole(claims: Record<string, unknown>): Role {
-    const raw = claims[this.oidcConfig.roleClaim];
+    const raw = this.readRoleClaim(claims);
     const values = (Array.isArray(raw) ? raw : raw == null ? [] : [raw])
       .flatMap((value) => value.toString().split(/[\s,]+/))
       .filter((value) => value.length > 0)

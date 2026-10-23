@@ -73,6 +73,14 @@ the handshake, but cross-replica event delivery still requires `REDIS_URL`.
     --data-raw '{"email":"developer.one@ldapmock.local","password":"password"}'
     ```
 
+## OIDC (SSO)
+
+Set `OIDC_ENABLED=true` and the `OIDC_*` variables in `.env`. Password login and registration are disabled while OIDC is enabled.
+
+- **Roles come from the identity provider.** On every login the role is derived from `OIDC_ROLE_CLAIM`: `admin` when a value matches `OIDC_ADMIN_VALUES`, otherwise `OIDC_DEFAULT_ROLE`. Roles assigned in the VRT UI are overwritten at the next login. When the claim is missing from the token, an existing user keeps their role.
+- `OIDC_ROLE_CLAIM` accepts a claim name or a dotted path into nested claims, e.g. `realm_access.roles` for Keycloak realm roles.
+- **Accounts are matched by email.** The first login creates the user, later logins find them by the email claim. If a user's email changes at the identity provider, a new VRT account is created. Unverified emails are rejected unless `OIDC_REQUIRE_VERIFIED_EMAIL=false`.
+
 ## Local OIDC test server
 
 - Run `docker compose -f docker-compose.yml -f docker-compose.oidc.yml up` (see [docker docs for multiple-compose-files - merge](https://docs.docker.com/compose/multiple-compose-files/merge/))
