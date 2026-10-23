@@ -257,3 +257,75 @@ describe('getDiff', () => {
     });
   });
 });
+
+describe('change signature', () => {
+  // Correctness of the signature itself is pinned in pixelmatch.core.spec
+  // against the real pixelmatch; Pixelmatch is mocked in this file, so what is
+  // worth testing here is only the plumbing — that the service asks for one and
+  // carries what comes back into the result.
+  const initWithPool = async (output: Record<string, unknown>) => {
+    const run = jest.fn().mockResolvedValue(output);
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PixelmatchService,
+        { provide: DiffWorkerPool, useValue: { run } },
+        {
+          provide: StaticService,
+          useValue: {
+            getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('png')),
+            saveImage: jest.fn(),
+            deleteImage: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+    return { service: module.get<PixelmatchService>(PixelmatchService), run };
+  };
+
+  const compare = (service: PixelmatchService) =>
+    service.getDiff(
+      {
+        baseline: 'baseline.png',
+        image: 'image.png',
+        ignoreAreas: [],
+        diffTollerancePercent: 0,
+        saveDiffAsFile: false,
+      },
+      DEFAULT_CONFIG
+    );
+
+  // Asked for on every comparison, not only when the project has bulk approve
+  // switched on: computing it lazily would leave every run ingested before the
+  // flag was turned on without one.
+  it('asks for a signature and carries it into the result', async () => {
+    const { service, run } = await initWithPool({
+      equal: false,
+      isSameDimension: true,
+      pixelMisMatchCount: 10,
+      diffPercent: 5,
+      signature: [0.25, 0.75],
+    });
+
+    const result = await compare(service);
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ kind: 'diff', withSignature: true }));
+    // stamped with the settings it was computed under, so a stored one can be
+    // discarded when the project's config moves on
+    expect(result.changeSignature).toEqual({
+      threshold: DEFAULT_CONFIG.threshold,
+      includeAA: DEFAULT_CONFIG.ignoreAntialiasing,
+      signature: [0.25, 0.75],
+    });
+  });
+
+  it('leaves it out when the comparison produced none', async () => {
+    const { service } = await initWithPool({
+      equal: false,
+      isSameDimension: true,
+      pixelMisMatchCount: 10,
+      diffPercent: 5,
+    });
+
+    expect((await compare(service)).changeSignature).toBeUndefined();
+  });
+});
