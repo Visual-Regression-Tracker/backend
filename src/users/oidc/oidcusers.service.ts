@@ -10,7 +10,7 @@ import { UserLoginRequestDto } from '../dto/user-login-request.dto';
 import { Users } from '../users.interface';
 import { ConfigService } from '@nestjs/config';
 import { genSaltSync } from 'bcryptjs';
-import { Agent as HttpsAgent } from 'https';
+import { Agent as HttpsAgent } from 'node:https';
 
 type OIDCConfig = {
   issuerUrl: string;
@@ -62,9 +62,11 @@ export class OidcUsersService implements Users {
       requireVerifiedEmail:
         this.configService.get<string>('OIDC_REQUIRE_VERIFIED_EMAIL', 'true').toLowerCase() === 'true',
     };
-    this.appFrontendUrl = this.configService
-      .get<string>('APP_FRONTEND_URL', 'http://localhost:8080')
-      .replace(/\/+$/, '');
+    let appFrontendUrl = this.configService.get<string>('APP_FRONTEND_URL', 'http://localhost:8080');
+    while (appFrontendUrl.endsWith('/')) {
+      appFrontendUrl = appFrontendUrl.slice(0, -1);
+    }
+    this.appFrontendUrl = appFrontendUrl;
 
     if (this.oidcConfig.tlsNoVerify) {
       this.logger.warn('OIDC TLS certificate verification is disabled for the configured issuer only');
@@ -231,14 +233,25 @@ export class OidcUsersService implements Users {
   }
 
   private claimToString(claims: Record<string, unknown>, name: string): string | null {
-    const value = claims[name];
-    if (value == null) {
-      return null;
-    }
+    return this.scalarToString(this.toArray(claims[name])[0]);
+  }
+
+  private toArray(value: unknown): unknown[] {
     if (Array.isArray(value)) {
-      return value.length > 0 ? value[0].toString() : null;
+      return value;
     }
-    return value.toString();
+    return value == null ? [] : [value];
+  }
+
+  // Objects are ignored rather than stringified to '[object Object]'.
+  private scalarToString(value: unknown): string | null {
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    return null;
   }
 
   /**
@@ -262,16 +275,16 @@ export class OidcUsersService implements Users {
 
   private resolveRole(claims: Record<string, unknown>): Role {
     const raw = this.readRoleClaim(claims);
-    const values = (Array.isArray(raw) ? raw : raw == null ? [] : [raw])
-      .flatMap((value) => value.toString().split(/[\s,]+/))
+    const values = this.toArray(raw)
+      .flatMap((value) => (this.scalarToString(value) ?? '').split(/[\s,]+/))
       .filter((value) => value.length > 0)
       .map((value) => value.toLowerCase());
     const isAdmin = values.some((value) => this.oidcConfig.adminValues.includes(value));
     return isAdmin ? Role.admin : this.oidcConfig.defaultRole;
   }
 
-  async create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
-    throw new HttpException('User creation is disabled. Use SSO to login.', HttpStatus.BAD_REQUEST);
+  create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
+    return Promise.reject(new HttpException('User creation is disabled. Use SSO to login.', HttpStatus.BAD_REQUEST));
   }
 
   async update(id: string, userDto: UpdateUserDto): Promise<UserLoginResponseDto> {
@@ -288,12 +301,14 @@ export class OidcUsersService implements Users {
     return new UserLoginResponseDto(user, token);
   }
 
-  async changePassword(user: User, newPassword: string): Promise<boolean> {
+  changePassword(user: User, newPassword: string): Promise<boolean> {
     this.logger.warn(`${user.email} tried to change password - this is not supported for OIDC users`);
-    throw new HttpException('Password changes are disabled. Use SSO to change your password.', HttpStatus.BAD_REQUEST);
+    return Promise.reject(
+      new HttpException('Password changes are disabled. Use SSO to change your password.', HttpStatus.BAD_REQUEST)
+    );
   }
 
-  async login(userLoginRequestDto: UserLoginRequestDto): Promise<UserLoginResponseDto> {
-    throw new HttpException('Password login is disabled. Use SSO to login.', HttpStatus.BAD_REQUEST);
+  login(userLoginRequestDto: UserLoginRequestDto): Promise<UserLoginResponseDto> {
+    return Promise.reject(new HttpException('Password login is disabled. Use SSO to login.', HttpStatus.BAD_REQUEST));
   }
 }

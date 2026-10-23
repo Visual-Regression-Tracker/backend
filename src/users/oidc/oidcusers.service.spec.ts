@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Role, User } from '@prisma/client';
 import { Issuer, custom } from 'openid-client';
-import { Agent as HttpsAgent } from 'https';
+import { Agent as HttpsAgent } from 'node:https';
 import { AuthService } from '../../auth/auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OidcUsersService } from './oidcusers.service';
