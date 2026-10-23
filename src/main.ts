@@ -4,6 +4,7 @@ import { setupSwagger } from './swagger';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 import * as bodyParser from 'body-parser';
+import compression from 'compression';
 import { readFileSync, existsSync } from 'fs';
 import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -29,6 +30,14 @@ async function bootstrap() {
     httpsOptions: getHttpsOptions(),
   });
   app.useGlobalPipes(new ValidationPipe());
+
+  // Large builds return multi-megabyte test-run lists; gzip shrinks them ~10x.
+  // Images are already-compressed PNGs — recompressing them wastes CPU.
+  // Must be registered before any routes (incl. swagger) to cover them.
+  app.use(
+    compression({ filter: (req, res) => compression.filter(req, res) && res.getHeader('Content-Type') !== 'image/png' })
+  );
+
   setupSwagger(app);
 
   // Fan out socket.io events across API instances when running multiple

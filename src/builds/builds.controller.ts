@@ -40,15 +40,21 @@ export class BuildsController {
   @Get()
   @ApiOkResponse({ type: PaginatedBuildDto })
   @ApiQuery({ name: 'ciBuildId', required: false, description: 'Case insensitive substring of the CI build id' })
+  @ApiQuery({
+    name: 'aroundBuildId',
+    required: false,
+    description: 'Return the page holding this build instead of the one at `skip`. Ignored when it holds no page.',
+  })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   get(
     @Query('projectId', new ParseUUIDPipe()) projectId: string,
     @Query('take', new ParseIntPipe()) take: number,
     @Query('skip', new ParseIntPipe()) skip: number,
-    @Query('ciBuildId') ciBuildId?: string
+    @Query('ciBuildId') ciBuildId?: string,
+    @Query('aroundBuildId', new ParseUUIDPipe({ optional: true })) aroundBuildId?: string
   ): Promise<PaginatedBuildDto> {
-    return this.buildsService.findMany(projectId, take, skip, ciBuildId);
+    return this.buildsService.findMany(projectId, take, skip, ciBuildId, aroundBuildId);
   }
 
   @Get(':id')

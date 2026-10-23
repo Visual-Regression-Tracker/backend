@@ -4,7 +4,6 @@ import { TestVariation, Baseline, Build, TestRun, User } from '@prisma/client';
 import { StaticService } from '../static/static.service';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
-import { PNG } from 'pngjs';
 import { CreateTestRequestDto } from 'src/test-runs/dto/create-test-request.dto';
 import { BuildDto } from 'src/builds/dto/build.dto';
 import { getTestVariationUniqueData } from '../utils';
@@ -183,8 +182,8 @@ export class TestVariationsService {
 
     // compare source to destination branch variations
     for (const sourceBranchTestVariation of testVariations) {
-      const baseline = await this.staticService.getImage(sourceBranchTestVariation.baselineName);
-      if (baseline) {
+      const baselineBuffer = await this.staticService.getImageBuffer(sourceBranchTestVariation.baselineName);
+      if (baselineBuffer) {
         // get destination branch request
         const createTestRequestDto: CreateTestRequestDto = {
           ...sourceBranchTestVariation,
@@ -209,7 +208,7 @@ export class TestVariationsService {
         const testRun = await this.testRunsService.create({
           testVariation: destintionBranchTestVariation,
           createTestRequestDto,
-          imageBuffer: PNG.sync.write(baseline),
+          imageBuffer: baselineBuffer,
         });
 
         await this.testRunsService.calculateDiff(projectId, testRun);

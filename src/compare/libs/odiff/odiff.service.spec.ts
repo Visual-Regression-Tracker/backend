@@ -1,7 +1,8 @@
 import { TestingModule, Test } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
-import { IgnoreAreaDto } from 'src/test-runs/dto/ignore-area.dto';
+import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { StaticService } from '../../../static/static.service';
+import { HddService } from '../../../static/hdd/hdd.service';
 import { DIFF_DIMENSION_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { OdiffService, DEFAULT_CONFIG, ignoreAreaToRegionMapper } from './odiff.service';
 import { OdiffConfig, OdiffIgnoreRegions } from './odiff.types';
@@ -25,6 +26,11 @@ const initService = async ({
         provide: StaticService,
         useValue: {
           deleteImage: deleteImageMock,
+        },
+      },
+      {
+        provide: HddService,
+        useValue: {
           generateNewImage: generateNewImageMock,
           getImagePath: getImagePathMock,
         },

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompareService } from './compare.service';
+import { DiffWorkerPool } from './diff-worker-pool';
 import { LookSameService } from './libs/looks-same/looks-same.service';
 import { OdiffService } from './libs/odiff/odiff.service';
 import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
@@ -27,6 +28,7 @@ describe('CompareService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CompareService,
+        DiffWorkerPool,
         OdiffService,
         PixelmatchService,
         LookSameService,

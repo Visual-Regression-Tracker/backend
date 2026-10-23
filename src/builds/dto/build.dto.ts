@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Build, TestStatus } from '@prisma/client';
 import { TestRunDto } from 'src/test-runs/dto/testRun.dto';
+import { BuildStats } from '../build-stats';
 
 export class BuildDto {
   @ApiProperty()
@@ -41,7 +42,7 @@ export class BuildDto {
   @ApiProperty()
   merge: boolean;
 
-  constructor(build: Build & { testRuns?: TestRunDto[] }) {
+  constructor(build: Build & { testRuns?: TestRunDto[] }, stats?: BuildStats) {
     this.id = build.id;
     this.ciBuildId = build.ciBuildId;
     this.number = build.number;
@@ -58,7 +59,12 @@ export class BuildDto {
     this.failedCount = 0;
 
     this.merge = false;
-    if (build.testRuns) {
+    if (stats) {
+      this.passedCount = stats.passedCount;
+      this.unresolvedCount = stats.unresolvedCount;
+      this.failedCount = stats.failedCount;
+      this.merge = stats.merge;
+    } else if (build.testRuns) {
       // determine if merge
       this.merge = build.testRuns.some((testRun) => testRun.merge);
 
@@ -84,11 +90,10 @@ export class BuildDto {
       });
     }
 
-    if (!build.testRuns || build.testRuns.length === 0) {
-      this.status = 'new';
-    } else {
-      this.status = 'passed';
-    }
+    const hasTestRuns = stats
+      ? this.passedCount + this.unresolvedCount + this.failedCount > 0
+      : !!build.testRuns && build.testRuns.length > 0;
+    this.status = hasTestRuns ? 'passed' : 'new';
     if (this.failedCount > 0) {
       this.status = 'failed';
     }

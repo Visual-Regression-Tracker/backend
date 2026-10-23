@@ -28,8 +28,8 @@ async function createDefaultUser() {
     console.log(error.message);
   }
 
-  const defaultEmail = 'visual-regression-tracker@example.com';
-  const defaultPassword = '123456';
+  const defaultEmail = process.env.DEFAULT_USER_EMAIL || 'visual-regression-tracker@example.com';
+  const defaultPassword = process.env.DEFAULT_USER_PASSWORD || '123456';
   const salt = await genSalt(10);
 
   // Only create default user if the db has no admin user
@@ -47,7 +47,7 @@ async function createDefaultUser() {
           firstName: 'fname',
           lastName: 'lname',
           role: Role.admin,
-          apiKey: 'DEFAULTUSERAPIKEYTOBECHANGED',
+          apiKey: process.env.DEFAULT_USER_API_KEY || 'DEFAULTUSERAPIKEYTOBECHANGED',
           password: await hash(defaultPassword, salt),
         },
       })

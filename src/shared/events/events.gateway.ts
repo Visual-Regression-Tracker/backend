@@ -1,7 +1,8 @@
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'socket.io';
-import { Build, TestRun } from '@prisma/client';
+import { TestRun } from '@prisma/client';
 import { BuildDto } from '../../builds/dto/build.dto';
+import { getBuildsStats } from '../../builds/build-stats';
 import { debounce } from 'lodash';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -90,24 +91,20 @@ export class EventsGateway {
 
   private buildUpdatedDebounced = debounce(
     () => {
-      this.prismaService.build
-        .findMany({
-          where: {
-            id: {
-              in: this.buildsUpdatedQueued,
-            },
-          },
-          include: {
-            testRuns: true,
-          },
-        })
-        .then((builds: Array<Build>) => {
-          this.server.emit(
-            'build_updated',
-            builds.map((build: Build) => new BuildDto(build))
-          );
-        });
+      // Deduplicate: during ingestion the queue holds one entry per test run.
+      // Stats are aggregated in the database — a build can hold thousands of
+      // test runs and this fires on every debounced event burst.
+      const buildIds = [...new Set(this.buildsUpdatedQueued)];
       this.buildsUpdatedQueued = [];
+      Promise.all([
+        this.prismaService.build.findMany({ where: { id: { in: buildIds } } }),
+        getBuildsStats(this.prismaService, buildIds),
+      ]).then(([builds, stats]) => {
+        this.server.emit(
+          'build_updated',
+          builds.map((build) => new BuildDto(build, stats.get(build.id)))
+        );
+      });
     },
     this.debounceTimeout,
     {
