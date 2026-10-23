@@ -43,18 +43,3 @@ export interface CoordBounds {
    */
   bottom: number;
 }
-
-export type LookSameResult = {
-  /**
-   * true if images are equal, false - otherwise
-   */
-  equal?: boolean;
-  /**
-   * diff bounds for not equal images
-   */
-  diffBounds?: CoordBounds;
-  /**
-   * diff clusters for not equal images
-   */
-  diffClusters?: CoordBounds[];
-};
