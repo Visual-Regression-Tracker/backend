@@ -24,7 +24,7 @@ export class OdiffService implements ImageComparator {
 
   constructor(
     private readonly staticService: StaticService,
-    private readonly hddService: HddService,
+    private readonly hddService: HddService
   ) {}
 
   parseConfig(configJson: string): OdiffConfig {
