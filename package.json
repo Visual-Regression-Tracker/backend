@@ -16,13 +16,13 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test,prisma}/**/*.ts\"",
-    "test": "jest --projects src",
-    "test:watch": "jest --projects src --watch",
-    "test:cov": "jest --projects src --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --projects src --runInBand",
-    "test:e2e": "jest --projects test",
-    "test:acceptance": "jest --projects test_acceptance",
-    "test:ldap": "jest --projects test_ldap"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects src",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects src --watch",
+    "test:cov": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects src --coverage",
+    "test:debug": "node --experimental-vm-modules --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --projects src --runInBand",
+    "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test",
+    "test:acceptance": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_acceptance",
+    "test:ldap": "node --experimental-vm-modules node_modules/jest/bin/jest.js --projects test_ldap"
   },
   "engines": {
     "node": ">=20"
