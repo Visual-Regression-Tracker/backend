@@ -6,7 +6,7 @@ import { DiffResult } from '../../../test-runs/diffResult';
 import { applyIgnoreAreas, parseConfig } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
-import { LookSameResult, LooksSameConfig } from './looks-same.types';
+import { LooksSameConfig } from './looks-same.types';
 import looksSame from 'looks-same';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 
@@ -54,42 +54,48 @@ export class LookSameService implements ImageComparator {
 
     // compare
     const compareResult = await this.compare(baselineIgnored, imageIgnored, config);
+    if (!compareResult) {
+      // looks-same failed: keep the run for review instead of failing it
+      result.status = TestStatus.unresolved;
+      return result;
+    }
+
+    result.pixelMisMatchCount = compareResult.differentPixels;
+    result.diffPercent =
+      compareResult.totalPixels > 0 ? (compareResult.differentPixels * 100) / compareResult.totalPixels : 0;
+
     if (compareResult.equal) {
       result.status = TestStatus.ok;
     } else {
       result.status = TestStatus.unresolved;
       if (data.saveDiffAsFile) {
-        result.diffName = await this.createDiff(baselineIgnored, imageIgnored, config);
+        result.diffName = await this.saveDiff(compareResult.diffImage);
       }
     }
 
     return result;
   }
 
-  async compare(baseline: PNG, image: PNG, config: LooksSameConfig): Promise<LookSameResult | undefined> {
-    const diffResult = await looksSame(PNG.sync.write(baseline), PNG.sync.write(image), config).catch((error) => {
-      this.logger.error(error.message);
-    });
-    if (diffResult) {
-      return diffResult;
-    }
-    return undefined;
+  // one pass gives the verdict, the pixel counts and the diff image together
+  async compare(
+    baseline: PNG,
+    image: PNG,
+    config: LooksSameConfig
+  ): Promise<looksSame.LooksSameResult<true> | undefined> {
+    return looksSame(PNG.sync.write(baseline), PNG.sync.write(image), { ...config, createDiffImage: true }).catch(
+      (error) => {
+        this.logger.error(error.message);
+        return undefined;
+      }
+    );
   }
 
-  async createDiff(baseline: PNG, image: PNG, config: LooksSameConfig): Promise<string | undefined> {
-    const buffer = await looksSame
-      .createDiff({
-        reference: PNG.sync.write(baseline),
-        current: PNG.sync.write(image),
-        highlightColor: '#ff00ff',
-        ...config,
-      })
-      .catch((error) => {
-        this.logger.error(error.message);
-      });
-    if (buffer) {
-      return this.staticService.saveImage('diff', buffer);
+  async saveDiff(diffImage: looksSame.DiffImage): Promise<string | null> {
+    try {
+      return await this.staticService.saveImage('diff', await diffImage.createBuffer('png'));
+    } catch (error) {
+      this.logger.error(error.message);
+      return null;
     }
-    return undefined;
   }
 }
