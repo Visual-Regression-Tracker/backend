@@ -94,7 +94,7 @@ export class LookSameService implements ImageComparator {
     try {
       return await this.staticService.saveImage('diff', await diffImage.createBuffer('png'));
     } catch (error) {
-      this.logger.error(error instanceof Error ? error.message : String(error));
+      this.logger.error((error as Error).message);
       return null;
     }
   }
