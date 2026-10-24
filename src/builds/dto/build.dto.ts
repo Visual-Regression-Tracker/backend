@@ -8,13 +8,13 @@ export class BuildDto {
   id: string;
 
   @ApiPropertyOptional()
-  ciBuildId?: string;
+  ciBuildId?: string | null;
 
   @ApiProperty()
-  number: number;
+  number: number | null;
 
   @ApiProperty()
-  branchName: string;
+  branchName: string | null;
 
   @ApiProperty()
   status: string;
@@ -29,7 +29,7 @@ export class BuildDto {
   createdAt: Date;
 
   @ApiPropertyOptional()
-  userId?: string;
+  userId?: string | null;
 
   @ApiProperty()
   passedCount: number;
@@ -38,7 +38,7 @@ export class BuildDto {
   @ApiProperty()
   failedCount: number;
   @ApiProperty()
-  isRunning: boolean;
+  isRunning: boolean | null;
   @ApiProperty()
   merge: boolean;
 
@@ -48,7 +48,6 @@ export class BuildDto {
     this.number = build.number;
     this.branchName = build.branchName;
     this.userId = build.userId;
-    this.status = build.status;
     this.projectId = build.projectId;
     this.updatedAt = build.updatedAt;
     this.createdAt = build.createdAt;

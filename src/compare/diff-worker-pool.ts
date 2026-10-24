@@ -158,8 +158,9 @@ export class DiffWorkerPool implements OnApplicationShutdown {
 
   private dispatch(): void {
     while (this.idle.length > 0 && this.queue.length > 0) {
-      const worker = this.idle.pop();
-      const job = this.queue.shift();
+      // the loop condition guarantees both are there
+      const worker = this.idle.pop()!;
+      const job = this.queue.shift()!;
       this.inFlight.set(worker, job);
       worker.postMessage(job.input);
     }

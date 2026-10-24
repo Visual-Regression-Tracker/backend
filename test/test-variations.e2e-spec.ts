@@ -2,8 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
-import { haveTestRunCreated, haveUserLogged } from './preconditions';
-import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
+import { haveTestRunCreated, haveUserLogged, LoggedUser } from './preconditions';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { Project } from '@prisma/client';
@@ -18,7 +17,7 @@ describe('TestVariations (e2e)', () => {
   let usersService: UsersService;
   let projecstService: ProjectsService;
   let buildsService: BuildsService;
-  let user: UserLoginResponseDto;
+  let user: LoggedUser;
   let project: Project;
   let testVariationsService: TestVariationsService;
 
@@ -62,9 +61,9 @@ describe('TestVariations (e2e)', () => {
       const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'develop', image_v1);
       await testRunsService.approve(testRun.id);
 
-      await testVariationsService.delete(testRun.testVariationId);
+      await testVariationsService.delete(testRun.testVariationId!);
 
-      expect((await testRunsService.findOne(testRun.id)).testVariationId).toBeNull();
+      expect((await testRunsService.findOne(testRun.id))!.testVariationId).toBeNull();
     });
   });
 });

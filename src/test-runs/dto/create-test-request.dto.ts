@@ -7,11 +7,11 @@ import { IgnoreAreaDto } from './ignore-area.dto';
 export class CreateTestRequestDto extends BaselineDataDto {
   @ApiProperty()
   @IsUUID()
-  buildId: string;
+  buildId!: string;
 
   @ApiProperty()
   @IsUUID()
-  projectId: string;
+  projectId!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -33,5 +33,5 @@ export class CreateTestRequestDto extends BaselineDataDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  comment?: string;
+  comment?: string | null;
 }

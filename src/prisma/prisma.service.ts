@@ -65,7 +65,8 @@ export function getPgOptions(databaseUrl: string | undefined): {
 } {
   let url: URL | undefined;
   try {
-    url = new URL(databaseUrl);
+    // undefined throws here like any other unparsable URL
+    url = new URL(databaseUrl as string);
   } catch {
     // an unparsable URL is left for pg to report when it connects
   }
@@ -107,8 +108,9 @@ export function getPgOptions(databaseUrl: string | undefined): {
       params.get('sslaccept') === 'strict'
         ? { ...(sslcert && { ca: readFileSync(isAbsolute(sslcert) ? sslcert : resolve('prisma', sslcert)) }) }
         : { rejectUnauthorized: false };
-    PRISMA_SSL_PARAMS.forEach((name) => url.searchParams.delete(name));
-    pool.connectionString = url.toString();
+    // prismaTls is only true for a parsed URL
+    PRISMA_SSL_PARAMS.forEach((name) => url!.searchParams.delete(name));
+    pool.connectionString = url!.toString();
     pool.ssl = sslmode === 'disable' ? false : ssl;
   }
 

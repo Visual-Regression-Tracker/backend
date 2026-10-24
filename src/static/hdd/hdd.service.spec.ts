@@ -158,7 +158,7 @@ describe('HddService', () => {
     });
 
     it.each(['', undefined, null])('returns null for an empty name (%p)', async (imageName) => {
-      await expect(service.getImageBuffer(imageName)).resolves.toBeNull();
+      await expect(service.getImageBuffer(imageName as string | null)).resolves.toBeNull();
     });
 
     it('rethrows a read failure other than a missing file', async () => {

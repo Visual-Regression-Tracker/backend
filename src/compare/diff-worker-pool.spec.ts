@@ -52,6 +52,6 @@ describe('DiffWorkerPool', () => {
     });
 
     expect(output.signature).toHaveLength(64);
-    expect(output.signature.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1);
+    expect(output.signature!.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1);
   });
 });

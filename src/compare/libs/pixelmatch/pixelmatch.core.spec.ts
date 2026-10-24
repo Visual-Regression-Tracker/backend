@@ -100,8 +100,8 @@ describe('computePixelmatchDiff with thumbnails', () => {
   it('returns a small picture of both the checkpoint and the diff', () => {
     const result = diffJob(blank, block(10, 10, RED), false, true);
 
-    const image = PNG.sync.read(Buffer.from(result.imageThumbnail));
-    const diff = PNG.sync.read(Buffer.from(result.diffThumbnail));
+    const image = PNG.sync.read(Buffer.from(result.imageThumbnail!));
+    const diff = PNG.sync.read(Buffer.from(result.diffThumbnail!));
     expect(Math.max(image.width, image.height)).toBeLessThanOrEqual(THUMBNAIL_MAX_DIMENSION);
     expect(Math.max(diff.width, diff.height)).toBeLessThanOrEqual(THUMBNAIL_MAX_DIMENSION);
   });

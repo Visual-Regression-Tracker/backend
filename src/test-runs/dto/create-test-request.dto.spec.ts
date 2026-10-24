@@ -27,8 +27,8 @@ describe('CreateTestRequestDto', () => {
   it('turns ignore areas into IgnoreAreaDto instances', () => {
     const dto = plainToInstance(CreateTestRequestDto, { ...valid, ignoreAreas: [area] });
 
-    expect(dto.ignoreAreas[0]).toBeInstanceOf(IgnoreAreaDto);
-    expect(dto.ignoreAreas[0]).toEqual(area);
+    expect(dto.ignoreAreas![0]).toBeInstanceOf(IgnoreAreaDto);
+    expect(dto.ignoreAreas![0]).toEqual(area);
   });
 
   it('rejects ids that are not uuids, and malformed optional fields', async () => {

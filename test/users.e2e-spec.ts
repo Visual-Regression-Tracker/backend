@@ -29,7 +29,7 @@ describe('Users (e2e)', () => {
   });
 
   afterEach(async () => {
-    await usersService.delete(user.id);
+    await usersService.delete(user.id!);
   });
 
   it('POST /register', () => {
@@ -51,7 +51,7 @@ describe('Users (e2e)', () => {
     const password = '123456';
     user = await usersService.create(generateUser(password));
     const loginData: UserLoginRequestDto = {
-      email: user.email,
+      email: user.email!,
       password,
     };
 
@@ -73,13 +73,13 @@ describe('Users (e2e)', () => {
     const password = '123456';
     user = await usersService.create(generateUser(password));
     const loggedUser = await usersService.login({
-      email: user.email,
+      email: user.email!,
       password,
     });
 
-    const res = await requestWithAuth(app, 'get', '/users/newApiKey', loggedUser.token).send().expect(200);
+    const res = await requestWithAuth(app, 'get', '/users/newApiKey', loggedUser.token!).send().expect(200);
 
-    const newUser = await usersService.findOne(user.id);
+    const newUser = (await usersService.findOne(user.id!))!;
     expect(res.text).not.toBe(user.apiKey);
     expect(res.text).toBe(newUser.apiKey);
   });
@@ -89,13 +89,13 @@ describe('Users (e2e)', () => {
     const password = '123456';
     user = await usersService.create(generateUser(password));
     const loggedUser = await usersService.login({
-      email: user.email,
+      email: user.email!,
       password,
     });
 
-    await requestWithAuth(app, 'put', '/users/password', loggedUser.token).send({ password: newPassword }).expect(200);
+    await requestWithAuth(app, 'put', '/users/password', loggedUser.token!).send({ password: newPassword }).expect(200);
 
-    const newUser = await usersService.findOne(user.id);
+    const newUser = (await usersService.findOne(user.id!))!;
     expect(compareSync(newPassword, newUser.password)).toBe(true);
   });
 
@@ -109,11 +109,11 @@ describe('Users (e2e)', () => {
     };
 
     const loggedUser = await usersService.login({
-      email: user.email,
+      email: user.email!,
       password,
     });
 
-    const res = await requestWithAuth(app, 'put', '/users', loggedUser.token).send(editedUser).expect(200);
+    const res = await requestWithAuth(app, 'put', '/users', loggedUser.token!).send(editedUser).expect(200);
 
     expect(res.body.id).toBe(user.id);
     expect(res.body.email).toBe(editedUser.email);

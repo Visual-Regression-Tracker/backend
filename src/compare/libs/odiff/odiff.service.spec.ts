@@ -261,7 +261,7 @@ describe('getDiff', () => {
       DEFAULT_CONFIG
     );
 
-    expect(compareMock.mock.lastCall[3]).not.toHaveProperty('ignoreRegions');
+    expect(compareMock.mock.lastCall![3]).not.toHaveProperty('ignoreRegions');
   });
 
   it('ok', async () => {

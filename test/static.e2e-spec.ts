@@ -123,7 +123,7 @@ describe('Images (e2e)', () => {
       await testRunsService.approve(first.id);
       const run = await postRun(pngBuffer([{ x: 5, y: 5, w: 10, h: 10, color: RED }]));
       expect(run.status).toBe(TestStatus.unresolved);
-      const stored = await prisma.testRun.findUnique({ where: { id: run.id } });
+      const stored = (await prisma.testRun.findUnique({ where: { id: run.id } }))!;
 
       for (const name of [stored.diffName, stored.imageThumbnailName, stored.diffThumbnailName]) {
         const res = await get(`/images/${name}/download`).buffer(true).parse(asBuffer).expect(200);

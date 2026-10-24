@@ -4,9 +4,9 @@ import { User } from '@prisma/client';
 
 export class UserLoginResponseDto extends UserDto {
   @ApiProperty()
-  token: string;
+  token: string | null;
 
-  constructor(user: User, token?: string) {
+  constructor(user: User, token: string | null) {
     super(user);
     this.token = token;
   }

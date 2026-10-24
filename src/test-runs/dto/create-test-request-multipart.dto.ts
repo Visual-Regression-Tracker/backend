@@ -11,7 +11,7 @@ export class CreateTestRequestMultipartDto extends OmitType(CreateTestRequestDto
   'diffTollerancePercent',
 ]) {
   @ApiFile()
-  image: Express.Multer.File;
+  image!: Express.Multer.File;
 
   @ApiPropertyOptional()
   @IsOptional()

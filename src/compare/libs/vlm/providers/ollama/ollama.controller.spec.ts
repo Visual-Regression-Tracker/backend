@@ -68,9 +68,9 @@ describe('OllamaController', () => {
     ['one image', [image('a')]],
     ['three images', [image('a'), image('b'), image('c')]],
   ])('rejects compare with %s as a 400', async (_, files) => {
-    await expect(controller.compareImages(files, 'gemma3:12b', 'prompt', '0.1')).rejects.toThrow(
-      new HttpException('Two images required', HttpStatus.BAD_REQUEST)
-    );
+    await expect(
+      controller.compareImages(files as Express.Multer.File[], 'gemma3:12b', 'prompt', '0.1')
+    ).rejects.toThrow(new HttpException('Two images required', HttpStatus.BAD_REQUEST));
     expect(ollamaService.generate).not.toHaveBeenCalled();
   });
 
@@ -91,7 +91,7 @@ describe('OllamaController', () => {
     // out reaches the provider as NaN rather than its default temperature.
     ollamaService.generate.mockResolvedValue({});
 
-    await controller.compareImages([image('a'), image('b')], 'gemma3:12b', 'prompt', undefined);
+    await controller.compareImages([image('a'), image('b')], 'gemma3:12b', 'prompt', undefined as unknown as string);
 
     expect(ollamaService.generate.mock.calls[0][0].temperature).toBeNaN();
   });

@@ -53,7 +53,7 @@ export const BLUE: [number, number, number] = [0, 0, 255];
 /** Where the HDD storage keeps a stored image (the default STATIC_SERVICE). */
 export const storedImagePath = (imageName: string): string => path.resolve(HDD_IMAGE_PATH, imageName);
 
-export const imageExists = (imageName: string): boolean => !!imageName && existsSync(storedImagePath(imageName));
+export const imageExists = (imageName: string | null): boolean => !!imageName && existsSync(storedImagePath(imageName));
 
 /** Polls until the predicate holds — for image deletions the app fires and does not await. */
 export const waitFor = async (predicate: () => boolean | Promise<boolean>, timeoutMs = 5000): Promise<void> => {

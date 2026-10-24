@@ -39,9 +39,10 @@ export class TestRunsService {
   }
 
   async findOne(id: string): Promise<
-    TestRun & {
-      testVariation?: TestVariation;
-    }
+    | (TestRun & {
+        testVariation: TestVariation | null;
+      })
+    | null
   > {
     return this.prismaService.testRun.findUnique({
       where: { id },
@@ -58,7 +59,7 @@ export class TestRunsService {
     createTestRequestDto: CreateTestRequestDto;
     imageBuffer: Buffer;
   }): Promise<TestRunResultDto> {
-    const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
+    const project = (await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } }))!;
 
     let testVariation = await this.testVariationService.find(createTestRequestDto);
     // creates variatioin if does not exist
@@ -115,15 +116,16 @@ export class TestRunsService {
 
     if (testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove) {
       // replace main branch with feature branch test variation
-      const featureBranchTestVariation = await this.testVariationService.findUnique({
-        ...testRun,
-      });
+      // looked up by the run's own columns, which it copied from its variation
+      const featureBranchTestVariation = await this.testVariationService.findUnique(
+        testRun as Parameters<TestVariationsService['findUnique']>[0]
+      );
 
       if (!featureBranchTestVariation) {
         testVariation = await this.testVariationService.create({
           testRunId: id,
           createTestRequestDto: {
-            projectId: testRun.projectId,
+            projectId: testRun.projectId!,
             branchName: testRun.branchName,
             ...getTestVariationUniqueData(testRun),
           },
@@ -269,7 +271,7 @@ export class TestRunsService {
     // the dialog lists them as one group and its order should not depend on
     // which test rejected a sibling.
     const orderOf = new Map(siblings.map((sibling, index) => [sibling.id, index] as const));
-    skipped.sort((a, b) => orderOf.get(a.run.id) - orderOf.get(b.run.id));
+    skipped.sort((a, b) => orderOf.get(a.run.id)! - orderOf.get(b.run.id)!);
 
     return { testRun, matching, skipped };
   }
@@ -366,7 +368,7 @@ export class TestRunsService {
     });
 
     this.eventsGateway.testRunUpdated(testRun);
-    return this.findOne(id);
+    return (await this.findOne(id))!;
   }
 
   // Nullable because it genuinely is: a comparison that produced nothing at all
@@ -473,7 +475,7 @@ export class TestRunsService {
     return testRun;
   }
 
-  async delete(id: string): Promise<TestRun> {
+  async delete(id: string): Promise<TestRun | undefined> {
     this.logger.debug(`Going to remove TestRun ${id}`);
     const testRun = await this.findOne(id);
 
@@ -517,7 +519,7 @@ export class TestRunsService {
         },
       })
       .then(async (testRun: TestRun) => {
-        const testVariation = await this.testVariationService.update(testRun.testVariationId, {
+        const testVariation = await this.testVariationService.update(testRun.testVariationId!, {
           ignoreAreas: testRun.ignoreAreas,
         });
         return this.calculateDiff(testVariation.projectId, testRun);
@@ -542,7 +544,7 @@ export class TestRunsService {
         },
       })
       .then(async (testRun) => {
-        await this.testVariationService.update(testRun.testVariationId, data);
+        await this.testVariationService.update(testRun.testVariationId!, data);
         this.eventsGateway.testRunUpdated(testRun);
         return testRun;
       });
@@ -566,7 +568,7 @@ export class TestRunsService {
     }
 
     this.logger.log(`Try AutoApproveByPastBaselines testRun: ${testRun.id}`);
-    const testVariationHistory = await this.testVariationService.getDetails(testVariation.id);
+    const testVariationHistory = (await this.testVariationService.getDetails(testVariation.id))!;
     // skip first baseline as it was used by default in general flow
     for (const baseline of testVariationHistory.baselines.slice(1)) {
       if (await this.shouldAutoApprove({ projectId: testVariation.projectId, baseline, testRun })) {
@@ -603,8 +605,9 @@ export class TestRunsService {
     });
 
     for (const approvedTestRun of alreadyApprovedTestRuns) {
-      const approvedTestVariation = await this.testVariationService.getDetails(approvedTestRun.testVariationId);
-      const baseline = approvedTestVariation.baselines.shift();
+      // the query only matched runs whose variation exists
+      const approvedTestVariation = (await this.testVariationService.getDetails(approvedTestRun.testVariationId!))!;
+      const baseline = approvedTestVariation.baselines.shift()!;
 
       if (await this.shouldAutoApprove({ projectId: testVariation.projectId, baseline, testRun })) {
         return this.approve(testRun.id, false, true);
@@ -622,7 +625,7 @@ export class TestRunsService {
     projectId: string;
     baseline: Baseline;
     testRun: TestRun;
-  }): Promise<boolean> {
+  }): Promise<boolean | undefined> {
     const diffResult = await this.compareService.getDiff({
       projectId,
       data: {
@@ -692,7 +695,8 @@ class BoundedCache<T> {
     this.entries.delete(key);
     this.entries.set(key, value);
     while (this.entries.size > this.limit) {
-      this.entries.delete(this.entries.keys().next().value);
+      // the map is not empty while it is over the limit
+      this.entries.delete(this.entries.keys().next().value!);
     }
   }
 

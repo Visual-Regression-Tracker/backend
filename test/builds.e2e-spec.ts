@@ -2,10 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
-import { haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
+import { haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth, LoggedUser } from './preconditions';
 import { BuildsService } from '../src/builds/builds.service';
 import { CreateBuildDto } from '../src/builds/dto/build-create.dto';
-import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { Project } from '@prisma/client';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
@@ -20,7 +19,7 @@ describe('Builds (e2e)', () => {
   let projecstService: ProjectsService;
   let usersService: UsersService;
   let testRunsService: TestRunsService;
-  let user: UserLoginResponseDto;
+  let user: LoggedUser;
   let project: Project;
 
   beforeAll(async () => {
@@ -76,7 +75,8 @@ describe('Builds (e2e)', () => {
     });
 
     it('201 by null branchname', () => {
-      const createBuildDto: CreateBuildDto = {
+      // what an older SDK sends; the DTO type does not allow it
+      const createBuildDto = {
         branchName: null,
         project: project.id,
       };

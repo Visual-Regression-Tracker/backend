@@ -2,9 +2,9 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class Pagination {
   @ApiProperty()
-  take: number;
+  take!: number;
   @ApiProperty()
-  skip: number;
+  skip!: number;
   @ApiProperty()
-  total: number;
+  total!: number;
 }

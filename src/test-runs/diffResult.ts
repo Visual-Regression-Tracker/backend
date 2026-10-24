@@ -12,12 +12,13 @@ export interface StampedSignature {
   signature: number[];
 }
 
+// Without a baseline nothing was compared, and only diffName is set (to null).
 export interface DiffResult {
-  status: TestStatus;
-  diffName: string;
-  pixelMisMatchCount: number;
-  diffPercent: number;
-  isSameDimension: boolean;
+  status: TestStatus | undefined;
+  diffName: string | null;
+  pixelMisMatchCount: number | undefined;
+  diffPercent: number | undefined;
+  isSameDimension: boolean | undefined;
   /**
    * Optional array of analysis insights (e.g., from VLM or other AI services)
    * Each string represents a distinct observation or difference

@@ -4,13 +4,13 @@ import { TestRunDto } from './testRun.dto';
 
 export class TestRunResultDto extends TestRunDto {
   @ApiPropertyOptional()
-  pixelMisMatchCount?: number;
+  pixelMisMatchCount?: number | null;
   @ApiPropertyOptional()
-  vlmDescription?: string;
+  vlmDescription?: string | null;
   @ApiProperty()
   url: string;
   @ApiProperty()
-  baselineName: string;
+  baselineName: string | null;
 
   constructor(testRun: TestRun, testVariation: TestVariation) {
     super(testRun);

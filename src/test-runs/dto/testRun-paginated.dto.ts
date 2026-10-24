@@ -4,5 +4,5 @@ import { TestRunDto } from './testRun.dto';
 
 export class PaginatedTestRunDto extends Pagination {
   @ApiProperty({ type: TestRunDto, isArray: true })
-  data: TestRunDto[];
+  data!: TestRunDto[];
 }

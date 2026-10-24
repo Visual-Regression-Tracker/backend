@@ -9,10 +9,10 @@ export class UserDto {
   readonly email: string;
 
   @ApiProperty()
-  readonly firstName: string;
+  readonly firstName: string | null;
 
   @ApiProperty()
-  readonly lastName: string;
+  readonly lastName: string | null;
 
   @ApiProperty()
   readonly apiKey: string;

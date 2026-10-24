@@ -7,5 +7,5 @@ export class CreateTestRequestBase64Dto extends CreateTestRequestDto {
   @ApiProperty()
   @Transform(({ value }) => value.replace(/(\r\n|\n|\r)/gm, ''))
   @IsBase64()
-  imageBase64: string;
+  imageBase64!: string;
 }

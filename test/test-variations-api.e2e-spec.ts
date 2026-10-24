@@ -7,10 +7,9 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { TestVariationDto } from '../src/test-variations/dto/test-variation.dto';
-import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { UsersService } from '../src/users/users.service';
 import { createE2eApp, imageExists, pngBuffer, RED, waitFor } from './api-helpers';
-import { haveUserLogged, requestWithAuth } from './preconditions';
+import { haveUserLogged, requestWithAuth, LoggedUser } from './preconditions';
 
 describe('TestVariations API (e2e)', () => {
   let app: INestApplication;
@@ -19,7 +18,7 @@ describe('TestVariations API (e2e)', () => {
   let buildsService: BuildsService;
   let testRunsService: TestRunsService;
   let prisma: PrismaService;
-  let user: UserLoginResponseDto;
+  let user: LoggedUser;
   let project: Project;
 
   const WHITE = pngBuffer();
@@ -74,8 +73,8 @@ describe('TestVariations API (e2e)', () => {
 
   describe('GET /test-variations?projectId=', () => {
     it('lists the variations of every branch of the project', async () => {
-      const master = await haveBaseline(project.mainBranchName, WHITE);
-      const feature = await haveBaseline('feature', CHANGED);
+      const master = (await haveBaseline(project.mainBranchName, WHITE))!;
+      const feature = (await haveBaseline('feature', CHANGED))!;
       const other = await projectsService.create({ ...TEST_PROJECT, name: `Other ${uuidAPIKey.create().uuid}` });
       try {
         await testRunsService.postTestRun({
@@ -116,8 +115,8 @@ describe('TestVariations API (e2e)', () => {
 
   describe('GET /test-variations/details/:id', () => {
     it('returns the baseline history, newest first, with run and approving user', async () => {
-      const first = await haveBaseline(project.mainBranchName, WHITE);
-      const second = await haveBaseline(project.mainBranchName, CHANGED);
+      const first = (await haveBaseline(project.mainBranchName, WHITE))!;
+      const second = (await haveBaseline(project.mainBranchName, CHANGED))!;
       expect(second.testVariationId).toBe(first.testVariationId);
 
       const res = await requestWithAuth(
@@ -192,7 +191,7 @@ describe('TestVariations API (e2e)', () => {
       expect(byName['Only on feature'].status).toBe(TestStatus.new);
       // a master variation was created for the screen that only existed on feature
       const created = await prisma.testVariation.findUnique({
-        where: { id: byName['Only on feature'].testVariationId },
+        where: { id: byName['Only on feature'].testVariationId! },
       });
       expect(created).toMatchObject({ branchName: 'master', baselineName: null });
       // the merged screenshot is a stored copy of the feature baseline
@@ -248,9 +247,9 @@ describe('TestVariations API (e2e)', () => {
 
   describe('DELETE /test-variations/:id', () => {
     it('removes the baselines (rows and files) and detaches the runs', async () => {
-      const first = await haveBaseline(project.mainBranchName, WHITE);
-      const second = await haveBaseline(project.mainBranchName, CHANGED);
-      const baselines = await prisma.baseline.findMany({ where: { testVariationId: first.testVariationId } });
+      const first = (await haveBaseline(project.mainBranchName, WHITE))!;
+      const second = (await haveBaseline(project.mainBranchName, CHANGED))!;
+      const baselines = await prisma.baseline.findMany({ where: { testVariationId: first.testVariationId! } });
       expect(baselines).toHaveLength(2);
       expect(baselines.every((baseline) => imageExists(baseline.baselineName))).toBe(true);
 
@@ -259,8 +258,8 @@ describe('TestVariations API (e2e)', () => {
       );
 
       expect(res.body.id).toBe(first.testVariationId);
-      expect(await prisma.testVariation.findUnique({ where: { id: first.testVariationId } })).toBeNull();
-      expect(await prisma.baseline.count({ where: { testVariationId: first.testVariationId } })).toBe(0);
+      expect(await prisma.testVariation.findUnique({ where: { id: first.testVariationId! } })).toBeNull();
+      expect(await prisma.baseline.count({ where: { testVariationId: first.testVariationId! } })).toBe(0);
       await waitFor(() => baselines.every((baseline) => !imageExists(baseline.baselineName)));
       // the runs stay, without a variation, and keep their own screenshots
       const runs = await prisma.testRun.findMany({ where: { id: { in: [first.id, second.id] } } });
@@ -269,7 +268,7 @@ describe('TestVariations API (e2e)', () => {
     });
 
     it('the next screenshot of that screen starts over as new', async () => {
-      const first = await haveBaseline(project.mainBranchName, WHITE);
+      const first = (await haveBaseline(project.mainBranchName, WHITE))!;
       await requestWithAuth(app, 'delete', `/test-variations/${first.testVariationId}`, user.token).expect(200);
 
       const next = await postRun(project.mainBranchName, WHITE);
@@ -283,14 +282,14 @@ describe('TestVariations API (e2e)', () => {
     });
 
     it('403 for a guest', async () => {
-      const first = await haveBaseline(project.mainBranchName, WHITE);
+      const first = (await haveBaseline(project.mainBranchName, WHITE))!;
       const guest = await haveUserLogged(usersService, 'guest');
       try {
         await requestWithAuth(app, 'delete', `/test-variations/${first.testVariationId}`, guest.token).expect(403);
       } finally {
         await usersService.delete(guest.id);
       }
-      expect(await prisma.testVariation.findUnique({ where: { id: first.testVariationId } })).not.toBeNull();
+      expect(await prisma.testVariation.findUnique({ where: { id: first.testVariationId! } })).not.toBeNull();
     });
   });
 });

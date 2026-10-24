@@ -7,10 +7,9 @@ import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
-import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { UsersService } from '../src/users/users.service';
 import { createE2eApp, imageExists, pngBuffer, RED } from './api-helpers';
-import { haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
+import { haveUserLogged, requestWithApiKey, requestWithAuth, LoggedUser } from './preconditions';
 
 describe('Builds API (e2e)', () => {
   let app: INestApplication;
@@ -19,7 +18,7 @@ describe('Builds API (e2e)', () => {
   let buildsService: BuildsService;
   let testRunsService: TestRunsService;
   let prisma: PrismaService;
-  let user: UserLoginResponseDto;
+  let user: LoggedUser;
   let project: Project;
 
   const WHITE = pngBuffer();
@@ -59,7 +58,7 @@ describe('Builds API (e2e)', () => {
 
   const postRun = (build: Build, image: Buffer, name = 'Screen') =>
     testRunsService.postTestRun({
-      createTestRequestDto: { projectId: build.projectId, buildId: build.id, branchName: build.branchName, name },
+      createTestRequestDto: { projectId: build.projectId, buildId: build.id, branchName: build.branchName!, name },
       imageBuffer: image,
     });
 
@@ -206,7 +205,7 @@ describe('Builds API (e2e)', () => {
       const build = await newBuild();
       const run = await postRun(build, CHANGED);
       expect(run.status).toBe(TestStatus.unresolved);
-      const stored = await prisma.testRun.findUnique({ where: { id: run.id } });
+      const stored = (await prisma.testRun.findUnique({ where: { id: run.id } }))!;
       const files = [stored.imageName, stored.diffName, stored.imageThumbnailName, stored.diffThumbnailName];
       expect(files.every((name) => imageExists(name))).toBe(true);
 
@@ -225,11 +224,11 @@ describe('Builds API (e2e)', () => {
       const build = await newBuild();
       const run = await postRun(build, WHITE);
       await testRunsService.approve(run.id);
-      const baseline = await prisma.baseline.findUnique({ where: { testRunId: run.id } });
+      const baseline = (await prisma.baseline.findUnique({ where: { testRunId: run.id } }))!;
 
       await requestWithAuth(app, 'delete', `/builds/${build.id}`, user.token).expect(200);
 
-      const after = await prisma.baseline.findUnique({ where: { id: baseline.id } });
+      const after = (await prisma.baseline.findUnique({ where: { id: baseline.id } }))!;
       expect(after.testRunId).toBeNull();
       expect(imageExists(after.baselineName)).toBe(true);
     });

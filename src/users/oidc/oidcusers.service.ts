@@ -145,7 +145,7 @@ export class OidcUsersService implements Users {
    * URL the browser is redirected to after OIDC finished (success or error).
    * The token travels in the URL fragment so it never reaches server logs.
    */
-  buildFrontendRedirect(token?: string, error?: string): string {
+  buildFrontendRedirect(token?: string | null, error?: string): string {
     const base = `${this.appFrontendUrl}/login`;
     if (token) {
       return `${base}#token=${encodeURIComponent(token)}`;

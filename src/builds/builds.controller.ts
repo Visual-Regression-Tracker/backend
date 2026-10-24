@@ -89,7 +89,7 @@ export class BuildsController {
   @UseGuards(ApiGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   async create(@Body() createBuildDto: CreateBuildDto): Promise<BuildDto> {
-    const project = await this.projectService.findOne(createBuildDto.project);
+    const project = (await this.projectService.findOne(createBuildDto.project))!;
     await this.buildsService.deleteOldBuilds(project.id, project.maxBuildAllowed);
     const build = await this.buildsService.findOrCreate({
       projectId: project.id,

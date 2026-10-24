@@ -23,10 +23,11 @@ export class TestVariationsService {
     private buildsService: BuildsService
   ) {}
 
-  async getDetails(
-    id: string
-  ): Promise<
-    TestVariation & { baselines: (Baseline & { testRun: TestRun; user: Omit<User, 'password' | 'apiKey'> })[] }
+  async getDetails(id: string): Promise<
+    | (TestVariation & {
+        baselines: (Baseline & { testRun: TestRun | null; user: Omit<User, 'password' | 'apiKey'> | null })[];
+      })
+    | null
   > {
     const testVariation = await this.prismaService.testVariation.findUnique({
       where: { id },
@@ -50,7 +51,9 @@ export class TestVariationsService {
     return testVariation;
   }
 
-  async findUnique(data: BaselineDataDto & { projectId: string }): Promise<TestVariation | null> {
+  async findUnique(
+    data: ReturnType<typeof getTestVariationUniqueData> & { projectId: string; branchName: string }
+  ): Promise<TestVariation | null> {
     return this.prismaService.testVariation.findUnique({
       where: {
         projectId_name_browser_device_os_viewport_customTags_branchName: {
@@ -88,8 +91,8 @@ export class TestVariationsService {
    */
   async find(
     createTestRequestDto: BaselineDataDto & { projectId: string; sourceBranch?: string }
-  ): Promise<TestVariation | null> {
-    const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
+  ): Promise<TestVariation | null | undefined> {
+    const project = (await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } }))!;
     const mainBranch = createTestRequestDto.sourceBranch ?? project.mainBranchName;
 
     const [mainBranchTestVariation, currentBranchTestVariation] = await Promise.all([
@@ -147,7 +150,7 @@ export class TestVariationsService {
     baselineName,
   }: {
     id: string;
-    userId: string;
+    userId?: string;
     testRunId: string;
     baselineName: string;
   }): Promise<TestVariation> {
@@ -242,7 +245,7 @@ export class TestVariationsService {
 
   async delete(id: string): Promise<TestVariation> {
     this.logger.debug(`Going to remove TestVariation ${id}`);
-    const testVariation = await this.getDetails(id);
+    const testVariation = (await this.getDetails(id))!;
 
     // delete Baselines
     for (const baseline of testVariation.baselines) {

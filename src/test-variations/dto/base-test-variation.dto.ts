@@ -2,38 +2,38 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class BaseTestVariationDto {
   @ApiProperty()
-  id: string;
+  id!: string;
 
   @ApiProperty()
-  name: string;
+  name!: string;
 
   @ApiPropertyOptional()
-  baselineName?: string;
+  baselineName?: string | null;
 
   @ApiProperty()
-  branchName: string;
+  branchName!: string;
 
   @ApiProperty()
-  os: string;
+  os!: string;
 
   @ApiProperty()
-  browser: string;
+  browser!: string;
 
   @ApiProperty()
-  viewport: string;
+  viewport!: string;
 
   @ApiProperty()
-  device: string;
+  device!: string;
 
   @ApiProperty()
-  customTags: string;
+  customTags!: string;
 
   @ApiPropertyOptional()
   ignoreAreas?: string;
 
   @ApiProperty()
-  projectId: string;
+  projectId!: string;
 
   @ApiPropertyOptional()
-  comment?: string;
+  comment?: string | null;
 }

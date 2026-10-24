@@ -4,5 +4,5 @@ import { BuildDto } from './build.dto';
 
 export class PaginatedBuildDto extends Pagination {
   @ApiProperty({ type: BuildDto, isArray: true })
-  data: BuildDto[];
+  data!: BuildDto[];
 }
