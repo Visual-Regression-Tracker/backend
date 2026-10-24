@@ -154,6 +154,40 @@ describe('Dinov2Service', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  describe('status', () => {
+    const status = async (url: string) => (await init({ url })).service.status();
+
+    it('is not configured without a service address', async () => {
+      expect(await status('')).toEqual({ configured: false, available: false });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("is available when the service's health check answers", async () => {
+      fetchMock.mockResolvedValue({ ok: true } as Response);
+
+      expect(await status('http://dinov2:8000/')).toEqual({ configured: true, available: true });
+      expect(fetchMock.mock.calls[0][0]).toBe('http://dinov2:8000/health');
+    });
+
+    it('is configured but not available when the health check fails', async () => {
+      fetchMock.mockResolvedValue({ ok: false, status: 503 } as Response);
+
+      expect(await status('http://dinov2:8000')).toEqual({ configured: true, available: false });
+    });
+
+    it('is configured but not available when the service is unreachable', async () => {
+      fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+
+      expect(await status('http://dinov2:8000')).toEqual({ configured: true, available: false });
+    });
+
+    it('is configured but not available when the check throws something that is not an Error', async () => {
+      fetchMock.mockRejectedValue('socket hang up');
+
+      expect(await status('http://dinov2:8000')).toEqual({ configured: true, available: false });
+    });
+  });
+
   // the check exists to stop the blur passing a real change; when it cannot
   // check, the run goes to review rather than through
   describe('when it cannot check', () => {
