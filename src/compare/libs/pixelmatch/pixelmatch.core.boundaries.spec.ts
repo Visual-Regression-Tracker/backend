@@ -75,6 +75,23 @@ describe('computePixelmatchDiff dimensions', () => {
     expect(job(png(60, 60), png(30, 60, 1))).toStrictEqual({ equal: false, isSameDimension: false });
   });
 
+  // 60x30 and 30x60 with the first 60 pixels red hold the very same bytes:
+  // one red row against two half-width red rows
+  const wide = png(60, 30, 60);
+  const tall = png(30, 60, 60);
+
+  it('stops at another shape with the same pixel bytes when different dimensions are not allowed', () => {
+    expect(job(wide, tall)).toStrictEqual({ equal: false, isSameDimension: false });
+  });
+
+  it('compares another shape with the same pixel bytes instead of calling it equal when dimensions may differ', () => {
+    const result = job(wide, tall, { allowDiffDimensions: true });
+
+    expect(result.equal).toBe(false);
+    expect(result.isSameDimension).toBe(false);
+    expect(result.pixelMisMatchCount).toBeGreaterThan(0);
+  });
+
   it('compares on the larger canvas when different dimensions are allowed', () => {
     // the checkpoint is padded with transparent pixels, which pixelmatch blends to white:
     // only the baseline's red first row differs
