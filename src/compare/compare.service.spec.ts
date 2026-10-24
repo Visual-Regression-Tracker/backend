@@ -294,7 +294,7 @@ describe('CompareService with mocked collaborators', () => {
     });
 
     it('does not second-guess a run that already passed', async () => {
-      const ok = { ...unresolved, status: TestStatus.ok, diffName: null };
+      const ok = { ...unresolved, status: TestStatus.ok, diffName: null as string | null };
       const { service, run } = await setup({ result: ok });
 
       expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(ok);

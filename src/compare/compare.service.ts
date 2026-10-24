@@ -91,7 +91,9 @@ export class CompareService {
       }
       return { ...result, status: TestStatus.ok, diffName: null };
     } catch (error) {
-      this.logger.warn(`Rendering-noise filter skipped: ${error instanceof Error ? error.message : error}`);
+      // read as an Error, not checked with instanceof: fetch errors come from
+      // another realm under Jest
+      this.logger.warn(`Rendering-noise filter skipped: ${(error as Error)?.message ?? error}`);
       return result;
     }
   }
