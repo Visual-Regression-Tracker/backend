@@ -89,6 +89,23 @@ describe('HttpExceptionFilter', () => {
       expect(loggerSpy).toHaveBeenCalledWith(exception, exception.stack, undefined);
     });
 
+    it('answers a ValidationPipe rejection with the validation messages', () => {
+      const { host, response } = createHost();
+      const exception = new BadRequestException([
+        'name should not be empty',
+        'imageComparisonConfig must be a json string',
+      ]);
+
+      filter.catch(exception, host);
+
+      expect(response.status).toHaveBeenCalledWith(400);
+      expect(response.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'name should not be empty, imageComparisonConfig must be a json string',
+        })
+      );
+    });
+
     it('answers 500 when getStatus itself throws', () => {
       const { host, response } = createHost();
       const exception = new HttpException('Weird', 418);
