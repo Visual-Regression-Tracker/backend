@@ -1,13 +1,33 @@
-import { Controller, Get, UseGuards, Body, Post, Param, ParseUUIDPipe, Delete, Put } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiParam } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  UseGuards,
+  Body,
+  Post,
+  Param,
+  ParseUUIDPipe,
+  Delete,
+  Put,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiParam,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { Project, Role } from '@prisma/client';
+import { Project, Role, User } from '@prisma/client';
 import { ProjectDto } from './dto/project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
+import { CurrentUser } from '../shared/current-user.decorator';
 
 @Controller('projects')
 @ApiTags('projects')
@@ -20,6 +40,38 @@ export class ProjectsController {
   @ApiOkResponse({ type: ProjectDto, isArray: true })
   getAll(): Promise<Project[]> {
     return this.projectsService.findAll();
+  }
+
+  // Favourites are personal, not project settings, so every role (guests
+  // included) may use them: no RoleGuard. Declared before any `:id` route so
+  // "favorites" is never read as a project id.
+  @Get('favorites')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: String, isArray: true, description: "Ids of the current user's favourite projects" })
+  getFavorites(@CurrentUser() user: User): Promise<string[]> {
+    return this.projectsService.findFavoriteIds(user.id);
+  }
+
+  @Put(':id/favorite')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({ description: 'The project is a favourite (also when it already was)' })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  @ApiParam({ name: 'id', required: true })
+  addFavorite(@CurrentUser() user: User, @Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
+    return this.projectsService.addFavorite(user.id, id);
+  }
+
+  @Delete(':id/favorite')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({ description: 'The project is not a favourite (also when it was not one, or does not exist)' })
+  @ApiParam({ name: 'id', required: true })
+  removeFavorite(@CurrentUser() user: User, @Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
+    return this.projectsService.removeFavorite(user.id, id);
   }
 
   @Post()

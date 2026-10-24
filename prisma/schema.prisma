@@ -46,6 +46,7 @@ model Project {
   builds                Build[]
   TestRun               TestRun[]
   testVariations        TestVariation[]
+  favoritedBy           User[]          @relation("UserFavoriteProjects")
 }
 
 model TestRun {
@@ -133,18 +134,19 @@ model Baseline {
 }
 
 model User {
-  id        String     @id @default(uuid())
-  email     String     @unique
-  password  String
-  firstName String?
-  lastName  String?
-  apiKey    String     @unique
-  isActive  Boolean    @default(true)
-  role      Role       @default(guest)
-  updatedAt DateTime   @updatedAt
-  createdAt DateTime   @default(now())
-  baselines Baseline[]
-  builds    Build[]
+  id               String     @id @default(uuid())
+  email            String     @unique
+  password         String
+  firstName        String?
+  lastName         String?
+  apiKey           String     @unique
+  isActive         Boolean    @default(true)
+  role             Role       @default(guest)
+  updatedAt        DateTime   @updatedAt
+  createdAt        DateTime   @default(now())
+  baselines        Baseline[]
+  builds           Build[]
+  favoriteProjects Project[]  @relation("UserFavoriteProjects")
 }
 
 enum TestStatus {

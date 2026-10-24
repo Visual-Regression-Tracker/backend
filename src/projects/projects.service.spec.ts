@@ -15,6 +15,7 @@ const initService = async ({
   projectCreateMock = jest.fn(),
   projectUpdateMock = jest.fn(),
   projectDeleteMock = jest.fn(),
+  userUpdateMock = jest.fn(),
   buildRemoveMock = jest.fn(),
   testVariationDeleteMock = jest.fn(),
 }) => {
@@ -30,6 +31,9 @@ const initService = async ({
             create: projectCreateMock,
             update: projectUpdateMock,
             delete: projectDeleteMock,
+          },
+          user: {
+            update: userUpdateMock,
           },
         },
       },
@@ -190,6 +194,92 @@ describe('ProjectsService', () => {
       // NOTE: current behavior — no not-found handling (unlike findOne), the null project is dereferenced
       await expect(service.remove('missing')).rejects.toThrow(TypeError);
       expect(projectDeleteMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('favourites', () => {
+    const userId = 'b1e2c3d4-0000-4000-8000-000000000001';
+    const projectId = 'a9385fc1-884d-4f9f-915e-40da0e7773d5';
+
+    it('lists the ids of the projects the user marked as favourite', async () => {
+      const projectFindManyMock = jest.fn().mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+      service = await initService({ projectFindManyMock });
+
+      const result = await service.findFavoriteIds(userId);
+
+      expect(projectFindManyMock).toHaveBeenCalledWith({
+        where: { favoritedBy: { some: { id: userId } } },
+        select: { id: true },
+      });
+      expect(result).toEqual(['p1', 'p2']);
+    });
+
+    it('lists nothing for a user without favourites', async () => {
+      const projectFindManyMock = jest.fn().mockResolvedValue([]);
+      service = await initService({ projectFindManyMock });
+
+      await expect(service.findFavoriteIds(userId)).resolves.toEqual([]);
+    });
+
+    it('connects the project to the user favourites', async () => {
+      const projectFindUniqueMock = jest.fn().mockResolvedValue(TEST_PROJECT);
+      const userUpdateMock = jest.fn().mockResolvedValue({});
+      service = await initService({ projectFindUniqueMock, userUpdateMock });
+
+      await service.addFavorite(userId, projectId);
+
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: projectId, name: undefined } });
+      expect(userUpdateMock).toHaveBeenCalledWith({
+        where: { id: userId },
+        data: { favoriteProjects: { connect: { id: projectId } } },
+        select: { id: true },
+      });
+    });
+
+    it('adds a favourite twice without an error', async () => {
+      const projectFindUniqueMock = jest.fn().mockResolvedValue(TEST_PROJECT);
+      const userUpdateMock = jest.fn().mockResolvedValue({});
+      service = await initService({ projectFindUniqueMock, userUpdateMock });
+
+      await service.addFavorite(userId, projectId);
+      await expect(service.addFavorite(userId, projectId)).resolves.toBeUndefined();
+
+      expect(userUpdateMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('answers 404 and changes nothing when the project does not exist', async () => {
+      const projectFindUniqueMock = jest.fn().mockResolvedValue(null);
+      const userUpdateMock = jest.fn();
+      service = await initService({ projectFindUniqueMock, userUpdateMock });
+
+      await expect(service.addFavorite(userId, projectId)).rejects.toThrow(
+        new HttpException('Project not found', HttpStatus.NOT_FOUND)
+      );
+      expect(userUpdateMock).not.toHaveBeenCalled();
+    });
+
+    it('disconnects the project from the user favourites', async () => {
+      const userUpdateMock = jest.fn().mockResolvedValue({});
+      service = await initService({ userUpdateMock });
+
+      await expect(service.removeFavorite(userId, projectId)).resolves.toBeUndefined();
+
+      expect(userUpdateMock).toHaveBeenCalledWith({
+        where: { id: userId },
+        data: { favoriteProjects: { disconnect: { id: projectId } } },
+        select: { id: true },
+      });
+    });
+
+    it('removes a project that is not a favourite without an error', async () => {
+      // Prisma treats disconnecting an unconnected record as a no-op, so the
+      // service does no lookup of its own first
+      const projectFindUniqueMock = jest.fn();
+      const userUpdateMock = jest.fn().mockResolvedValue({});
+      service = await initService({ projectFindUniqueMock, userUpdateMock });
+
+      await expect(service.removeFavorite(userId, projectId)).resolves.toBeUndefined();
+      expect(projectFindUniqueMock).not.toHaveBeenCalled();
     });
   });
 });
