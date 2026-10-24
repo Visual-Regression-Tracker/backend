@@ -5,7 +5,7 @@ import unittest
 
 import numpy as np
 
-from patches import PATCH, TILE, patch_distances, patch_features, tiles
+from patches import MEAN, PATCH, STD, TILE, normalize, patch_distances, patch_features, tiles
 
 
 def mean_colour_encoder(x: np.ndarray) -> np.ndarray:
@@ -25,8 +25,23 @@ class TilesTest(unittest.TestCase):
         x, rows, cols = tiles(page(300, 500))
         self.assertEqual((rows, cols), (2, 3))
         self.assertEqual(x.shape, (6, 3, TILE, TILE))
-        # the padding repeats the page, so every tile normalises the same
-        self.assertTrue(np.allclose(x, x[0]))
+        # the padding repeats the page, so every tile is the same
+        self.assertTrue(np.array_equal(x, np.broadcast_to(x[0], x.shape)))
+
+    # a tall page is not turned into float32 whole: only the tiles encoded are
+    def test_leaves_tiles_as_bytes(self):
+        x, _, _ = tiles(page(300, 500))
+        self.assertEqual(x.dtype, np.uint8)
+        self.assertTrue((x == 245).all())
+
+
+class NormalizeTest(unittest.TestCase):
+    def test_scales_and_centres_each_channel_as_the_model_was_trained(self):
+        x = np.stack([np.zeros((3, TILE, TILE), np.uint8), np.full((3, TILE, TILE), 255, np.uint8)])
+        n = normalize(x)
+        self.assertEqual(n.dtype, np.float32)
+        self.assertTrue(np.allclose(n[0], (0 - MEAN[0]) / STD[0]))
+        self.assertTrue(np.allclose(n[1], (1 - MEAN[0]) / STD[0]))
 
 
 class PatchFeaturesTest(unittest.TestCase):
