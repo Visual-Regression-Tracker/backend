@@ -201,17 +201,30 @@ describe('Users admin and RBAC (e2e)', () => {
       await requestWithAuth(app, 'get', '/users/me', admin.token).expect(401);
     });
 
-    it('stops at the first unknown id, keeping the deletions before it', async () => {
+    it('404 for an unknown id, deleting nobody', async () => {
       const admin = await haveUser(Role.admin);
       const first = await haveUser(Role.guest);
       const last = await haveUser(Role.guest);
+      const unknown = randomUUID();
 
-      // NOTE: current behavior — not transactional and P2025 is not mapped: the request
-      // fails with 500 although the first user is already gone, and the last one is kept
-      await requestWithAuth(app, 'delete', '/users', admin.token).send([first.id, randomUUID(), last.id]).expect(500);
+      const res = await requestWithAuth(app, 'delete', '/users', admin.token)
+        .send([first.id, unknown, last.id])
+        .expect(404);
+
+      expect(res.body.message).toBe(`User not found: ${unknown}`);
+      expect(await usersService.findOne(first.id)).not.toBeNull();
+      expect(await usersService.findOne(last.id)).not.toBeNull();
+    });
+
+    it('deletes every listed user', async () => {
+      const admin = await haveUser(Role.admin);
+      const first = await haveUser(Role.guest);
+      const last = await haveUser(Role.editor);
+
+      await requestWithAuth(app, 'delete', '/users', admin.token).send([first.id, last.id]).expect(200);
 
       expect(await usersService.findOne(first.id)).toBeNull();
-      expect(await usersService.findOne(last.id)).not.toBeNull();
+      expect(await usersService.findOne(last.id)).toBeNull();
     });
 
     it('keeps the baselines a deleted user approved, without the user', async () => {

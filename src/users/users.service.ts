@@ -8,7 +8,7 @@ import { UpdateUserDto } from './dto/user-update.dto';
 import { AuthService } from '../auth/auth.service';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
-import { HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Logger, NotFoundException } from '@nestjs/common';
 import { UsersFactoryService } from './users.factory';
 import { Users } from './users.interface';
 import { OidcUsersService } from './oidc/oidcusers.service';
@@ -75,6 +75,22 @@ export class UsersService {
   async delete(id: string): Promise<User> {
     this.logger.debug(`Removing User: ${id}`);
     return this.prismaService.user.delete({ where: { id } });
+  }
+
+  /**
+   * All or nothing: an unknown id fails the request before anyone is removed,
+   * instead of after the users listed ahead of it are already gone.
+   */
+  async deleteMany(ids: string[]): Promise<void> {
+    this.logger.debug(`Removing Users: ${ids}`);
+    await this.prismaService.$transaction(async (tx) => {
+      const found = await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true } });
+      const missing = ids.filter((id) => !found.some((user) => user.id === id));
+      if (missing.length > 0) {
+        throw new NotFoundException(`User not found: ${missing.join(', ')}`);
+      }
+      await tx.user.deleteMany({ where: { id: { in: ids } } });
+    });
   }
 
   async get(id: string): Promise<UserDto> {

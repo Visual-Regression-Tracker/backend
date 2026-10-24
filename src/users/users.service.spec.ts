@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service';
 import { AuthService } from '../auth/auth.service';
@@ -162,6 +163,31 @@ describe('UsersService with DbUserService implementation', () => {
 
     // Assert
     expect(prismaUserDeleteMock).toHaveBeenCalled();
+  });
+
+  describe('deleteMany', () => {
+    const withTransaction = (found: Pick<User, 'id'>[]) => {
+      const tx = { user: { findMany: jest.fn().mockResolvedValueOnce(found), deleteMany: jest.fn() } };
+      (prismaService as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((run) => run(tx));
+      return tx;
+    };
+
+    it('deletes every listed user inside one transaction', async () => {
+      const tx = withTransaction([{ id: '1' }, { id: '2' }]);
+
+      await service.deleteMany(['1', '2']);
+
+      expect(tx.user.findMany).toHaveBeenCalledWith({ where: { id: { in: ['1', '2'] } }, select: { id: true } });
+      expect(tx.user.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['1', '2'] } } });
+    });
+
+    it('deletes nobody and names the unknown ids when one is missing', async () => {
+      const tx = withTransaction([{ id: '1' }]);
+
+      await expect(service.deleteMany(['1', 'x', 'y'])).rejects.toThrow(new NotFoundException('User not found: x, y'));
+
+      expect(tx.user.deleteMany).not.toHaveBeenCalled();
+    });
   });
 
   it('should get existing user', async () => {

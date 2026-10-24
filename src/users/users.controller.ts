@@ -174,9 +174,7 @@ export class UsersController {
   @Roles(Role.admin)
   async delete(@Body() ids: string[]): Promise<void> {
     this.logger.debug(`Going to remove User: ${ids}`);
-    for (const id of ids) {
-      await this.usersService.delete(id);
-    }
+    await this.usersService.deleteMany(ids);
   }
 
   @Patch('assignRole')
