@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
-import { parseConfig } from '../../utils';
+import { applyIgnoreAreas, parseConfig } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { VlmConfig, OllamaVlmConfig } from './vlm.types';
@@ -78,8 +78,9 @@ export class VlmService implements ImageComparator {
         return pixelmatchResult;
       }
 
-      const baselineBytes = new Uint8Array(PNG.sync.write(baseline));
-      const imageBytes = new Uint8Array(PNG.sync.write(image));
+      // mask ignore areas the same way pixelmatch did, so the VLM does not flag changes inside them
+      const baselineBytes = new Uint8Array(PNG.sync.write(applyIgnoreAreas(baseline, data.ignoreAreas)));
+      const imageBytes = new Uint8Array(PNG.sync.write(applyIgnoreAreas(image, data.ignoreAreas)));
       const diffBytes = new Uint8Array(PNG.sync.write(diffImage));
 
       const { pass, description } = await this.compareImagesWithVLM(baselineBytes, imageBytes, diffBytes, config);

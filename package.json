@@ -56,7 +56,7 @@
     "fs-extra": "^11.4.1",
     "ldapts": "^7.1.0",
     "looks-same": "^10.0.1",
-    "odiff-bin": "^2.6.1",
+    "odiff-bin": "^4.5.0",
     "ollama": "^0.6.4",
     "openid-client": "^5.7.1",
     "passport": "^0.7.0",
