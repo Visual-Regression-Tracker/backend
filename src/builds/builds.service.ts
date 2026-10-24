@@ -204,7 +204,7 @@ export class BuildsService {
     return deletionPromise;
   }
 
-  async approve(id: string, merge: boolean): Promise<void> {
+  async approve(id: string, merge: boolean, userId?: string): Promise<void> {
     const build = await this.prismaService.build.findUnique({
       where: { id },
       include: {
@@ -223,7 +223,8 @@ export class BuildsService {
     }
 
     for (const testRun of build.testRuns) {
-      await this.testRunsService.approve(testRun.id, merge);
+      // recorded on each new baseline, as POST /test-runs/approve does
+      await this.testRunsService.approve(testRun.id, merge, false, userId);
     }
   }
 

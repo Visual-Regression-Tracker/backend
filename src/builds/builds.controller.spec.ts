@@ -7,7 +7,7 @@ import { ApiGuard } from '../auth/guards/api.guard';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ProjectsService } from '../projects/projects.service';
 import { TEST_BUILD, TEST_PROJECT } from '../_data_';
-import { Build } from '@prisma/client';
+import { Build, User } from '@prisma/client';
 import { BuildDto } from './dto/build.dto';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
@@ -208,8 +208,8 @@ describe('Builds Controller handlers', () => {
   it.each([true, false])('approves a build with merge=%s', async (merge) => {
     buildsService.approve.mockResolvedValue(undefined);
 
-    await expect(controller.approve(TEST_BUILD.id, merge)).resolves.toBeUndefined();
-    expect(buildsService.approve).toHaveBeenCalledWith(TEST_BUILD.id, merge);
+    await expect(controller.approve({ id: 'user id' } as User, TEST_BUILD.id, merge)).resolves.toBeUndefined();
+    expect(buildsService.approve).toHaveBeenCalledWith(TEST_BUILD.id, merge, 'user id');
   });
 
   it("creates the build on the project's main branch when no branch is given", async () => {
