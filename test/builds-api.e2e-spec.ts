@@ -1,7 +1,8 @@
 import { INestApplication } from '@nestjs/common';
-import { Build, Project, TestStatus } from '@prisma/client';
+import { Build, Project, TestRun, TestStatus } from '@prisma/client';
 import uuidAPIKey from 'uuid-apikey';
 import { TEST_PROJECT } from '../src/_data_';
+import { BuildDto } from '../src/builds/dto/build.dto';
 import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
@@ -90,19 +91,19 @@ describe('Builds API (e2e)', () => {
       const last = await list('take=2&skip=4').expect(200);
 
       expect(first.body).toMatchObject({ total: 5, take: 2, skip: 0 });
-      expect(first.body.data.map((build) => build.id)).toEqual(ordered.slice(0, 2));
-      expect(second.body.data.map((build) => build.id)).toEqual(ordered.slice(2, 4));
-      expect(last.body.data.map((build) => build.id)).toEqual(ordered.slice(4));
+      expect(first.body.data.map((build: BuildDto) => build.id)).toEqual(ordered.slice(0, 2));
+      expect(second.body.data.map((build: BuildDto) => build.id)).toEqual(ordered.slice(2, 4));
+      expect(last.body.data.map((build: BuildDto) => build.id)).toEqual(ordered.slice(4));
     });
 
     it('aroundBuildId opens the page holding that build', async () => {
       const res = await list(`take=2&skip=0&aroundBuildId=${ordered[4]}`).expect(200);
       expect(res.body).toMatchObject({ total: 5, take: 2, skip: 4 });
-      expect(res.body.data.map((build) => build.id)).toEqual([ordered[4]]);
+      expect(res.body.data.map((build: BuildDto) => build.id)).toEqual([ordered[4]]);
 
       const middle = await list(`take=2&skip=0&aroundBuildId=${ordered[3]}`).expect(200);
       expect(middle.body.skip).toBe(2);
-      expect(middle.body.data.map((build) => build.id)).toEqual(ordered.slice(2, 4));
+      expect(middle.body.data.map((build: BuildDto) => build.id)).toEqual(ordered.slice(2, 4));
     });
 
     it('aroundBuildId that holds no page falls back to skip', async () => {
@@ -113,7 +114,7 @@ describe('Builds API (e2e)', () => {
         for (const aroundBuildId of [uuidAPIKey.create().uuid, foreign.id]) {
           const res = await list(`take=2&skip=2&aroundBuildId=${aroundBuildId}`).expect(200);
           expect(res.body.skip).toBe(2);
-          expect(res.body.data.map((build) => build.id)).toEqual(ordered.slice(2, 4));
+          expect(res.body.data.map((build: BuildDto) => build.id)).toEqual(ordered.slice(2, 4));
         }
       } finally {
         await projectsService.remove(otherProject.id);
@@ -130,7 +131,7 @@ describe('Builds API (e2e)', () => {
       const res = await list('take=10&skip=0&ciBuildId=RELEASE').expect(200);
 
       expect(res.body.total).toBe(2);
-      expect(res.body.data.map((build) => build.ciBuildId).sort()).toEqual(['Release-1', 'release-2']);
+      expect(res.body.data.map((build: BuildDto) => build.ciBuildId).sort()).toEqual(['Release-1', 'release-2']);
     });
 
     it('aroundBuildId is resolved within the ciBuildId filter', async () => {
@@ -141,7 +142,7 @@ describe('Builds API (e2e)', () => {
 
       const res = await list(`take=1&skip=0&ciBuildId=nightly&aroundBuildId=${oldestNightly}`).expect(200);
       expect(res.body).toMatchObject({ total: 2, take: 1, skip: 1 });
-      expect(res.body.data.map((build) => build.id)).toEqual([oldestNightly]);
+      expect(res.body.data.map((build: BuildDto) => build.id)).toEqual([oldestNightly]);
 
       // a build the filter leaves out holds no page
       const excluded = await list(`take=1&skip=0&ciBuildId=nightly&aroundBuildId=${ordered[4]}`).expect(200);
@@ -156,7 +157,7 @@ describe('Builds API (e2e)', () => {
       const res = await list('take=10&skip=0').expect(200);
       const around = await list(`take=1&skip=0&aroundBuildId=${smaller}`).expect(200);
 
-      expect(res.body.data.slice(-2).map((build) => build.id)).toEqual([larger, smaller]);
+      expect(res.body.data.slice(-2).map((build: BuildDto) => build.id)).toEqual([larger, smaller]);
       expect(around.body.skip).toBe(4);
     });
 
@@ -210,7 +211,7 @@ describe('Builds API (e2e)', () => {
 
       // the raw build row with the runs it had
       expect(res.body.id).toBe(build.id);
-      expect(res.body.testRuns.map((testRun) => testRun.id)).toEqual([run.id]);
+      expect(res.body.testRuns.map((testRun: TestRun) => testRun.id)).toEqual([run.id]);
       expect(await prisma.build.findUnique({ where: { id: build.id } })).toBeNull();
       expect(await prisma.testRun.count({ where: { buildId: build.id } })).toBe(0);
       expect(files.some((name) => imageExists(name))).toBe(false);

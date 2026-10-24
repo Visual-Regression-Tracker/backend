@@ -5,6 +5,7 @@ import { TEST_PROJECT } from '../src/_data_';
 import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
+import { TestRunDto } from '../src/test-runs/dto/testRun.dto';
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { UsersService } from '../src/users/users.service';
 import { BLUE, createE2eApp, imageExists, pngBuffer, RED, Rect, TEST_RUN_DTO_KEYS, waitFor } from './api-helpers';
@@ -130,7 +131,7 @@ describe('TestRuns review API (e2e)', () => {
 
       const res = await requestWithAuth(app, 'get', `/test-runs?buildId=${build.id}`, user.token).expect(200);
 
-      expect(res.body.map((run) => run.id).sort()).toEqual([a.id, b.id].sort());
+      expect(res.body.map((run: TestRunDto) => run.id).sort()).toEqual([a.id, b.id].sort());
       // internal columns (pixelMisMatchCount, changeSignature, timestamps, projectId) are not exposed
       expect(Object.keys(res.body[0]).sort()).toEqual(TEST_RUN_DTO_KEYS);
     });
@@ -545,7 +546,7 @@ describe('TestRuns review API (e2e)', () => {
 
       const res = await matching(en.id).expect(200);
 
-      expect(res.body.variations.map((run) => run.id)).toEqual([en.id]);
+      expect(res.body.variations.map((run: TestRunDto) => run.id)).toEqual([en.id]);
       expect(res.body.skipped).toEqual([]);
       expect(Object.keys(res.body.variations[0]).sort()).toEqual(TEST_RUN_DTO_KEYS);
     });
@@ -556,7 +557,7 @@ describe('TestRuns review API (e2e)', () => {
 
       const res = await matching(runs.en.id).expect(200);
 
-      expect(res.body.variations.map((run) => run.id)).toEqual([runs.en.id, runs.de.id]);
+      expect(res.body.variations.map((run: TestRunDto) => run.id)).toEqual([runs.en.id, runs.de.id]);
       expect(byTag(res.body.skipped).map((run) => [run.customTags, run.reason])).toEqual([
         ['es', 'different change size'],
         ['fr', 'different change pattern'],
@@ -586,7 +587,7 @@ describe('TestRuns review API (e2e)', () => {
       const second = await matching(runs.en.id).expect(200);
 
       for (const res of [first, second]) {
-        expect(res.body.variations.map((run) => run.id)).toEqual([runs.en.id, runs.de.id]);
+        expect(res.body.variations.map((run: TestRunDto) => run.id)).toEqual([runs.en.id, runs.de.id]);
         expect(byTag(res.body.skipped).map((run) => [run.customTags, run.reason])).toEqual([
           ['es', 'different change size'],
           ['fr', 'different change pattern'],
@@ -605,7 +606,7 @@ describe('TestRuns review API (e2e)', () => {
 
       const res = await matching(runs.en.id).expect(200);
 
-      expect(res.body.variations.map((run) => run.id)).toEqual([runs.en.id]);
+      expect(res.body.variations.map((run: TestRunDto) => run.id)).toEqual([runs.en.id]);
       expect(byTag(res.body.skipped).map((run) => [run.customTags, run.reason])).toEqual([
         ['de', 'no diff to match'],
         ['es', 'different change size'],
@@ -620,7 +621,7 @@ describe('TestRuns review API (e2e)', () => {
 
       const res = await matching(runs.pt.id).expect(200);
 
-      expect(res.body.variations.map((run) => run.id)).toEqual([runs.pt.id]);
+      expect(res.body.variations.map((run: TestRunDto) => run.id)).toEqual([runs.pt.id]);
       expect(byTag(res.body.skipped).map((run) => [run.customTags, run.reason])).toEqual([
         ['de', 'no reference diff'],
         ['en', 'no reference diff'],
@@ -639,7 +640,7 @@ describe('TestRuns review API (e2e)', () => {
 
       const res = await matching(mac.id).expect(200);
 
-      expect(res.body.variations.map((run) => run.id)).toEqual([mac.id, win.id]);
+      expect(res.body.variations.map((run: TestRunDto) => run.id)).toEqual([mac.id, win.id]);
       expect(res.body.skipped).toEqual([]);
     }, 60000);
 
@@ -652,7 +653,7 @@ describe('TestRuns review API (e2e)', () => {
 
       const res = await matching(en.id).expect(200);
 
-      expect(res.body.variations.map((run) => run.id)).toEqual([en.id, de.id]);
+      expect(res.body.variations.map((run: TestRunDto) => run.id)).toEqual([en.id, de.id]);
     }, 60000);
 
     it('unknown id', async () => {

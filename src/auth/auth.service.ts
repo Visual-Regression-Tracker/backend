@@ -9,7 +9,7 @@ import { User } from '@prisma/client';
 export class AuthService {
   constructor(private jwtService: JwtService) {}
 
-  async encryptPassword(password): Promise<string> {
+  async encryptPassword(password: string): Promise<string> {
     const salt = await genSalt(10);
     return hash(password, salt);
   }

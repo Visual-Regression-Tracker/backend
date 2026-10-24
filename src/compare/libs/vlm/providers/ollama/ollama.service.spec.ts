@@ -117,7 +117,7 @@ describe('OllamaService', () => {
 
     it('accepts a config without provider', async () => {
       mockChat.mockResolvedValue(createMockResponse('{}'));
-      const config = { ...createConfig(), provider: undefined };
+      const config = { ...createConfig(), provider: undefined as OllamaVlmConfig['provider'] };
 
       await expect(service.generate(config, [])).resolves.toEqual({ content: '{}', thinking: undefined });
     });

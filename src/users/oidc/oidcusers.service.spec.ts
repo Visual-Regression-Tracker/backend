@@ -319,7 +319,7 @@ describe('OidcUsersService', () => {
     });
 
     it('rejects an empty email claim array', async () => {
-      mockCallback.mockResolvedValue({ claims: () => ({ email: [] }) });
+      mockCallback.mockResolvedValue({ claims: () => ({ email: [] as string[] }) });
 
       await expect(service.handleCallback({ code: 'code', state: 'mock-state' }, checks)).rejects.toThrow(
         'OIDC login failed.'

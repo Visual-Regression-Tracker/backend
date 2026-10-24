@@ -55,7 +55,8 @@ export class GeminiService implements VlmProvider {
         content: result.text,
       };
     } catch (error) {
-      this.logger.error(`Gemini generate request failed: ${error.message}`, error.stack);
+      const { message, stack } = error instanceof Error ? error : { message: String(error), stack: undefined };
+      this.logger.error(`Gemini generate request failed: ${message}`, stack);
       throw error;
     }
   }

@@ -135,7 +135,7 @@ export async function negotiatePreferredSsl(config: ClientConfig, logger?: Logge
       logger?.log('Database server has no TLS, connecting without it (sslmode=prefer)');
     }
   } finally {
-    await client.end().catch(() => undefined);
+    await client.end().catch((): undefined => undefined);
   }
 }
 

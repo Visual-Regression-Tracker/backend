@@ -59,7 +59,7 @@ export class OllamaService implements VlmProvider {
         thinking: response.message.thinking,
       };
     } catch (error) {
-      this.logger.error(`Ollama generate request failed: ${error.message}`);
+      this.logger.error(`Ollama generate request failed: ${error instanceof Error ? error.message : error}`);
       throw error;
     }
   }
@@ -70,7 +70,7 @@ export class OllamaService implements VlmProvider {
       const response: ListResponse = await client.list();
       return response.models;
     } catch (error) {
-      this.logger.error(`Failed to list models: ${error.message}`);
+      this.logger.error(`Failed to list models: ${error instanceof Error ? error.message : error}`);
       throw error;
     }
   }

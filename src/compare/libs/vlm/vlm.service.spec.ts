@@ -8,6 +8,7 @@ import { OllamaService } from './providers/ollama/ollama.service';
 import { GeminiService } from './providers/gemini/gemini.service';
 import { PixelmatchService } from '../pixelmatch/pixelmatch.service';
 import { DiffResult } from '../../../test-runs/diffResult';
+import { ImageCompareInput } from '../ImageCompareInput';
 
 jest.mock('zod/v3', () => {
   const actualZod = jest.requireActual('zod');
@@ -307,7 +308,7 @@ describe('VlmService', () => {
   });
 
   describe('characterization', () => {
-    const input = {
+    const input: ImageCompareInput = {
       baseline: 'baseline',
       image: 'image',
       diffTollerancePercent: 0.1,

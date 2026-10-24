@@ -5,6 +5,7 @@ import {
   SIGNATURE_LENGTH,
   SIGNATURE_SIMILARITY_THRESHOLD,
 } from './signature.core';
+import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 
 const WIDTH = 40;
 const HEIGHT = 40;
@@ -36,7 +37,7 @@ const blank = png(() => undefined);
 const RED: [number, number, number] = [255, 0, 0];
 const BLUE: [number, number, number] = [0, 0, 255];
 
-const signatureOf = (baseline: Buffer, image: Buffer, ignoreAreas = []): number[] | null =>
+const signatureOf = (baseline: Buffer, image: Buffer, ignoreAreas: IgnoreAreaDto[] = []): number[] | null =>
   computeChangeSignature({
     kind: 'signature',
     baseline,

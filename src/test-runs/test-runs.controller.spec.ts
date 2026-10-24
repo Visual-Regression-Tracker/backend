@@ -103,7 +103,7 @@ describe('TestRuns Controller', () => {
   });
 
   it('returns the matching variations of a test run', async () => {
-    const group = { variations: [{ id: 'a' }], skipped: [] };
+    const group = { variations: [{ id: 'a' }], skipped: [] as unknown[] };
     const getMatchingVariations = jest.fn().mockResolvedValueOnce(group);
     controller = await initController({ getMatchingVariations });
 

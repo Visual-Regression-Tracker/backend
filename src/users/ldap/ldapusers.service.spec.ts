@@ -172,7 +172,7 @@ describe('LdapUsersService with no results from ldap', () => {
     try {
       await service.login({ email: 'testÜ*()\\\0@example.com', password: 'password' });
     } catch (e) {
-      expect(e.message).toBe('Invalid email or password.');
+      expect((e as Error).message).toBe('Invalid email or password.');
     }
   });
 });
@@ -308,7 +308,7 @@ describe('LdapUsersService characterization', () => {
     it.each(['dn', 'mailAttr', 'firstAttr', 'lastAttr'])(
       'rejects an LDAP entry without the %s attribute',
       async (attribute) => {
-        const incomplete = { ...entry, [attribute]: undefined };
+        const incomplete: Partial<typeof entry> = { ...entry, [attribute]: undefined };
         ldapClient.search.mockResolvedValueOnce({ searchEntries: [incomplete], searchReferences: [] });
 
         await expect(service.login({ email: 'jane', password: 'pw' })).rejects.toThrow(

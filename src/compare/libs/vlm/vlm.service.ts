@@ -99,10 +99,11 @@ export class VlmService implements ImageComparator {
 
       return result;
     } catch (error) {
-      this.logger.error(`VLM comparison failed: ${error.message}`, error.stack);
+      const { message, stack } = error instanceof Error ? error : { message: String(error), stack: undefined };
+      this.logger.error(`VLM comparison failed: ${message}`, stack);
       return {
         ...pixelmatchResult,
-        vlmDescription: `VLM analysis failed: ${error.message}`,
+        vlmDescription: `VLM analysis failed: ${message}`,
       };
     }
   }
