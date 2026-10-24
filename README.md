@@ -2,14 +2,14 @@
 
 ## Local setup
 
-- Install Node `18` (LTS)
+- Install Node `20` (LTS) or newer
 - clone repo
-- Update `.env` and `prisma/.env`
-- Make sure Postgres is up and running, using `docker compose up` in a separate terminal
+- Update `.env` and `prisma/.env` (`DATABASE_URL` in `prisma/.env` must match the `POSTGRES_*` values in `.env`)
+- Start Postgres `docker compose up -d postgres`
 - `npm i`
 - `npm run test`
-- Create DB structure `npx prisma db push`
-- Apply migrations `npx prisma migrate deploy`
+- Create DB structure `npx prisma migrate deploy`
+  - do not run `npx prisma db push` before it: `db push` creates the tables without the migration history, so `migrate deploy` then fails with `P3005 The database schema is not empty`. If that already happened, start over with an empty database (`docker compose down -v`)
 - `npm run test:e2e`
 - Seed initial data `npx prisma db seed`
 - `npm run start:debug`
