@@ -158,7 +158,13 @@ export class BuildsService {
     return build;
   }
 
-  async deleteOldBuilds(projectId: string, keepBuilds: number): Promise<void> {
+  /**
+   * Makes room for the build about to be started: keeps the newest
+   * `keepBuilds - 1` builds, so that with it the project holds `keepBuilds`.
+   * The build that a POST with `ciBuildId` is about to reuse (parallel CI jobs
+   * share one) is never pruned, and does not count among the ones kept.
+   */
+  async deleteOldBuilds(projectId: string, keepBuilds: number, ciBuildId?: string): Promise<void> {
     if (this.ongoingDeletions.has(projectId)) {
       this.logger.debug(`Deletion for project ${projectId} is already in progress. Returning existing promise.`);
       return this.ongoingDeletions.get(projectId);
@@ -166,9 +172,18 @@ export class BuildsService {
 
     const deletionPromise = (async () => {
       this.logger.debug(`Starting to delete old builds for project ${projectId}, keeping ${keepBuilds} builds.`);
-      keepBuilds = keepBuilds < 2 ? keepBuilds : keepBuilds - 1;
-      const buildList = await this.findMany(projectId, undefined, keepBuilds);
-      for (const eachBuild of buildList.data) {
+      const oldBuilds = await this.prismaService.build.findMany({
+        where: {
+          projectId,
+          // spelled out with the null case: NOT { ciBuildId } alone would also
+          // leave out every build without a CI build id
+          ...(ciBuildId && { OR: [{ ciBuildId: null }, { ciBuildId: { not: ciBuildId } }] }),
+        },
+        orderBy: BUILD_ORDER,
+        skip: Math.max(keepBuilds - 1, 0),
+        select: { id: true },
+      });
+      for (const eachBuild of oldBuilds) {
         await this.remove(eachBuild.id);
       }
       this.logger.debug(`Finished deleting old builds for project ${projectId}.`);
@@ -176,10 +191,15 @@ export class BuildsService {
 
     this.ongoingDeletions.set(projectId, deletionPromise);
 
-    deletionPromise.finally(() => {
-      this.ongoingDeletions.delete(projectId);
-      this.logger.debug(`Deletion promise for project ${projectId} resolved/rejected and removed from map.`);
-    });
+    deletionPromise
+      .finally(() => {
+        this.ongoingDeletions.delete(projectId);
+        this.logger.debug(`Deletion promise for project ${projectId} resolved/rejected and removed from map.`);
+      })
+      // finally() hands on the rejection in a promise nobody awaits: unhandled,
+      // it would take the whole process down. The caller gets the error from
+      // deletionPromise itself.
+      .catch((): void => undefined);
 
     return deletionPromise;
   }
