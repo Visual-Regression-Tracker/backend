@@ -38,6 +38,36 @@ export class ProjectsService {
     return this.prismaService.project.findMany();
   }
 
+  async findFavoriteIds(userId: string): Promise<string[]> {
+    const projects = await this.prismaService.project.findMany({
+      where: { favoritedBy: { some: { id: userId } } },
+      select: { id: true },
+    });
+    return projects.map(({ id }) => id);
+  }
+
+  async addFavorite(userId: string, projectId: string): Promise<void> {
+    // connect alone would fail with a Prisma error for an unknown project;
+    // findOne turns that into the API's usual 404
+    await this.findOne(projectId);
+    // connecting an already connected project is a no-op, so adding twice is fine
+    await this.prismaService.user.update({
+      where: { id: userId },
+      data: { favoriteProjects: { connect: { id: projectId } } },
+      select: { id: true },
+    });
+  }
+
+  async removeFavorite(userId: string, projectId: string): Promise<void> {
+    // disconnecting a project that is not connected (or does not exist) is a
+    // no-op, which makes removal idempotent without a lookup
+    await this.prismaService.user.update({
+      where: { id: userId },
+      data: { favoriteProjects: { disconnect: { id: projectId } } },
+      select: { id: true },
+    });
+  }
+
   async create(projectDto: CreateProjectDto): Promise<Project> {
     return this.prismaService.project.create({
       data: {
