@@ -421,6 +421,20 @@ describe('VlmService', () => {
       expect(result.vlmDescription).toBe('From thinking');
     });
 
+    it('marks the run unresolved when the model sees a difference, whatever status pixelmatch gave', async () => {
+      const { getImageMock } = createImageMocks();
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(createPixelmatchResult({ status: TestStatus.failed }));
+      const ollamaGenerateMock = jest.fn().mockResolvedValue({
+        content: '{"identical": false, "description": "Button moved"}',
+      });
+      const service = await initService({ getImageMock, ollamaGenerateMock, pixelmatchGetDiffMock });
+
+      const result = await service.getDiff(input, DEFAULT_CONFIG);
+
+      expect(result.status).toBe(TestStatus.unresolved);
+      expect(result.vlmDescription).toBe('Button moved');
+    });
+
     it('falls back to the content field when thinking is preferred but empty', async () => {
       const { getImageMock } = createImageMocks();
       const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(createPixelmatchResult({}));

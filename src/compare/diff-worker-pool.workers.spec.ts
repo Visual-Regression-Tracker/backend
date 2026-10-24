@@ -381,6 +381,38 @@ describe('DiffWorkerPool with worker threads', () => {
       expect(mockWorkers).toHaveLength(3);
     });
 
+    it('does not run a job again when the worker that already answered it crashes later', async () => {
+      createPool();
+
+      const result = pool.run(job(1));
+      mockWorkers[0].emit('message', output(1));
+      await expect(result).resolves.toEqual(output(1));
+
+      mockWorkers[0].emit('error', new Error('boom'));
+
+      expect(mockWorkers).toHaveLength(2);
+      expect(mockWorkers[1].postMessage).not.toHaveBeenCalled();
+    });
+
+    it('takes only the crashed worker out of the idle ones', async () => {
+      createPool({ workers: '3' });
+
+      settle(pool.run(job(1)));
+      const [crashed, idle, busy] = mockWorkers;
+      expect(busy.postMessage).toHaveBeenCalledWith(job(1));
+
+      crashed.emit('error', new Error('boom'));
+      const replacement = mockWorkers[3];
+      settle(pool.run(job(2)));
+      settle(pool.run(job(3)));
+      settle(pool.run(job(4)));
+
+      expect(replacement.postMessage).toHaveBeenCalledWith(job(2));
+      expect(idle.postMessage).toHaveBeenCalledWith(job(3));
+      // job 4 waits: the crashed worker is never handed anything
+      expect(crashed.postMessage).not.toHaveBeenCalled();
+    });
+
     it('ignores a late answer from a worker that was already dropped', async () => {
       createPool();
 

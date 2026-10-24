@@ -1579,6 +1579,7 @@ describe('TestRunsService', () => {
         new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'test' }),
       ],
       ['any other error', new Error('connection lost')],
+      ['a non-prisma error carrying the P2025 code', Object.assign(new Error('gone'), { code: 'P2025' })],
     ])('swallows %s and reports the run as deleted', async (_case, error) => {
       const { built, testRun, eventTestRunDeletedMock } = await initDeleteService(error);
 
@@ -2016,6 +2017,58 @@ describe('TestRunsService', () => {
       expect(compareGetChangeSignatureMock).toHaveBeenCalledTimes(1);
     });
 
+    // the default project config is threshold 0.1 with antialiasing ignored
+    const stamped = (signature: unknown[], stamp = { threshold: 0.1, includeAA: true }) =>
+      JSON.stringify({ ...stamp, signature });
+
+    it('reuses a stored signature stamped with the current config', async () => {
+      const testRun = sibling('target', { changeSignature: stamped(SAME_PALETTE) });
+      const { built, compareGetChangeSignatureMock } = await initEdgeService({ testRun });
+
+      await built.getMatchingVariations(testRun.id);
+
+      expect(compareGetChangeSignatureMock).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['only the threshold changed', { threshold: 0.2, includeAA: true }],
+      ['only the antialiasing setting changed', { threshold: 0.1, includeAA: false }],
+    ])('recomputes a stored signature when %s', async (_case, stamp) => {
+      const testRun = sibling('target', { changeSignature: stamped(SAME_PALETTE, stamp) });
+      const { built, compareGetChangeSignatureMock } = await initEdgeService({ testRun });
+
+      await built.getMatchingVariations(testRun.id);
+
+      expect(compareGetChangeSignatureMock).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['a single value that is not a number', stamped([1, ...new Array(SIGNATURE_LENGTH - 1).fill('nope')])],
+      ['a value that is not finite', stamped(SAME_PALETTE).replace('[1,', '[1e999,')],
+    ])('recomputes a stored signature with %s', async (_case, changeSignature) => {
+      const testRun = sibling('target', { changeSignature });
+      const { built, compareGetChangeSignatureMock } = await initEdgeService({ testRun });
+
+      await built.getMatchingVariations(testRun.id);
+
+      expect(compareGetChangeSignatureMock).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['no stored signature', null],
+      ['an empty stored signature', ''],
+      ['a stored json null', 'null'],
+    ])('computes quietly for %s', async (_case, changeSignature) => {
+      const testRun = sibling('target', { changeSignature });
+      const { built, compareGetChangeSignatureMock } = await initEdgeService({ testRun });
+      const warn = jest.spyOn(built['logger'], 'warn').mockImplementation(() => undefined);
+
+      await built.getMatchingVariations(testRun.id);
+
+      expect(warn).not.toHaveBeenCalled();
+      expect(compareGetChangeSignatureMock).toHaveBeenCalledTimes(1);
+    });
+
     it('does not remember a failed signature', async () => {
       const testRun = sibling('target');
       let calls = 0;
@@ -2052,6 +2105,19 @@ describe('TestRunsService', () => {
       expect(cache.get('key 0')).toBeUndefined();
       expect(cache.get('key 1')).toBeDefined();
       expect(cache.get('key 2000')).toBeDefined();
+    });
+
+    it('does not take up room for a key that was looked up but never set', () => {
+      const cache = service['signatureCache'];
+      for (let index = 0; index < 2000; index++) {
+        cache.set(`key ${index}`, Promise.resolve([index]));
+      }
+
+      expect(cache.get('absent')).toBeUndefined();
+      // replacing an existing key keeps the size, so nothing is evicted
+      cache.set('key 0', Promise.resolve([0]));
+
+      expect(cache.get('key 1')).toBeDefined();
     });
 
     it('keeps an entry that was read recently', () => {

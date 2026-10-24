@@ -412,6 +412,163 @@ describe('OidcUsersService', () => {
     });
   });
 
+  describe('configuration', () => {
+    const configWith = (overrides: Record<string, string>): ConfigService =>
+      ({
+        get: jest.fn((key: string, defaultValue?: string) =>
+          key in overrides ? overrides[key] : configService.get(key, defaultValue)
+        ),
+        getOrThrow: configService.getOrThrow,
+      }) as unknown as ConfigService;
+    const checks = { state: 'mock-state', codeVerifier: 'mock-verifier' };
+
+    it.each([
+      ['a single admin value', { groups: 'admin' }, Role.admin],
+      ['values separated by spaces', { groups: 'viewer vrt-admin' }, Role.admin],
+      ['values separated by commas', { groups: 'viewer,admin' }, Role.admin],
+      ['admin values in another case', { groups: ['VRT-Admin'] }, Role.admin],
+      ['values that are only separators', { groups: ' , ' }, Role.editor],
+      ['object values, which are ignored', { groups: [{ name: 'admin' }] }, Role.editor],
+    ])('derives the role from %s', async (_case, roleClaims, expected) => {
+      mockCallback.mockResolvedValue({
+        claims: () => ({ email: 'new@example.com', email_verified: true, ...roleClaims }),
+      });
+      findUnique.mockResolvedValue(null);
+      create.mockImplementation(({ data }) => ({ ...user, ...data }));
+
+      await service.handleCallback({ code: 'code' }, checks);
+
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ role: expected }) })
+      );
+    });
+
+    it('trims and lower-cases the configured admin values', async () => {
+      const custom = new OidcUsersService(
+        configWith({ OIDC_ADMIN_VALUES: ' Ops-Team , ,42' }),
+        prismaService,
+        authService
+      );
+      mockCallback.mockResolvedValue({
+        claims: () => ({ email: 'new@example.com', email_verified: true, groups: ['ops-team'] }),
+      });
+      findUnique.mockResolvedValue(null);
+      create.mockImplementation(({ data }) => ({ ...user, ...data }));
+
+      await custom.handleCallback({ code: 'code' }, checks);
+
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ role: Role.admin }) })
+      );
+    });
+
+    it.each([
+      ['a number', 42],
+      ['a boolean', true],
+    ])('compares a role claim holding %s as a string', async (_case, value) => {
+      const custom = new OidcUsersService(configWith({ OIDC_ADMIN_VALUES: String(value) }), prismaService, authService);
+      mockCallback.mockResolvedValue({
+        claims: () => ({ email: 'new@example.com', email_verified: true, groups: [value] }),
+      });
+      findUnique.mockResolvedValue(null);
+      create.mockImplementation(({ data }) => ({ ...user, ...data }));
+
+      await custom.handleCallback({ code: 'code' }, checks);
+
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ role: Role.admin }) })
+      );
+    });
+
+    it('gives new users without an admin claim the configured default role', async () => {
+      const custom = new OidcUsersService(configWith({ OIDC_DEFAULT_ROLE: 'Admin' }), prismaService, authService);
+      mockCallback.mockResolvedValue({ claims: () => ({ email: 'new@example.com', email_verified: true }) });
+      findUnique.mockResolvedValue(null);
+      create.mockImplementation(({ data }) => ({ ...user, ...data }));
+
+      await custom.handleCallback({ code: 'code' }, checks);
+
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ role: Role.admin }) })
+      );
+    });
+  });
+
+  describe('handleCallback claim sources', () => {
+    const checks = { state: 'mock-state', codeVerifier: 'mock-verifier' };
+    const relaxed = () =>
+      new OidcUsersService(
+        {
+          get: jest.fn((key: string, defaultValue?: string) =>
+            key === 'OIDC_REQUIRE_VERIFIED_EMAIL' ? 'false' : configService.get(key, defaultValue)
+          ),
+          getOrThrow: configService.getOrThrow,
+        } as unknown as ConfigService,
+        prismaService,
+        authService
+      );
+
+    it('rejects a missing email even when unverified emails are allowed', async () => {
+      mockCallback.mockResolvedValue({ claims: () => ({ sub: 'user-1' }) });
+
+      await expect(relaxed().handleCallback({ code: 'code' }, checks)).rejects.toThrow('OIDC login failed.');
+
+      expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    it('warns and keeps the role of an existing user when the role claim is missing', async () => {
+      mockCallback.mockResolvedValue({ claims: () => ({ email: 'test@example.com', email_verified: true }) });
+      findUnique.mockResolvedValue({ ...user, role: Role.admin });
+      const warn = jest.spyOn(service['logger'], 'warn').mockImplementation(() => undefined);
+
+      await service.handleCallback({ code: 'code' }, checks);
+
+      expect(warn).toHaveBeenCalledWith("Claim 'groups' not found for 'test@example.com'. Keeping role 'admin'.");
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a missing parent claim', {}],
+      ['a null parent claim', { realm_access: null }],
+      ['a parent claim that is not an object', { realm_access: 'admin' }],
+    ])('treats a dotted role claim with %s as missing', async (_case, parent) => {
+      const nested = new OidcUsersService(
+        {
+          get: jest.fn((key: string, defaultValue?: string) =>
+            key === 'OIDC_ROLE_CLAIM' ? 'realm_access.length' : configService.get(key, defaultValue)
+          ),
+          getOrThrow: configService.getOrThrow,
+        } as unknown as ConfigService,
+        prismaService,
+        authService
+      );
+      mockCallback.mockResolvedValue({
+        claims: () => ({ email: 'test@example.com', email_verified: true, ...parent }),
+      });
+      findUnique.mockResolvedValue({ ...user, role: Role.admin });
+
+      await nested.handleCallback({ code: 'code' }, checks);
+
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['another prisma error', new PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: '5' })],
+      ['a non-prisma error', new Error('db down')],
+    ])('rethrows %s from creating the user without looking it up again', async (_case, error) => {
+      mockCallback.mockResolvedValue({ claims: () => ({ email: 'race@example.com', email_verified: true }) });
+      // a lookup after the failed insert would find the user
+      findUnique
+        .mockReset()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ ...user, email: 'race@example.com' });
+      create.mockRejectedValue(error);
+
+      await expect(service.handleCallback({ code: 'code' }, checks)).rejects.toBe(error);
+      expect(findUnique).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('non-SSO operations', () => {
     it('updates the name but never the email of an OIDC user', async () => {
       update.mockResolvedValue(user);
