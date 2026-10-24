@@ -8,6 +8,7 @@ import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { PixelmatchConfig } from './pixelmatch.types';
 import { DiffWorkerPool } from '../../diff-worker-pool';
+import { Dinov2Service } from '../dinov2/dinov2.service';
 
 export const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialiasing: true };
 
@@ -18,7 +19,8 @@ export class PixelmatchService implements ImageComparator {
 
   constructor(
     private readonly staticService: StaticService,
-    private readonly diffWorkerPool: DiffWorkerPool
+    private readonly diffWorkerPool: DiffWorkerPool,
+    private readonly dinov2Service: Dinov2Service
   ) {}
 
   parseConfig(configJson: string): PixelmatchConfig {
@@ -86,7 +88,7 @@ export class PixelmatchService implements ImageComparator {
 
     // The mismatch stays on the run as measured, so a reviewer can still see
     // the pixels moved; only the verdict is the filter's.
-    if (output.renderingNoiseOnly) {
+    if (output.renderingNoiseOnly && (await this.confirmedByDinov2(data, baselineBuffer, imageBuffer))) {
       this.logger.debug(
         `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${output.blurAmplitude?.toFixed(1)}, ${output.solidPixels} solid pixels)`
       );
@@ -121,5 +123,19 @@ export class PixelmatchService implements ImageComparator {
       result.status = TestStatus.ok;
     }
     return result;
+  }
+
+  // The project's DINOv2 check, when it has one, gets the last word on what the
+  // blur would pass; without one the blur's verdict stands.
+  private async confirmedByDinov2(data: ImageCompareInput, baseline: Buffer, image: Buffer): Promise<boolean> {
+    const dinov2 = data.blurAmplitude?.dinov2;
+    if (!dinov2) {
+      return true;
+    }
+    const verdict = await this.dinov2Service.confirmsNoise(baseline, image, data.ignoreAreas, dinov2.threshold);
+    if (!verdict.noise) {
+      this.logger.debug(`DINOv2 sees a change of content (score ${verdict.score?.toFixed(3) ?? 'n/a'}): to review`);
+    }
+    return verdict.noise;
   }
 }

@@ -6,6 +6,7 @@ import { join } from 'path';
 import { PixelmatchJobInput, PixelmatchJobOutput } from './libs/pixelmatch/pixelmatch.core';
 import { SignatureJobInput, SignatureJobOutput } from './libs/pixelmatch/signature.core';
 import { BlurAmplitudeJobInput, BlurAmplitudeJobOutput } from './libs/pixelmatch/blur-amplitude.core';
+import { PatchGateJobInput, PatchGateJobOutput } from './libs/pixelmatch/patch-gate.core';
 import { runWorkerJob, WorkerJobInput, WorkerJobOutput } from './libs/pixelmatch/worker-job';
 
 const WORKER_FILE = join(__dirname, 'libs', 'pixelmatch', 'pixelmatch.worker.js');
@@ -53,6 +54,7 @@ export class DiffWorkerPool implements OnApplicationShutdown {
   async run(input: PixelmatchJobInput): Promise<PixelmatchJobOutput>;
   async run(input: SignatureJobInput): Promise<SignatureJobOutput>;
   async run(input: BlurAmplitudeJobInput): Promise<BlurAmplitudeJobOutput>;
+  async run(input: PatchGateJobInput): Promise<PatchGateJobOutput>;
   async run(input: WorkerJobInput): Promise<WorkerJobOutput> {
     if (this.inline) {
       return runWorkerJob(input);
