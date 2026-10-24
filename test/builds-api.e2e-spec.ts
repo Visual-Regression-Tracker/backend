@@ -188,9 +188,12 @@ describe('Builds API (e2e)', () => {
       expect(listed.body.data[0]).toMatchObject({ id: build.id, passedCount: 1, unresolvedCount: 2, failedCount: 1 });
     });
 
-    it('unknown id', async () => {
-      // NOTE: current behavior — a missing build is a 500 (BuildDto of null), not a 404
-      await requestWithAuth(app, 'get', `/builds/${uuidAPIKey.create().uuid}`, user.token).expect(500);
+    it('404 for an unknown id', async () => {
+      const id = uuidAPIKey.create().uuid;
+
+      const res = await requestWithAuth(app, 'get', `/builds/${id}`, user.token).expect(404);
+
+      expect(res.body.message).toBe(`Build not found: ${id}`);
     });
   });
 
@@ -230,11 +233,8 @@ describe('Builds API (e2e)', () => {
       expect(imageExists(after.baselineName)).toBe(true);
     });
 
-    it('unknown id', async () => {
-      // NOTE: current behavior — deleting a missing build is a 200 with an empty body, not a 404
-      const res = await requestWithAuth(app, 'delete', `/builds/${uuidAPIKey.create().uuid}`, user.token).expect(200);
-
-      expect(res.text).toBe('');
+    it('404 for an unknown id', async () => {
+      await requestWithAuth(app, 'delete', `/builds/${uuidAPIKey.create().uuid}`, user.token).expect(404);
     });
 
     it('403 for a guest', async () => {
@@ -279,6 +279,12 @@ describe('Builds API (e2e)', () => {
       const build = await newBuild();
 
       await requestWithAuth(app, 'patch', `/builds/${build.id}/approve`, user.token).expect(400);
+    });
+
+    it('404 for an unknown id', async () => {
+      await requestWithAuth(app, 'patch', `/builds/${uuidAPIKey.create().uuid}/approve?merge=false`, user.token).expect(
+        404
+      );
     });
 
     it('403 for a guest', async () => {
@@ -326,11 +332,10 @@ describe('Builds API (e2e)', () => {
       expect(res.body.message).toBe('There is already a build with this ci build id.');
     });
 
-    it('unknown id', async () => {
-      // NOTE: current behavior — a 500 (Prisma "record not found"), not a 404
+    it('404 for an unknown id', async () => {
       await requestWithApiKey(app, 'patch', `/builds/${uuidAPIKey.create().uuid}`, user.apiKey)
         .send({ isRunning: false })
-        .expect(500);
+        .expect(404);
     });
   });
 

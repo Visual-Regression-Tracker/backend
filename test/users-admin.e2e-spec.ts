@@ -160,13 +160,12 @@ describe('Users admin and RBAC (e2e)', () => {
       expect((await usersService.findOne(target.id)).role).toBe(Role.guest);
     });
 
-    it('500 for a user that does not exist', async () => {
+    it('404 for a user that does not exist', async () => {
       const admin = await haveUser(Role.admin);
 
-      // NOTE: current behavior — Prisma's "record not found" (P2025) is not mapped to 404
       await requestWithAuth(app, 'patch', '/users/assignRole', admin.token)
         .send({ id: randomUUID(), role: Role.editor })
-        .expect(500);
+        .expect(404);
     });
   });
 

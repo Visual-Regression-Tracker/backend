@@ -169,11 +169,12 @@ describe('TestRuns review API (e2e)', () => {
       expect(res.body.projectId).toBe(project.id);
     });
 
-    it('unknown id', async () => {
-      // NOTE: current behavior — a missing run is a 200 with an empty body, not a 404
-      const res = await requestWithAuth(app, 'get', `/test-runs/${uuidAPIKey.create().uuid}`, user.token).expect(200);
+    it('404 for an unknown id', async () => {
+      const id = uuidAPIKey.create().uuid;
 
-      expect(res.text).toBe('');
+      const res = await requestWithAuth(app, 'get', `/test-runs/${id}`, user.token).expect(404);
+
+      expect(res.body.message).toBe(`Test run not found: ${id}`);
     });
 
     it('400 for an id that is not a uuid', async () => {
@@ -295,11 +296,10 @@ describe('TestRuns review API (e2e)', () => {
       }
     });
 
-    it('unknown id', async () => {
-      // NOTE: current behavior — approving a missing run is a 500 (TypeError on the null run), not a 404
+    it('404 for an unknown id', async () => {
       await requestWithAuth(app, 'post', `/test-runs/approve?merge=false`, user.token)
         .send([uuidAPIKey.create().uuid])
-        .expect(500);
+        .expect(404);
     });
   });
 
@@ -437,11 +437,10 @@ describe('TestRuns review API (e2e)', () => {
         .expect(400);
     });
 
-    it('unknown id', async () => {
-      // NOTE: current behavior — a missing run is a 500 (Prisma "record not found"), not a 404
+    it('404 for an unknown id', async () => {
       await requestWithAuth(app, 'post', `/test-runs/ignoreAreas/update`, user.token)
         .send({ ids: [uuidAPIKey.create().uuid], ignoreAreas: [area] })
-        .expect(500);
+        .expect(404);
     });
   });
 
@@ -655,9 +654,8 @@ describe('TestRuns review API (e2e)', () => {
       expect(res.body.variations.map((run) => run.id)).toEqual([en.id, de.id]);
     }, 60000);
 
-    it('unknown id', async () => {
-      // NOTE: current behavior — a missing run is a 500 ("No test run found"), not a 404
-      await matching(uuidAPIKey.create().uuid).expect(500);
+    it('404 for an unknown id', async () => {
+      await matching(uuidAPIKey.create().uuid).expect(404);
     });
 
     it('400 for an id that is not a uuid', async () => {

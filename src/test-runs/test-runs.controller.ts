@@ -13,6 +13,7 @@ import {
   ValidationPipe,
   Logger,
   Patch,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -60,8 +61,12 @@ export class TestRunsController {
   @ApiOkResponse({ type: TestRunDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRunDto> {
-    return this.testRunsService.findOne(id);
+  async getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRunDto> {
+    const testRun = await this.testRunsService.findOne(id);
+    if (!testRun) {
+      throw new NotFoundException(`Test run not found: ${id}`);
+    }
+    return testRun;
   }
 
   @Post('approve')

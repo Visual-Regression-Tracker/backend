@@ -1,4 +1,4 @@
-import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
+import { Injectable, Inject, forwardRef, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestVariation, Baseline, Build, TestRun, User } from '@prisma/client';
 import { StaticService } from '../static/static.service';
@@ -28,7 +28,7 @@ export class TestVariationsService {
   ): Promise<
     TestVariation & { baselines: (Baseline & { testRun: TestRun; user: Omit<User, 'password' | 'apiKey'> })[] }
   > {
-    return this.prismaService.testVariation.findUnique({
+    const testVariation = await this.prismaService.testVariation.findUnique({
       where: { id },
       include: {
         baselines: {
@@ -44,6 +44,10 @@ export class TestVariationsService {
         },
       },
     });
+    if (!testVariation) {
+      throw new NotFoundException(`Test variation not found: ${id}`);
+    }
+    return testVariation;
   }
 
   async findUnique(data: BaselineDataDto & { projectId: string }): Promise<TestVariation | null> {

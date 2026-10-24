@@ -6,6 +6,7 @@ import { EventsGateway } from '../shared/events/events.gateway';
 import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { mocked, MockedObject } from 'jest-mock';
 import { BuildDto } from './dto/build.dto';
+import { NotFoundException } from '@nestjs/common';
 import { ProjectsService } from '../projects/projects.service';
 import { generateTestRun, TEST_PROJECT } from '../_data_';
 import { Prisma as PrismaRuntime } from '@prisma/client';
@@ -17,7 +18,8 @@ const initService = async ({
   buildFindManyMock = jest.fn(),
   buildCreateMock = jest.fn(),
   buildUpdateMock = jest.fn(),
-  buildFindUniqueMock = jest.fn(),
+  // a row for whatever id is asked: findOne answers 404 for a missing build
+  buildFindUniqueMock = jest.fn().mockImplementation(async ({ where }) => ({ id: where.id })),
   buildFindFirstMock = jest.fn(),
   buildDeleteMock = jest.fn(),
   buildUpsertMock = jest.fn(),
@@ -141,6 +143,14 @@ describe('BuildsService', () => {
       merge: true,
     });
     expect(result).toBe(buildDto);
+  });
+
+  it('findOne throws NotFoundException for an unknown id', async () => {
+    const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(null);
+    const testRunGroupByMock = jest.fn().mockResolvedValue([]);
+    service = await initService({ buildFindUniqueMock, testRunGroupByMock });
+
+    await expect(service.findOne('missing')).rejects.toThrow(new NotFoundException('Build not found: missing'));
   });
 
   it('findMany', async () => {
@@ -522,9 +532,10 @@ describe('BuildsService', () => {
     it('should remove the promise from the map after completion (success)', async () => {
       const buildFindManyMock = jest.fn().mockResolvedValueOnce([build1]);
       const buildCountMock = jest.fn().mockResolvedValueOnce(1);
+      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build1);
       const removeMock = jest.fn().mockResolvedValue(undefined);
 
-      service = await initService({ buildFindManyMock, buildCountMock });
+      service = await initService({ buildFindManyMock, buildCountMock, buildFindUniqueMock });
       service.remove = removeMock;
 
       const projectId = 'testProject';
@@ -575,6 +586,13 @@ describe('BuildsService', () => {
       },
     });
     expect(testRunApproveMock).toHaveBeenCalledWith(build.testRuns[0].id, true);
+  });
+
+  it('approve throws NotFoundException for an unknown build', async () => {
+    const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(null);
+    service = await initService({ buildFindUniqueMock });
+
+    await expect(service.approve('missing', false)).rejects.toThrow(new NotFoundException('Build not found: missing'));
   });
 
   describe('findOsCreate', () => {
