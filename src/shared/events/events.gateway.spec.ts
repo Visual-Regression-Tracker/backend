@@ -168,6 +168,27 @@ describe('EventsGateway', () => {
     });
   });
 
+  describe('onModuleDestroy', () => {
+    it('drops the batches still waiting for their debounce', async () => {
+      const buildFindManyMock = jest.fn().mockResolvedValue([]);
+      const { gateway, emitMock } = await initGateway({ buildFindManyMock });
+
+      // the leading edge goes out at once; the second call waits for the trailing edge
+      gateway.testRunCreated(testRunA);
+      gateway.testRunCreated(testRunB);
+      await flushPromises();
+      emitMock.mockClear();
+      buildFindManyMock.mockClear();
+
+      gateway.onModuleDestroy();
+      jest.advanceTimersByTime(3000);
+      await flushPromises();
+
+      expect(emitMock).not.toHaveBeenCalled();
+      expect(buildFindManyMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('build_updated', () => {
     it('emits the build with stats aggregated by the database on the leading edge', async () => {
       const build: Build = { ...TEST_BUILD, id: 'buildX' };
