@@ -1,3 +1,4 @@
+import { OnModuleDestroy } from '@nestjs/common';
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { TestRun } from '@prisma/client';
@@ -7,7 +8,7 @@ import { debounce } from 'lodash';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @WebSocketGateway({ cors: true })
-export class EventsGateway {
+export class EventsGateway implements OnModuleDestroy {
   @WebSocketServer()
   server: Server;
 
@@ -51,6 +52,15 @@ export class EventsGateway {
 
   buildDeleted(buildDto: BuildDto) {
     this.server.emit('build_deleted', buildDto);
+  }
+
+  // A batch still waiting for its debounce would otherwise fire after shutdown
+  // and query a database pool that is already closed.
+  onModuleDestroy(): void {
+    this.testRunCreatedDebounced.cancel();
+    this.testRunUpdatedDebounced.cancel();
+    this.testRunDeletedDebounced.cancel();
+    this.buildUpdatedDebounced.cancel();
   }
 
   private testRunUpdatedDebounced = debounce(
