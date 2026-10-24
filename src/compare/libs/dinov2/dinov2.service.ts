@@ -122,7 +122,9 @@ export class Dinov2Service {
       return { noise: score <= threshold, score };
     } catch (error) {
       this.logger.warn(
-        `DINOv2 check failed, the run goes to review: ${error instanceof Error ? error.message : error}`
+        // read as an Error, not checked with instanceof: fetch errors come
+        // from another realm under Jest
+        `DINOv2 check failed, the run goes to review: ${(error as Error)?.message ?? error}`
       );
       return { noise: false };
     }
