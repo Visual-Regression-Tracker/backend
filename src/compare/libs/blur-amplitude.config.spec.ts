@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { DEFAULT_BLUR_AMPLITUDE_THRESHOLD, DEFAULT_BLUR_SIGMA } from './pixelmatch/blur-amplitude.core';
-import { splitBlurAmplitudeConfig } from './blur-amplitude.config';
+import { MAX_BLUR_AMPLITUDE_THRESHOLD, splitBlurAmplitudeConfig } from './blur-amplitude.config';
 import { PixelmatchConfig } from './pixelmatch/pixelmatch.types';
 
 describe('splitBlurAmplitudeConfig', () => {
@@ -23,6 +23,17 @@ describe('splitBlurAmplitudeConfig', () => {
     expect(blurAmplitude).toEqual({ sigma: DEFAULT_BLUR_SIGMA, threshold: DEFAULT_BLUR_AMPLITUDE_THRESHOLD });
   });
 
+  // anything near 255 would pass almost every change of one size
+  it('accepts a threshold up to half the contrast range', () => {
+    const { blurAmplitude } = splitBlurAmplitudeConfig(
+      { blurAmplitudeFilter: true, blurAmplitudeThreshold: MAX_BLUR_AMPLITUDE_THRESHOLD },
+      logger
+    );
+
+    expect(MAX_BLUR_AMPLITUDE_THRESHOLD).toBe(128);
+    expect(blurAmplitude.threshold).toBe(128);
+  });
+
   it("uses the config's threshold", () => {
     const { blurAmplitude } = splitBlurAmplitudeConfig(
       { blurAmplitudeFilter: true, blurAmplitudeThreshold: 60.5 },
@@ -38,7 +49,7 @@ describe('splitBlurAmplitudeConfig', () => {
     expect(splitBlurAmplitudeConfig({ blurAmplitudeFilter: value as boolean }, logger).blurAmplitude).toBeUndefined();
   });
 
-  it.each([['80'], [Number.NaN], [-1], [256], [null]])(
+  it.each([['80'], [Number.NaN], [-1], [129], [null]])(
     'falls back to the default threshold for %p, and says so',
     (value) => {
       const { blurAmplitude } = splitBlurAmplitudeConfig(

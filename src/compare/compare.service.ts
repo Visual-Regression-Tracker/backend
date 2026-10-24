@@ -11,7 +11,7 @@ import { VlmService } from './libs/vlm/vlm.service';
 import { isHddStaticServiceConfigured } from '../static/utils';
 import { DiffWorkerPool } from './diff-worker-pool';
 import { SignatureJobInput, SignatureJobOutput } from './libs/pixelmatch/signature.core';
-import { BlurAmplitudeOptions } from './libs/pixelmatch/blur-amplitude.core';
+import { BlurAmplitudeOptions, isRenderingNoise } from './libs/pixelmatch/blur-amplitude.core';
 import { splitBlurAmplitudeConfig } from './libs/blur-amplitude.config';
 import { StaticService } from '../static/static.service';
 
@@ -72,18 +72,18 @@ export class CompareService {
       if (!baseline || !image) {
         return result;
       }
-      const { amplitude } = await this.diffWorkerPool.run({
+      const { measure } = await this.diffWorkerPool.run({
         kind: 'blur-amplitude',
         baseline,
         image,
         ignoreAreas: data.ignoreAreas,
         sigma,
       });
-      if (amplitude === null || amplitude > threshold) {
+      if (!isRenderingNoise(measure, threshold)) {
         return result;
       }
       this.logger.debug(
-        `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${amplitude.toFixed(1)})`
+        `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${measure.amplitude.toFixed(1)}, ${measure.solidPixels} solid pixels)`
       );
       // nothing will ever point at the diff of a run that passed
       if (result.diffName) {

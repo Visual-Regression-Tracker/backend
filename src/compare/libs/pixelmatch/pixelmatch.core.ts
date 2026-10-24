@@ -2,7 +2,7 @@ import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { applyIgnoreAreas, scaleImageToSize } from '../../utils';
-import { BlurAmplitudeOptions, maxBlurredDifference } from './blur-amplitude.core';
+import { BlurAmplitudeOptions, isRenderingNoise, measureBlurredDifference } from './blur-amplitude.core';
 import { signatureOfDecoded } from './signature.core';
 import { encodeThumbnail } from './thumbnail.core';
 
@@ -57,8 +57,10 @@ export interface PixelmatchJobOutput {
   imageThumbnail?: Buffer | Uint8Array;
   diffThumbnail?: Buffer | Uint8Array;
   // absent unless the blur-amplitude filter was asked for and the change was
-  // over tolerance — the only case where its verdict could matter
+  // over tolerance between screenshots of one size — the only case where its
+  // verdict could matter; the two numbers are absent when it could not measure
   blurAmplitude?: number;
+  solidPixels?: number;
   renderingNoiseOnly?: boolean;
 }
 
@@ -102,11 +104,13 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
   const diffPercent = (pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
 
   const overTolerance = diffPercent > input.diffTolerancePercent;
-  const blurAmplitude =
-    input.blurAmplitude && overTolerance
-      ? maxBlurredDifference(baselineIgnored, imageIgnored, input.blurAmplitude.sigma)
-      : undefined;
-  const renderingNoiseOnly = blurAmplitude === undefined ? undefined : blurAmplitude <= input.blurAmplitude.threshold;
+  // A size change is a finding of its own, as CompareService treats it for the
+  // other comparators: the filter only judges screenshots of one size.
+  const filtering = input.blurAmplitude && overTolerance && isSameDimension;
+  const measure = filtering
+    ? measureBlurredDifference(baselineIgnored, imageIgnored, input.blurAmplitude.sigma)
+    : undefined;
+  const renderingNoiseOnly = filtering ? isRenderingNoise(measure, input.blurAmplitude.threshold) : undefined;
 
   // A build is mostly runs that pass, so anything produced for a diff that is
   // about to be thrown away is work nobody ever sees the result of.
@@ -141,6 +145,11 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
     diffBuffer,
     ...(signature ? { signature } : {}),
     ...thumbnails,
-    ...(blurAmplitude === undefined ? {} : { blurAmplitude, renderingNoiseOnly }),
+    ...(filtering
+      ? {
+          renderingNoiseOnly,
+          ...(measure ? { blurAmplitude: measure.amplitude, solidPixels: measure.solidPixels } : {}),
+        }
+      : {}),
   };
 }

@@ -14,7 +14,7 @@ import { StaticService } from '../static/static.service';
 import { ImageComparison, TestStatus } from '@prisma/client';
 import * as utils from '../static/utils';
 import { ImageCompareInput } from './libs/ImageCompareInput';
-import { DEFAULT_BLUR_SIGMA } from './libs/pixelmatch/blur-amplitude.core';
+import { BlurredDifference, DEFAULT_BLUR_SIGMA, MAX_SOLID_SHARE } from './libs/pixelmatch/blur-amplitude.core';
 
 jest.mock('zod/v3', () => {
   const actualZod = jest.requireActual('zod');
@@ -183,8 +183,8 @@ describe('CompareService with mocked collaborators', () => {
       imageComparison = ImageComparison.lookSame as ImageComparison,
       config = filterOn as Record<string, unknown>,
       result = unresolved as object,
-      amplitude = 40 as number | null,
-      run = jest.fn().mockResolvedValue({ amplitude }),
+      measure = { amplitude: 40, solidPixels: 0, solidShare: 0 } as BlurredDifference | null,
+      run = jest.fn().mockResolvedValue({ measure }),
     } = {}) => {
       const staticServiceMock = {
         getImageBuffer: jest.fn().mockImplementation(async (name: string) => Buffer.from(name)),
@@ -238,7 +238,7 @@ describe('CompareService with mocked collaborators', () => {
     });
 
     it('passes a looks-same failure that is only rendering noise', async () => {
-      const { service, lookSame, run, staticServiceMock } = await setup({ amplitude: 40 });
+      const { service, lookSame, run, staticServiceMock } = await setup();
 
       const result = await service.getDiff({ projectId: 'projectId', data });
 
@@ -268,7 +268,9 @@ describe('CompareService with mocked collaborators', () => {
     });
 
     it('keeps a change stronger than rendering noise unresolved', async () => {
-      const { service, staticServiceMock } = await setup({ amplitude: 200 });
+      const { service, staticServiceMock } = await setup({
+        measure: { amplitude: 200, solidPixels: 0, solidShare: 0 },
+      });
 
       const result = await service.getDiff({ projectId: 'projectId', data });
 
@@ -276,8 +278,17 @@ describe('CompareService with mocked collaborators', () => {
       expect(staticServiceMock.deleteImage).not.toHaveBeenCalled();
     });
 
+    // a panel turned light grey is faint, but too solid to be noise
+    it('keeps a faint but solid change unresolved', async () => {
+      const { service } = await setup({
+        measure: { amplitude: 31, solidPixels: 9300, solidShare: MAX_SOLID_SHARE + 0.001 },
+      });
+
+      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(unresolved);
+    });
+
     it("measures against the config's own threshold", async () => {
-      const { service } = await setup({ config: { ...filterOn, blurAmplitudeThreshold: 30 }, amplitude: 40 });
+      const { service } = await setup({ config: { ...filterOn, blurAmplitudeThreshold: 30 } });
 
       expect((await service.getDiff({ projectId: 'projectId', data })).status).toBe(TestStatus.unresolved);
     });
@@ -300,7 +311,7 @@ describe('CompareService with mocked collaborators', () => {
     });
 
     it('keeps the verdict when the change cannot be measured', async () => {
-      const { service } = await setup({ amplitude: null });
+      const { service } = await setup({ measure: null });
 
       expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(unresolved);
     });
