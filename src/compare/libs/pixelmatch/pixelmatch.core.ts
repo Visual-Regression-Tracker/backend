@@ -2,7 +2,12 @@ import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { applyIgnoreAreas, scaleImageToSize } from '../../utils';
-import { BlurAmplitudeOptions, isRenderingNoise, measureBlurredDifference } from './blur-amplitude.core';
+import {
+  BlurAmplitudeOptions,
+  BlurredDifference,
+  isRenderingNoise,
+  measureBlurredDifference,
+} from './blur-amplitude.core';
 import { signatureOfDecoded } from './signature.core';
 import { encodeThumbnail } from './thumbnail.core';
 
@@ -106,11 +111,13 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
   const overTolerance = diffPercent > input.diffTolerancePercent;
   // A size change is a finding of its own, as CompareService treats it for the
   // other comparators: the filter only judges screenshots of one size.
-  const filtering = input.blurAmplitude && overTolerance && isSameDimension;
-  const measure = filtering
-    ? measureBlurredDifference(baselineIgnored, imageIgnored, input.blurAmplitude.sigma)
-    : undefined;
-  const renderingNoiseOnly = filtering ? isRenderingNoise(measure, input.blurAmplitude.threshold) : undefined;
+  const blurAmplitude = overTolerance && isSameDimension ? input.blurAmplitude : undefined;
+  let measure: BlurredDifference | null = null;
+  let renderingNoiseOnly: boolean | undefined;
+  if (blurAmplitude) {
+    measure = measureBlurredDifference(baselineIgnored, imageIgnored, blurAmplitude.sigma);
+    renderingNoiseOnly = isRenderingNoise(measure, blurAmplitude.threshold);
+  }
 
   // A build is mostly runs that pass, so anything produced for a diff that is
   // about to be thrown away is work nobody ever sees the result of.
@@ -145,7 +152,7 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
     diffBuffer,
     ...(signature ? { signature } : {}),
     ...thumbnails,
-    ...(filtering
+    ...(blurAmplitude
       ? {
           renderingNoiseOnly,
           ...(measure ? { blurAmplitude: measure.amplitude, solidPixels: measure.solidPixels } : {}),

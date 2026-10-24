@@ -79,7 +79,7 @@ export class CompareService {
         ignoreAreas: data.ignoreAreas,
         sigma,
       });
-      if (!isRenderingNoise(measure, threshold)) {
+      if (!measure || !isRenderingNoise(measure, threshold)) {
         return result;
       }
       this.logger.debug(
