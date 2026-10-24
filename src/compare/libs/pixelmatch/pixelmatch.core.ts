@@ -78,13 +78,18 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
   const baseline = PNG.sync.read(toBuffer(input.baseline));
   const image = PNG.sync.read(toBuffer(input.image));
 
-  if (baseline.data.equals(new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength))) {
-    return { equal: true };
-  }
-
   const isSameDimension = baseline.width === image.width && baseline.height === image.height;
   if (!isSameDimension && !input.allowDiffDimensions) {
     return { equal: false, isSameDimension };
+  }
+
+  // Identical bytes only mean identical screenshots at the same size: a 60x30
+  // and a 30x60 image of the same pixels decode to the very same buffer.
+  if (
+    isSameDimension &&
+    baseline.data.equals(new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength))
+  ) {
+    return { equal: true };
   }
 
   // scale image to max size
