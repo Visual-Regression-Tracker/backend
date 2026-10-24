@@ -183,6 +183,20 @@ export class TestVariationsService {
       projectId,
     });
 
+    try {
+      await this.mergeInto(build, projectId, fromBranch, toBranch);
+    } catch (e) {
+      // the build is stopped either way, so a failed merge does not stay
+      // "running" in the list forever; the cause still reaches the client
+      await this.buildsService.update(build.id, { isRunning: false }).catch(() => undefined);
+      throw e;
+    }
+
+    // stop build
+    return this.buildsService.update(build.id, { isRunning: false });
+  }
+
+  private async mergeInto(build: Build, projectId: string, fromBranch: string, toBranch: string): Promise<void> {
     // find source branch variations
     const testVariations: TestVariation[] = await this.prismaService.testVariation.findMany({
       where: { projectId, branchName: fromBranch },
@@ -202,14 +216,16 @@ export class TestVariationsService {
           ignoreAreas: JSON.parse(sourceBranchTestVariation.ignoreAreas),
         };
 
-        // get destination branch variation
-        let destintionBranchTestVariation = await this.find({
+        // get destination branch variation — on that branch only: find() would
+        // hand back the main branch's when it is the newer one, and the merge
+        // would then try to create a second variation on toBranch
+        let destintionBranchTestVariation = await this.findUnique({
           projectId,
           branchName: toBranch,
           ...getTestVariationUniqueData(sourceBranchTestVariation),
         });
 
-        if (destintionBranchTestVariation?.branchName !== toBranch) {
+        if (!destintionBranchTestVariation) {
           destintionBranchTestVariation = await this.create({ createTestRequestDto });
         }
 
@@ -222,9 +238,6 @@ export class TestVariationsService {
         await this.testRunsService.calculateDiff(projectId, testRun);
       }
     }
-
-    // stop build
-    return this.buildsService.update(build.id, { isRunning: false });
   }
 
   async delete(id: string): Promise<TestVariation> {

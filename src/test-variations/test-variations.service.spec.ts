@@ -489,10 +489,8 @@ describe('TestVariationsService', () => {
       variationFindManyMock,
       getImageBufferMock,
     });
-    service.find = jest
-      .fn()
-      .mockResolvedValueOnce(testVariationSourceBranch)
-      .mockResolvedValueOnce(testVariationSourceBranch);
+    // neither screen has a variation on the target branch yet
+    service.findUnique = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null);
     service.create = jest
       .fn()
       .mockResolvedValueOnce(testVariationTargetBranch)
@@ -504,7 +502,7 @@ describe('TestVariationsService', () => {
       branchName: targetBranch,
       projectId: project.id,
     });
-    expect(service.find).toHaveBeenNthCalledWith(1, {
+    expect(service.findUnique).toHaveBeenNthCalledWith(1, {
       name: testVariation.name,
       os: testVariation.os,
       device: testVariation.device,
@@ -514,7 +512,7 @@ describe('TestVariationsService', () => {
       branchName: targetBranch,
       projectId: project.id,
     });
-    expect(service.find).toHaveBeenNthCalledWith(2, {
+    expect(service.findUnique).toHaveBeenNthCalledWith(2, {
       name: testVariationSecond.name,
       os: testVariationSecond.os,
       device: testVariationSecond.device,
@@ -842,7 +840,7 @@ describe('TestVariationsService', () => {
         testRuncalCulateDiffMock,
         buildUpdateMock,
       });
-      service.find = jest.fn().mockResolvedValueOnce(target);
+      service.findUnique = jest.fn().mockResolvedValueOnce(target);
       service.create = jest.fn();
 
       const result = await service.merge('projectId', 'develop', 'master');
@@ -864,6 +862,27 @@ describe('TestVariationsService', () => {
       expect(testRuncalCulateDiffMock).toHaveBeenCalledWith('projectId', testRun);
       expect(buildUpdateMock).toHaveBeenCalledWith('buildId', { isRunning: false });
       expect(result).toBe('stopped build');
+    });
+
+    it('merge stops its build when a step fails and passes the failure on', async () => {
+      const source = generateTestVariation({ branchName: 'develop' });
+      const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce({ id: 'buildId' });
+      const variationFindManyMock = jest.fn().mockResolvedValueOnce([source]);
+      const getImageBufferMock = jest.fn().mockResolvedValueOnce(Buffer.from('png'));
+      const testRunCreateMock = jest.fn().mockRejectedValueOnce(new Error('storage down'));
+      const buildUpdateMock = jest.fn().mockResolvedValueOnce('stopped build');
+      service = await initModule({
+        buildFindOrCreateMock,
+        variationFindManyMock,
+        getImageBufferMock,
+        testRunCreateMock,
+        buildUpdateMock,
+      });
+      service.findUnique = jest.fn().mockResolvedValueOnce(generateTestVariation({ branchName: 'master' }));
+
+      await expect(service.merge('projectId', 'develop', 'master')).rejects.toThrow('storage down');
+
+      expect(buildUpdateMock).toHaveBeenCalledWith('buildId', { isRunning: false });
     });
 
     it('delete detaches the test runs with a raw update before deleting the variation', async () => {
