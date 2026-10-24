@@ -3,7 +3,7 @@ import { TestStatus } from '@prisma/client';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { StaticService } from '../../../static/static.service';
 import { HddService } from '../../../static/hdd/hdd.service';
-import { DIFF_DIMENSION_RESULT, NO_BASELINE_RESULT } from '../consts';
+import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { OdiffService, DEFAULT_CONFIG, ignoreAreaToRegionMapper } from './odiff.service';
 import { OdiffConfig, OdiffIgnoreRegions } from './odiff.types';
 import { compare } from 'odiff-bin';
@@ -86,10 +86,12 @@ describe('getDiff', () => {
   it('diff layout', async () => {
     const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
     const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    const deleteImageMock = jest.fn();
     compareMock.mockResolvedValueOnce({ match: false, reason: 'layout-diff' });
     service = await initService({
       getImagePathMock,
       generateNewImageMock,
+      deleteImageMock,
     });
 
     const result = await service.getDiff(
@@ -107,15 +109,18 @@ describe('getDiff', () => {
     );
 
     expect(result).toStrictEqual(DIFF_DIMENSION_RESULT);
+    expect(deleteImageMock).not.toHaveBeenCalled();
   });
 
   it('diff found', async () => {
     const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
     const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    const deleteImageMock = jest.fn();
     compareMock.mockResolvedValueOnce({ match: false, reason: 'pixel-diff', diffPercentage: 12.34, diffCount: 33.33 });
     service = await initService({
       getImagePathMock,
       generateNewImageMock,
+      deleteImageMock,
     });
 
     const result = await service.getDiff(
@@ -132,6 +137,7 @@ describe('getDiff', () => {
       }
     );
 
+    expect(deleteImageMock).not.toHaveBeenCalled();
     expect(result).toStrictEqual({
       diffName: 'diff.png',
       diffPercent: 12.34,
@@ -144,10 +150,12 @@ describe('getDiff', () => {
   it('diff found < tollerance', async () => {
     const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
     const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    const deleteImageMock = jest.fn();
     compareMock.mockResolvedValueOnce({ match: false, reason: 'pixel-diff', diffPercentage: 0.05, diffCount: 33.33 });
     service = await initService({
       getImagePathMock,
       generateNewImageMock,
+      deleteImageMock,
     });
 
     const result = await service.getDiff(
@@ -161,6 +169,8 @@ describe('getDiff', () => {
       DEFAULT_CONFIG
     );
 
+    // odiff writes the diff image for every pixel diff, so one below the tolerance is not kept
+    expect(deleteImageMock).toHaveBeenCalledWith('diff.png');
     expect(result).toStrictEqual({
       diffName: null,
       diffPercent: 0.05,
@@ -192,7 +202,7 @@ describe('getDiff', () => {
       DEFAULT_CONFIG
     );
 
-    expect(deleteImageMock).toHaveBeenLastCalledWith('./diff.png');
+    expect(deleteImageMock).toHaveBeenCalledWith('diff.png');
     expect(result).toStrictEqual({
       diffName: null,
       diffPercent: 3,
@@ -202,13 +212,67 @@ describe('getDiff', () => {
     });
   });
 
-  it('ok', async () => {
+  it('passes ignore areas to odiff as regions', async () => {
     const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
     const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
     compareMock.mockResolvedValueOnce({ match: true });
     service = await initService({
       getImagePathMock,
       generateNewImageMock,
+    });
+
+    await service.getDiff(
+      {
+        baseline: 'baseline',
+        image: 'image',
+        diffTollerancePercent: 0.1,
+        ignoreAreas: [{ x: 1, y: 2, width: 3, height: 4 }],
+        saveDiffAsFile: true,
+      },
+      DEFAULT_CONFIG
+    );
+
+    expect(compareMock).toHaveBeenLastCalledWith('./baseline.png', './image.png', './diff.png', {
+      ...DEFAULT_CONFIG,
+      diffColor: '#cd2cc9',
+      noFailOnFsErrors: true,
+      ignoreRegions: [{ x1: 1, y1: 2, x2: 4, y2: 6 }],
+    });
+  });
+
+  it('does not pass empty ignore regions to odiff', async () => {
+    // odiff 4 rejects an empty --ignore= argument with "Invalid ignore regions format"
+    const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
+    const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    compareMock.mockResolvedValueOnce({ match: true });
+    service = await initService({
+      getImagePathMock,
+      generateNewImageMock,
+    });
+
+    await service.getDiff(
+      {
+        baseline: 'baseline',
+        image: 'image',
+        diffTollerancePercent: 0.1,
+        ignoreAreas: [],
+        saveDiffAsFile: true,
+      },
+      DEFAULT_CONFIG
+    );
+
+    expect(compareMock.mock.lastCall[3]).not.toHaveProperty('ignoreRegions');
+  });
+
+  it('ok', async () => {
+    const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
+    const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    const deleteImageMock = jest.fn();
+    compareMock.mockResolvedValueOnce({ match: true });
+    service = await initService({
+      getImagePathMock,
+      generateNewImageMock,
+      deleteImageMock,
     });
 
     const result = await service.getDiff(
@@ -222,13 +286,108 @@ describe('getDiff', () => {
       DEFAULT_CONFIG
     );
 
-    expect(result).toStrictEqual({
-      diffName: null,
-      diffPercent: 0,
-      isSameDimension: true,
-      pixelMisMatchCount: 0,
-      status: TestStatus.ok,
+    // odiff writes no diff image when the images match
+    expect(deleteImageMock).not.toHaveBeenCalled();
+    expect(result).toStrictEqual(EQUAL_RESULT);
+  });
+
+  it('diff found without parsable numbers', async () => {
+    // odiff-bin resolves a pixel diff without numbers when it cannot parse the binary output
+    const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
+    const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    compareMock.mockResolvedValueOnce({ match: false, reason: 'pixel-diff' } as Awaited<ReturnType<typeof compare>>);
+    service = await initService({
+      getImagePathMock,
+      generateNewImageMock,
     });
+
+    const result = await service.getDiff(
+      {
+        baseline: 'baseline',
+        image: 'image',
+        diffTollerancePercent: 0.1,
+        ignoreAreas: [],
+        saveDiffAsFile: true,
+      },
+      DEFAULT_CONFIG
+    );
+
+    expect(result).toStrictEqual({
+      diffName: 'diff.png',
+      diffPercent: undefined,
+      isSameDimension: true,
+      pixelMisMatchCount: undefined,
+      status: TestStatus.unresolved,
+    });
+  });
+
+  it('baseline file missing', async () => {
+    const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
+    const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    compareMock.mockResolvedValueOnce({ match: false, reason: 'file-not-exists', file: './baseline.png' });
+    service = await initService({
+      getImagePathMock,
+      generateNewImageMock,
+    });
+
+    const result = await service.getDiff(
+      {
+        baseline: 'baseline',
+        image: 'image',
+        diffTollerancePercent: 0.1,
+        ignoreAreas: [],
+        saveDiffAsFile: true,
+      },
+      DEFAULT_CONFIG
+    );
+
+    expect(result).toStrictEqual(NO_BASELINE_RESULT);
+  });
+
+  it('image file missing', async () => {
+    const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
+    const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    compareMock.mockResolvedValueOnce({ match: false, reason: 'file-not-exists', file: './image.png' });
+    service = await initService({
+      getImagePathMock,
+      generateNewImageMock,
+    });
+
+    await expect(
+      service.getDiff(
+        {
+          baseline: 'baseline',
+          image: 'image',
+          diffTollerancePercent: 0.1,
+          ignoreAreas: [],
+          saveDiffAsFile: true,
+        },
+        DEFAULT_CONFIG
+      )
+    ).rejects.toThrow('Cannot get image: image');
+  });
+
+  it('odiff error', async () => {
+    const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
+    const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    compareMock.mockRejectedValueOnce(new TypeError('Error: Could not load comparison image: ./image.png'));
+    service = await initService({
+      getImagePathMock,
+      generateNewImageMock,
+    });
+
+    await expect(
+      service.getDiff(
+        {
+          baseline: 'baseline',
+          image: 'image',
+          diffTollerancePercent: 0.1,
+          ignoreAreas: [],
+          saveDiffAsFile: true,
+        },
+        DEFAULT_CONFIG
+      )
+    ).rejects.toThrow('Could not load comparison image');
   });
 });
 

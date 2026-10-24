@@ -167,6 +167,69 @@ describe('VlmService', () => {
     expect(result.diffPercent).toBe(pixelmatchOverrides.diffPercent);
   });
 
+  it.each([
+    ['ollama', DEFAULT_CONFIG],
+    [
+      'gemini',
+      {
+        provider: 'gemini' as const,
+        model: 'gemini-1.5-pro',
+        prompt: DEFAULT_CONFIG.prompt,
+        temperature: 0.1,
+        apiKey: 'test-api-key',
+      },
+    ],
+  ])('should send baseline and image with ignore areas masked to %s', async (_, config) => {
+    const createFilledImage = (r: number, g: number, b: number) => {
+      const png = new PNG({ width: 20, height: 20 });
+      for (let k = 0; k < png.data.length; k += 4) {
+        png.data[k] = r;
+        png.data[k + 1] = g;
+        png.data[k + 2] = b;
+        png.data[k + 3] = 255;
+      }
+      return png;
+    };
+    const baseline = createFilledImage(255, 255, 255);
+    const image = createFilledImage(255, 0, 0);
+    const diffImage = new PNG({ width: 20, height: 20 });
+    const getImageMock = jest
+      .fn()
+      .mockReturnValueOnce(baseline)
+      .mockReturnValueOnce(image)
+      .mockReturnValueOnce(diffImage);
+    const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(createPixelmatchResult({}));
+    const generateMock = jest.fn().mockResolvedValue({
+      content: '{"identical": false, "description": "Changed."}',
+    });
+    const service = await initService({
+      getImageMock,
+      pixelmatchGetDiffMock,
+      ollamaGenerateMock: generateMock,
+      geminiGenerateMock: generateMock,
+    });
+    const ignoreAreas = [{ x: 2, y: 3, width: 5, height: 4 }];
+
+    await service.getDiff(
+      { baseline: 'baseline', image: 'image', diffTollerancePercent: 0.1, ignoreAreas, saveDiffAsFile: false },
+      config
+    );
+
+    expect(generateMock).toHaveBeenCalledTimes(1);
+    const [sentBaseline, sentImage] = (generateMock.mock.calls[0][1] as Uint8Array[]).map((bytes) =>
+      PNG.sync.read(Buffer.from(bytes))
+    );
+    const pixelAt = (png: PNG, x: number, y: number) =>
+      Array.from(png.data.subarray(4 * (png.width * y + x), 4 * (png.width * y + x) + 4));
+    for (let y = 0; y < 20; y++) {
+      for (let x = 0; x < 20; x++) {
+        const isIgnored = x >= 2 && x < 7 && y >= 3 && y < 7;
+        expect(pixelAt(sentBaseline, x, y)).toEqual(isIgnored ? [0, 0, 0, 0] : [255, 255, 255, 255]);
+        expect(pixelAt(sentImage, x, y)).toEqual(isIgnored ? [0, 0, 0, 0] : [255, 0, 0, 255]);
+      }
+    }
+  });
+
   it('should use custom model and temperature from config', async () => {
     const pixelmatchResult = createPixelmatchResult({ pixelMisMatchCount: 150, diffPercent: 3.75 });
     const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(pixelmatchResult);

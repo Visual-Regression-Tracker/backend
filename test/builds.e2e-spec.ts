@@ -276,6 +276,28 @@ describe('Builds (e2e)', () => {
         });
     });
 
+    it('200 api without body stops build', async () => {
+      const build = await buildsController.create({ project: project.id, branchName: 'develop' });
+
+      return requestWithApiKey(app, 'patch', `/builds/${build.id}`, user.apiKey)
+        .send()
+        .expect(200)
+        .expect((res) => {
+          expect(res.body.isRunning).toBe(false);
+        });
+    });
+
+    it('200 api with empty body stops build', async () => {
+      const build = await buildsController.create({ project: project.id, branchName: 'develop' });
+
+      return requestWithApiKey(app, 'patch', `/builds/${build.id}`, user.apiKey)
+        .send({})
+        .expect(200)
+        .expect((res) => {
+          expect(res.body.isRunning).toBe(false);
+        });
+    });
+
     it('403', async () => {
       const build = await buildsController.create({ project: project.id, branchName: 'develop' });
 
