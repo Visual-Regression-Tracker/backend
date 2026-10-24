@@ -134,11 +134,27 @@ jobs:
         working-directory: prisma
         run: npm run test
 
+  test-dinov2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # the logic is tested with a stand-in encoder: numpy only, no model;
+      # the runner's own Python 3.12, in a venv (system pip is locked down)
+      - name: Unit tests
+        working-directory: dinov2
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install numpy==2.5.4
+          .venv/bin/python -m unittest test_patches
+
   # Branch protection requires a check named "build": it passes only when every job above did,
   # so the required check keeps covering the whole pipeline after the split.
   build:
     if: ${{ !cancelled() }}
-    needs: [checks, integration, test-migrations]
+    needs: [checks, integration, test-migrations, test-dinov2]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
 
