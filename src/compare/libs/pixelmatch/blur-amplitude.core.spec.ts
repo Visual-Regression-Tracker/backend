@@ -2,6 +2,7 @@ import { PNG } from 'pngjs';
 import { RawImage } from '../../utils';
 import {
   BlurAmplitudeJobInput,
+  BlurredDifference,
   computeBlurAmplitude,
   DEFAULT_BLUR_AMPLITUDE_THRESHOLD,
   isRenderingNoise,
@@ -28,8 +29,16 @@ const image = (paint: (x: number, y: number) => Rgba | undefined = () => undefin
 
 const blank = image();
 
-const maxBlurredDifference = (a: RawImage, b: RawImage, sigma: number): number =>
-  measureBlurredDifference(a, b, sigma).amplitude;
+// the measure of a pair that is known to be measurable
+const measured = (a: RawImage, b: RawImage, sigma: number): BlurredDifference => {
+  const measure = measureBlurredDifference(a, b, sigma);
+  if (!measure) {
+    throw new Error('expected a measure');
+  }
+  return measure;
+};
+
+const maxBlurredDifference = (a: RawImage, b: RawImage, sigma: number): number => measured(a, b, sigma).amplitude;
 
 // Expected values are scipy.ndimage.gaussian_filter (sigma=1, truncate=4,
 // mode='reflect') on the same black-and-white images, where every channel and
@@ -111,8 +120,8 @@ describe('measureBlurredDifference', () => {
     const block = image((x, y) => (x >= 4 && x < 16 && y >= 4 && y < 16 ? [200, 200, 200, 255] : undefined));
     const hairline = image((x) => (x === 10 ? BLACK : undefined));
 
-    expect(measureBlurredDifference(blank, block, 1).solidPixels).toBeGreaterThan(50);
-    expect(measureBlurredDifference(blank, hairline, 1).solidPixels).toBe(0);
+    expect(measured(blank, block, 1).solidPixels).toBeGreaterThan(50);
+    expect(measured(blank, hairline, 1).solidPixels).toBe(0);
   });
 
   // measuring a change spread over a huge screenshot would cost seconds and
@@ -160,7 +169,7 @@ describe('isRenderingNoise', () => {
       return { data, width: size, height: size };
     };
 
-    const measure = measureBlurredDifference(flat(255), flat(224), 1);
+    const measure = measured(flat(255), flat(224), 1);
 
     expect(measure.amplitude).toBeLessThan(DEFAULT_BLUR_AMPLITUDE_THRESHOLD);
     expect(isRenderingNoise(measure, DEFAULT_BLUR_AMPLITUDE_THRESHOLD)).toBe(false);
@@ -185,7 +194,7 @@ describe('computeBlurAmplitude', () => {
   });
 
   it('measures the change between two screenshots', () => {
-    expect(computeBlurAmplitude(job()).measure.amplitude).toBeCloseTo(255, 2);
+    expect(computeBlurAmplitude(job()).measure?.amplitude).toBeCloseTo(255, 2);
   });
 
   // what the project has masked out must not decide its verdict
@@ -213,7 +222,7 @@ describe('computeBlurAmplitude', () => {
   it('reads the Uint8Array views a worker message turns Buffers into', () => {
     const viaMessage = job({ baseline: new Uint8Array(encode(blank)), image: new Uint8Array(encode(block)) });
 
-    expect(computeBlurAmplitude(viaMessage).measure.amplitude).toBeCloseTo(255, 2);
+    expect(computeBlurAmplitude(viaMessage).measure?.amplitude).toBeCloseTo(255, 2);
   });
 
   it('is what the worker runs for a blur-amplitude job', () => {

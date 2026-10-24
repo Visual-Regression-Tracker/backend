@@ -31,7 +31,7 @@ describe('splitBlurAmplitudeConfig', () => {
     );
 
     expect(MAX_BLUR_AMPLITUDE_THRESHOLD).toBe(128);
-    expect(blurAmplitude.threshold).toBe(128);
+    expect(blurAmplitude?.threshold).toBe(128);
   });
 
   it("uses the config's threshold", () => {
@@ -57,7 +57,7 @@ describe('splitBlurAmplitudeConfig', () => {
         logger
       );
 
-      expect(blurAmplitude.threshold).toBe(DEFAULT_BLUR_AMPLITUDE_THRESHOLD);
+      expect(blurAmplitude?.threshold).toBe(DEFAULT_BLUR_AMPLITUDE_THRESHOLD);
       expect(logger.warn).toHaveBeenCalledTimes(1);
     }
   );
