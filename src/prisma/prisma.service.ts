@@ -168,6 +168,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnAppli
     await this.$connect();
   }
 
+  /**
+   * A connection of its own, with the same settings as the pool but outside
+   * it, for state bound to one connection that must not tie up a pooled one
+   * for long — such as the advisory lock the nightly cleanup holds while it runs.
+   * Not connected yet; the caller connects and ends it.
+   */
+  dedicatedClient(): Client {
+    return new Client(this.pgConfig);
+  }
+
   // After the HTTP server has stopped and drained its requests (Nest runs
   // onModuleDestroy before that), so none of them finds the pool closed
   async onApplicationShutdown() {

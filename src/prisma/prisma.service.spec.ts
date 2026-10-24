@@ -42,6 +42,13 @@ describe('PrismaService', () => {
     await expect(service.onModuleInit()).rejects.toThrow('Can not reach database server');
   });
 
+  it('hands out a client of its own, outside the pool, on every call', () => {
+    const client = service.dedicatedClient();
+
+    expect(client).toBeInstanceOf(Client);
+    expect(service.dedicatedClient()).not.toBe(client);
+  });
+
   it('disconnects when the module is destroyed', async () => {
     const disconnectSpy = jest.spyOn(service, '$disconnect').mockResolvedValue(undefined);
 
