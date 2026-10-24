@@ -22,17 +22,24 @@ Encoder = Callable[[np.ndarray], np.ndarray]
 
 
 def tiles(rgb: np.ndarray) -> tuple[np.ndarray, int, int]:
-    """HxWx3 uint8 -> normalised tiles (N, 3, TILE, TILE), tiles down, across.
+    """HxWx3 uint8 -> uint8 tiles (N, 3, TILE, TILE), tiles down, across.
 
     The image is padded with its own edge pixels to whole tiles, so the
     padding looks like the content next to it rather than a blank border.
+    Left as uint8: only the tiles encoded are normalised, a few batches at a
+    time, rather than a whole tall page as float32.
     """
     h, w, _ = rgb.shape
     rows, cols = -(-h // TILE), -(-w // TILE)
     padded = np.pad(rgb, ((0, rows * TILE - h), (0, cols * TILE - w), (0, 0)), mode="edge")
-    x = padded.astype(np.float32).transpose(2, 0, 1) / 255.0
+    x = padded.transpose(2, 0, 1)
     x = x.reshape(3, rows, TILE, cols, TILE).transpose(1, 3, 0, 2, 4).reshape(rows * cols, 3, TILE, TILE)
-    return (x - MEAN) / STD, rows, cols
+    return x, rows, cols
+
+
+def normalize(x: np.ndarray) -> np.ndarray:
+    """uint8 tiles -> the normalised float32 the model takes."""
+    return (x.astype(np.float32) / 255.0 - MEAN) / STD
 
 
 def patch_features(rgb: np.ndarray, encode: Encoder, only=None, batch: int = 8) -> np.ndarray:
@@ -46,7 +53,7 @@ def patch_features(rgb: np.ndarray, encode: Encoder, only=None, batch: int = 8) 
     x, rows, cols = tiles(rgb)
     wanted = list(range(rows * cols)) if only is None else sorted({r * cols + c for r, c in only if r < rows and c < cols})
     g = TILE // PATCH
-    encoded = [encode(x[wanted[i:i + batch]]) for i in range(0, len(wanted), batch)]
+    encoded = [encode(normalize(x[wanted[i:i + batch]])) for i in range(0, len(wanted), batch)]
     dim = encoded[0].shape[-1] if encoded else 1
     out = np.zeros((rows * cols, g * g, dim), np.float32)
     if encoded:
