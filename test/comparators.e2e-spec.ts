@@ -315,9 +315,7 @@ describe('Comparators (e2e)', () => {
         .send(projectBody(ImageComparison.lookSame, 'not json'))
         .expect(400)
         .expect((res) => {
-          // NOTE: current behavior — HttpExceptionFilter answers with the exception's generic
-          // message; the validation errors only travel inside the serialized exception
-          expect(res.body.message).toBe('Bad Request Exception');
+          expect(res.body.message).toBe('imageComparisonConfig must be a json string');
           expect(res.body.exception.response.message).toEqual(['imageComparisonConfig must be a json string']);
         });
     });

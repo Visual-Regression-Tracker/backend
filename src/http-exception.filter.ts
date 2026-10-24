@@ -19,7 +19,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const message =
       isUniqueConstaintException || isForbiddenException
         ? this.getCustomMessageForException(exception)
-        : exception.message;
+        : this.getMessage(exception);
 
     Logger.error(exception, exception.stack, exception.getResponse?.());
 
@@ -34,6 +34,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   isForbiddenException(exception: HttpException): boolean {
     return exception.message.includes('Forbidden resource');
+  }
+
+  // ValidationPipe puts the reasons in the response body and leaves the
+  // exception's own message at the generic "Bad Request Exception"; the
+  // reasons are what the client needs to see
+  getMessage(exception: HttpException): string {
+    const response = exception.getResponse?.();
+    const details = typeof response === 'object' ? (response as { message?: unknown })?.message : undefined;
+    return Array.isArray(details) ? details.join(', ') : exception.message;
   }
 
   isUniqueConstraintException(exception: HttpException): boolean {
