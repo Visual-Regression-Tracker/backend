@@ -66,6 +66,6 @@ describe('cleanOldTestVariations', () => {
         projectId: project.id,
       },
     });
-    expect(testVariationsDeleteMock).toBeCalledWith(testVariation.id);
+    expect(testVariationsDeleteMock).toHaveBeenCalledWith(testVariation.id);
   });
 });

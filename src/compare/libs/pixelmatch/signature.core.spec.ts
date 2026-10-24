@@ -1,5 +1,10 @@
 import { PNG } from 'pngjs';
-import { computeChangeSignature } from './signature.core';
+import {
+  computeChangeSignature,
+  signaturesMatch,
+  SIGNATURE_LENGTH,
+  SIGNATURE_SIMILARITY_THRESHOLD,
+} from './signature.core';
 
 const WIDTH = 40;
 const HEIGHT = 40;
@@ -85,5 +90,64 @@ describe('computeChangeSignature', () => {
     const ignoreAreas = [{ x: 0, y: 0, width: 16, height: 16 }];
 
     expect(signatureOf(blank, block(4, 4, RED), ignoreAreas)).toBeNull();
+  });
+});
+
+describe('computeChangeSignature with structured-clone input', () => {
+  // postMessage hands the worker Uint8Array views, possibly over a larger buffer
+  it('reads Uint8Array views the same as Buffers', () => {
+    const changed = block(0, 0, RED);
+    const padded = new Uint8Array(changed.length + 16);
+    padded.set(changed, 16);
+    const view = new Uint8Array(padded.buffer, 16, changed.length);
+    const baselineView = new Uint8Array(blank);
+
+    expect(
+      computeChangeSignature({
+        kind: 'signature',
+        baseline: baselineView,
+        image: view,
+        ignoreAreas: [],
+        threshold: 0.1,
+        includeAA: false,
+      }).signature
+    ).toEqual(signatureOf(blank, changed));
+  });
+});
+
+describe('signaturesMatch', () => {
+  it('matches a signature with itself', () => {
+    const signature = signatureOf(blank, block(0, 0, RED));
+
+    expect(signaturesMatch(signature, signature)).toBe(true);
+  });
+
+  it('matches the same change in another place', () => {
+    expect(signaturesMatch(signatureOf(blank, block(0, 0, RED)), signatureOf(blank, block(24, 28, RED)))).toBe(true);
+  });
+
+  it('does not match a change of another color', () => {
+    expect(signaturesMatch(signatureOf(blank, block(0, 0, RED)), signatureOf(blank, block(0, 0, BLUE)))).toBe(false);
+  });
+
+  it('matches at a cosine similarity of at least 0.9', () => {
+    expect(SIGNATURE_SIMILARITY_THRESHOLD).toBe(0.9);
+    // cos = 0.95 / sqrt(0.95^2 + 0.3^2) ≈ 0.954
+    expect(signaturesMatch([1, 0], [0.95, 0.3])).toBe(true);
+    // cos = 0.8 / sqrt(0.8^2 + 0.6^2) = 0.8
+    expect(signaturesMatch([1, 0], [0.8, 0.6])).toBe(false);
+  });
+
+  it('does not match when either signature is all zeros', () => {
+    expect(signaturesMatch([0, 0], [1, 0])).toBe(false);
+    expect(signaturesMatch([1, 0], [0, 0])).toBe(false);
+  });
+
+  it('compares only as many buckets as the first signature has', () => {
+    expect(SIGNATURE_LENGTH).toBe(64);
+    // NOTE: current behavior — a shorter second signature yields NaN (no match),
+    // while extra buckets in the second one are silently ignored (a match).
+    expect(signaturesMatch([1, 0], [1])).toBe(false);
+    expect(signaturesMatch([1], [1, 5])).toBe(true);
   });
 });

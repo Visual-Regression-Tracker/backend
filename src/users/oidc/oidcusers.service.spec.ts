@@ -5,7 +5,8 @@ import { Agent as HttpsAgent } from 'node:https';
 import { AuthService } from '../../auth/auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OidcUsersService } from './oidcusers.service';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { Prisma as PrismaRuntime } from '@prisma/client';
+const { PrismaClientKnownRequestError } = PrismaRuntime;
 
 const mockAuthorizationUrl = jest.fn();
 const mockCallback = jest.fn();

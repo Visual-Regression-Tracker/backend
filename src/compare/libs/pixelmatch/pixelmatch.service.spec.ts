@@ -46,6 +46,7 @@ describe('parseConfig', () => {
     ],
     ['', DEFAULT_CONFIG],
     ['invalid', DEFAULT_CONFIG],
+    ['null', DEFAULT_CONFIG],
   ])('should parse config', async (json, expected) => {
     service = await initService({});
 
@@ -77,6 +78,25 @@ describe('getDiff', () => {
     );
 
     expect(result).toStrictEqual(NO_BASELINE_RESULT);
+  });
+
+  it('throws when the image cannot be read', async () => {
+    const getImageBufferMock = jest.fn().mockResolvedValueOnce(toBuffer(image)).mockResolvedValueOnce(undefined);
+    service = await initService({ getImageBufferMock });
+
+    await expect(
+      service.getDiff(
+        {
+          baseline: 'baseline',
+          image: 'missing.png',
+          diffTollerancePercent: 0.1,
+          ignoreAreas: [],
+          saveDiffAsFile: true,
+        },
+        DEFAULT_CONFIG
+      )
+    ).rejects.toThrow('Cannot get image: missing.png');
+    expect(getImageBufferMock).toHaveBeenNthCalledWith(2, 'missing.png');
   });
 
   it('diff not found', async () => {

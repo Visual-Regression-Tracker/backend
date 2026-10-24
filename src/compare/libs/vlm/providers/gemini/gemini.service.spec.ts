@@ -109,6 +109,16 @@ describe('GeminiService', () => {
     });
 
     it.each([
+      ['an Ollama config', { provider: 'ollama' }, 'GeminiService requires GeminiVlmConfig, got ollama'],
+      ['a config without provider', { provider: undefined }, 'GeminiService requires GeminiVlmConfig, got undefined'],
+    ])('rejects %s before calling the SDK', async (_, overrides, expectedError) => {
+      const config = { ...createConfig(), ...overrides } as any;
+
+      await expect(service.generate(config, [])).rejects.toThrow(expectedError);
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+    });
+
+    it.each([
       ['API key is missing', { apiKey: '' }, 'Gemini API key is required'],
       ['SDK call fails', { apiKey: 'test-api-key' }, 'API Error'],
     ])('should throw error when %s', async (_, overrides, expectedError) => {

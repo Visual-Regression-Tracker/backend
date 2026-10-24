@@ -197,6 +197,31 @@ describe('getDiff', () => {
     });
   });
 
+  it('reports a 0% diff when Looks-Same counts no pixels at all', async () => {
+    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
+    service = await initService({ getImageMock });
+    service.compare = jest.fn().mockReturnValueOnce({ equal: false, differentPixels: 0, totalPixels: 0 });
+
+    const result = await service.getDiff({ ...input, saveDiffAsFile: false }, DEFAULT_CONFIG);
+
+    expect(result).toStrictEqual({
+      status: TestStatus.unresolved,
+      diffName: null,
+      diffPercent: 0,
+      pixelMisMatchCount: 0,
+      isSameDimension: true,
+    });
+  });
+
+  it('throws when the baseline exists but the image cannot be read', async () => {
+    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(undefined);
+    service = await initService({ getImageMock });
+
+    // NOTE: current behavior — unlike pixelmatch there is no explicit check, so a
+    // missing image surfaces as a TypeError rather than a descriptive error.
+    await expect(service.getDiff({ ...input, saveDiffAsFile: false }, DEFAULT_CONFIG)).rejects.toThrow(TypeError);
+  });
+
   it('saves the Looks-Same diff with its metrics', async () => {
     const baseline = new PNG({ width: 2, height: 1 });
     const changed = new PNG({ width: 2, height: 1 });
