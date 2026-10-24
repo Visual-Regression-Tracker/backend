@@ -17,6 +17,7 @@ const initController = async ({
   buildIncrementBuildNumberMock = jest.fn(),
   eventBuildCreatedMock = jest.fn(),
   deleteOldBuilds = jest.fn(),
+  buildUpdateMock = jest.fn(),
 }) => {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [BuildsController],
@@ -33,6 +34,7 @@ const initController = async ({
           findOrCreate: buildFindOrCreateMock,
           incrementBuildNumber: buildIncrementBuildNumberMock,
           deleteOldBuilds: deleteOldBuilds,
+          update: buildUpdateMock,
         },
       },
       { provide: EventsGateway, useValue: { buildCreated: eventBuildCreatedMock } },
@@ -96,5 +98,32 @@ describe('Builds Controller', () => {
     const result = await controller.create(createBuildDto);
 
     expect(result).toStrictEqual(new BuildDto(buildWithNumber));
+  });
+
+  describe('update', () => {
+    it.each([
+      ['no body', undefined],
+      ['null body', null],
+      ['empty body', {}],
+    ])('should stop build when called with %s', async (_, body) => {
+      const buildUpdateMock = jest.fn().mockResolvedValueOnce(new BuildDto(TEST_BUILD));
+      controller = await initController({ buildUpdateMock });
+
+      await controller.update(TEST_BUILD.id, body);
+
+      expect(buildUpdateMock).toHaveBeenCalledWith(TEST_BUILD.id, { isRunning: false });
+    });
+
+    it.each([[{ isRunning: false }], [{ isRunning: true }], [{ ciBuildId: 'ciBuildId' }]])(
+      'should pass %o as is',
+      async (body) => {
+        const buildUpdateMock = jest.fn().mockResolvedValueOnce(new BuildDto(TEST_BUILD));
+        controller = await initController({ buildUpdateMock });
+
+        await controller.update(TEST_BUILD.id, body);
+
+        expect(buildUpdateMock).toHaveBeenCalledWith(TEST_BUILD.id, body);
+      }
+    );
   });
 });
