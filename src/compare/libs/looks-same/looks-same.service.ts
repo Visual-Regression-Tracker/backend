@@ -65,7 +65,11 @@ export class LookSameService implements ImageComparator {
     result.diffPercent =
       compareResult.totalPixels > 0 ? (compareResult.differentPixels * 100) / compareResult.totalPixels : 0;
 
-    if (compareResult.equal) {
+    // The run's tolerance forgives a change as small as it, as pixelmatch and
+    // odiff do. Only a counted change: one looks-same reports but cannot
+    // measure (no pixels counted) is left for review whatever the tolerance.
+    const withinTolerance = result.diffPercent > 0 && result.diffPercent <= data.diffTollerancePercent;
+    if (compareResult.equal || withinTolerance) {
       result.status = TestStatus.ok;
     } else {
       result.status = TestStatus.unresolved;

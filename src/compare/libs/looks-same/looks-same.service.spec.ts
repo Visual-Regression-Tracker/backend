@@ -182,6 +182,24 @@ describe('getDiff', () => {
     });
   });
 
+  it('ok, without a diff, when the change is within the tolerance', async () => {
+    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
+    service = await initService({ getImageMock });
+    service.compare = jest.fn().mockReturnValueOnce({ equal: false, differentPixels: 20, totalPixels: 400 });
+    service.saveDiff = jest.fn();
+
+    const result = await service.getDiff({ ...input, diffTollerancePercent: 5, saveDiffAsFile: true }, DEFAULT_CONFIG);
+
+    expect(service.saveDiff).not.toHaveBeenCalled();
+    expect(result).toStrictEqual({
+      status: TestStatus.ok,
+      diffName: null,
+      diffPercent: 5,
+      pixelMisMatchCount: 20,
+      isSameDimension: true,
+    });
+  });
+
   it('comparison failed', async () => {
     const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
     service = await initService({ getImageMock });
