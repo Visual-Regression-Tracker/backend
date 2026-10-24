@@ -121,7 +121,9 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
 
   // A build is mostly runs that pass, so anything produced for a diff that is
   // about to be thrown away is work nobody ever sees the result of.
-  const keepingTheDiff = overTolerance && !renderingNoiseOnly && input.saveDiff;
+  // ...unless a DINOv2 check is still to come, which may send the run to
+  // review after all — and then it needs its diff.
+  const keepingTheDiff = overTolerance && input.saveDiff && (!renderingNoiseOnly || !!input.blurAmplitude?.dinov2);
 
   let diffBuffer: Buffer | undefined;
   if (keepingTheDiff) {

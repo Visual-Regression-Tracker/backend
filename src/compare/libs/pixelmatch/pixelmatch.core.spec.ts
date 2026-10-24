@@ -228,6 +228,17 @@ describe('computePixelmatchDiff with the blur-amplitude filter', () => {
     expect(result.blurAmplitude).toBeUndefined();
   });
 
+  // a second check may yet send it to review, and then it needs its diff
+  it('keeps the diff of a noise-like change when a DINOv2 check will follow', () => {
+    const result = withFilter(hairline(10), hairline(11), {
+      blurAmplitude: { ...filter, dinov2: { threshold: 0.15 } },
+    });
+
+    expect(result.renderingNoiseOnly).toBe(true);
+    expect(result.diffBuffer).toBeDefined();
+    expect(result.imageThumbnail).toBeDefined();
+  });
+
   it('measures nothing when the filter is off', () => {
     const result = diffJob(hairline(10), hairline(11), false, false, { includeAA: true });
 

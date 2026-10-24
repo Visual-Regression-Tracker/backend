@@ -21,6 +21,9 @@ export interface BlurAmplitudeOptions {
   // strongest blurred colour-channel difference (0-255) still treated as
   // rendering noise
   threshold: number;
+  // a second look at what the blur would pass (see dinov2/dinov2.service.ts):
+  // largest content distance between the two screenshots still treated as noise
+  dinov2?: { threshold: number };
 }
 
 export interface BlurredDifference {

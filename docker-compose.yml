@@ -17,6 +17,7 @@ services:
       BODY_PARSER_JSON_LIMIT: ${BODY_PARSER_JSON_LIMIT}
       ELASTIC_URL: ${ELASTIC_URL}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      DINOV2_URL: ${DINOV2_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports:
       - "${APP_PORT}:3000"
@@ -61,6 +62,18 @@ services:
       interval: 10s
       timeout: 120s
       retries: 10
+  # The DINOv2 service behind an image-comparison config's "dinov2Check". Only
+  # with `docker compose --profile dinov2 up`, and the api reaches it once
+  # DINOV2_URL=http://dinov2:8000 is set.
+  dinov2:
+    container_name: vrt_dinov2
+    profiles: ["dinov2"]
+    build:
+      context: dinov2
+      dockerfile: Dockerfile
+    restart: always
+    expose:
+      - "8000"
   redis:
     container_name: vrt_redis
     image: redis:7-alpine

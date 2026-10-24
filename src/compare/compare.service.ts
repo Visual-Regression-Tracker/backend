@@ -14,6 +14,7 @@ import { SignatureJobInput, SignatureJobOutput } from './libs/pixelmatch/signatu
 import { BlurAmplitudeOptions, isRenderingNoise } from './libs/pixelmatch/blur-amplitude.core';
 import { splitBlurAmplitudeConfig } from './libs/blur-amplitude.config';
 import { StaticService } from '../static/static.service';
+import { Dinov2Service } from './libs/dinov2/dinov2.service';
 
 @Injectable()
 export class CompareService {
@@ -26,7 +27,8 @@ export class CompareService {
     private readonly vlmService: VlmService,
     private readonly prismaService: PrismaService,
     private readonly diffWorkerPool: DiffWorkerPool,
-    private readonly staticService: StaticService
+    private readonly staticService: StaticService,
+    private readonly dinov2Service: Dinov2Service
   ) {}
 
   async getDiff({ projectId, data }: { projectId: string; data: ImageCompareInput }): Promise<DiffResult> {
@@ -58,7 +60,7 @@ export class CompareService {
   private async filterRenderingNoise(
     data: ImageCompareInput,
     result: DiffResult,
-    { sigma, threshold }: BlurAmplitudeOptions
+    { sigma, threshold, dinov2 }: BlurAmplitudeOptions
   ): Promise<DiffResult> {
     // a size change is a finding of its own, and there is nothing to line up
     if (result.status !== TestStatus.unresolved || !result.isSameDimension) {
@@ -80,6 +82,13 @@ export class CompareService {
         sigma,
       });
       if (!measure || !isRenderingNoise(measure, threshold)) {
+        return result;
+      }
+      // the project's DINOv2 check, when it has one, gets the last word
+      if (
+        dinov2 &&
+        !(await this.dinov2Service.confirmsNoise(baseline, image, data.ignoreAreas, dinov2.threshold)).noise
+      ) {
         return result;
       }
       this.logger.debug(
