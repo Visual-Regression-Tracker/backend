@@ -99,7 +99,8 @@ export class VlmService implements ImageComparator {
 
       return result;
     } catch (error) {
-      const { message, stack } = error instanceof Error ? error : { message: String(error), stack: undefined };
+      // a cast, not instanceof: errors from Node's own fetch can come from another realm
+      const { message, stack } = error as Error;
       this.logger.error(`VLM comparison failed: ${message}`, stack);
       return {
         ...pixelmatchResult,

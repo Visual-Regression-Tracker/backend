@@ -75,7 +75,7 @@ export class UsersController {
     } catch (e) {
       // The browser navigated here directly, so send it back to the login page
       // instead of showing a raw JSON error (e.g. when discovery fails).
-      this.logger.warn(`OIDC login failed: ${e instanceof Error ? e.message : e}`);
+      this.logger.warn(`OIDC login failed: ${(e as Error)?.message ?? e}`);
       res.redirect(this.usersService.oidcBuildFrontendRedirect(undefined, 'oidc_login_failed'));
       return;
     }
@@ -118,7 +118,7 @@ export class UsersController {
       });
       target = this.usersService.oidcBuildFrontendRedirect(token);
     } catch (e) {
-      this.logger.warn(`OIDC callback failed: ${e instanceof Error ? e.message : e}`);
+      this.logger.warn(`OIDC callback failed: ${(e as Error)?.message ?? e}`);
     } finally {
       res.clearCookie(OIDC_STATE_COOKIE, { path: '/' });
     }
