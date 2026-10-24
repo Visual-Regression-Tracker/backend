@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Build, Project, TestRun, TestStatus } from '@prisma/client';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 import { TEST_PROJECT } from '../src/_data_';
 import { BuildDto } from '../src/builds/dto/build.dto';
 import { BuildsService } from '../src/builds/builds.service';
@@ -40,7 +40,7 @@ describe('Builds API (e2e)', () => {
       ...TEST_PROJECT,
       autoApproveFeature: false,
       maxBuildAllowed: 100,
-      name: `Builds API E2E ${uuidAPIKey.create().uuid}`,
+      name: `Builds API E2E ${randomUUID()}`,
     });
   });
 
@@ -106,11 +106,11 @@ describe('Builds API (e2e)', () => {
     });
 
     it('aroundBuildId that holds no page falls back to skip', async () => {
-      const otherProject = await projectsService.create({ ...TEST_PROJECT, name: `Other ${uuidAPIKey.create().uuid}` });
+      const otherProject = await projectsService.create({ ...TEST_PROJECT, name: `Other ${randomUUID()}` });
       try {
         const foreign = await newBuild(undefined, otherProject.id);
 
-        for (const aroundBuildId of [uuidAPIKey.create().uuid, foreign.id]) {
+        for (const aroundBuildId of [randomUUID(), foreign.id]) {
           const res = await list(`take=2&skip=2&aroundBuildId=${aroundBuildId}`).expect(200);
           expect(res.body.skip).toBe(2);
           expect(res.body.data.map((build: BuildDto) => build.id)).toEqual(ordered.slice(2, 4));
@@ -189,7 +189,7 @@ describe('Builds API (e2e)', () => {
     });
 
     it('404 for an unknown id', async () => {
-      const id = uuidAPIKey.create().uuid;
+      const id = randomUUID();
 
       const res = await requestWithAuth(app, 'get', `/builds/${id}`, user.token).expect(404);
 
@@ -234,7 +234,7 @@ describe('Builds API (e2e)', () => {
     });
 
     it('404 for an unknown id', async () => {
-      await requestWithAuth(app, 'delete', `/builds/${uuidAPIKey.create().uuid}`, user.token).expect(404);
+      await requestWithAuth(app, 'delete', `/builds/${randomUUID()}`, user.token).expect(404);
     });
 
     it('403 for a guest', async () => {
@@ -282,9 +282,7 @@ describe('Builds API (e2e)', () => {
     });
 
     it('404 for an unknown id', async () => {
-      await requestWithAuth(app, 'patch', `/builds/${uuidAPIKey.create().uuid}/approve?merge=false`, user.token).expect(
-        404
-      );
+      await requestWithAuth(app, 'patch', `/builds/${randomUUID()}/approve?merge=false`, user.token).expect(404);
     });
 
     it('403 for a guest', async () => {
@@ -342,7 +340,7 @@ describe('Builds API (e2e)', () => {
     });
 
     it('404 for an unknown id', async () => {
-      await requestWithApiKey(app, 'patch', `/builds/${uuidAPIKey.create().uuid}`, user.apiKey)
+      await requestWithApiKey(app, 'patch', `/builds/${randomUUID()}`, user.apiKey)
         .send({ isRunning: false })
         .expect(404);
     });

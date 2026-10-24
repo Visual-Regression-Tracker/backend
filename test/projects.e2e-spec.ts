@@ -4,11 +4,11 @@ import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { requestWithAuth, haveUserLogged, LoggedUser } from './preconditions';
 import { ProjectsService } from '../src/projects/projects.service';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 import { ProjectDto } from 'src/projects/dto/project.dto';
 
 const project: ProjectDto = {
-  id: uuidAPIKey.create().uuid,
+  id: randomUUID(),
   name: 'Test project',
   buildsCounter: 0,
   mainBranchName: 'master',

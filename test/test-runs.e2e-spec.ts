@@ -9,7 +9,7 @@ import { Project, TestStatus } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
 import { TEST_PROJECT } from '../src/_data_';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 import { UpdateIgnoreAreasDto } from 'src/test-runs/dto/update-ignore-area.dto';
 
 describe('TestRuns (e2e)', () => {
@@ -46,7 +46,7 @@ describe('TestRuns (e2e)', () => {
     user = await haveUserLogged(usersService);
     project = await projecstService.create({
       ...TEST_PROJECT,
-      name: `TestRun E2E test${uuidAPIKey.create().uuid}`,
+      name: `TestRun E2E test${randomUUID()}`,
     });
   });
 
@@ -237,7 +237,7 @@ describe('TestRuns (e2e)', () => {
 
     it('404 for a project that does not exist, storing nothing', async () => {
       const build = await buildsService.findOrCreate({ projectId: project.id, branchName: project.mainBranchName });
-      const projectId = uuidAPIKey.create().uuid;
+      const projectId = randomUUID();
 
       const res = await requestWithApiKey(app, 'post', url, user.apiKey)
         .set('Content-type', 'multipart/form-data')

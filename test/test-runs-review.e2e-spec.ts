@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Build, Project, TestStatus } from '@prisma/client';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 import { TEST_PROJECT } from '../src/_data_';
 import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -37,7 +37,7 @@ describe('TestRuns review API (e2e)', () => {
       ...TEST_PROJECT,
       autoApproveFeature: false,
       maxBuildAllowed: 100,
-      name: `TestRuns review E2E ${uuidAPIKey.create().uuid}`,
+      name: `TestRuns review E2E ${randomUUID()}`,
     });
   });
 
@@ -170,7 +170,7 @@ describe('TestRuns review API (e2e)', () => {
     });
 
     it('404 for an unknown id', async () => {
-      const id = uuidAPIKey.create().uuid;
+      const id = randomUUID();
 
       const res = await requestWithAuth(app, 'get', `/test-runs/${id}`, user.token).expect(404);
 
@@ -297,9 +297,7 @@ describe('TestRuns review API (e2e)', () => {
     });
 
     it('404 for an unknown id', async () => {
-      await requestWithAuth(app, 'post', `/test-runs/approve?merge=false`, user.token)
-        .send([uuidAPIKey.create().uuid])
-        .expect(404);
+      await requestWithAuth(app, 'post', `/test-runs/approve?merge=false`, user.token).send([randomUUID()]).expect(404);
     });
   });
 
@@ -346,7 +344,7 @@ describe('TestRuns review API (e2e)', () => {
     });
 
     it('ignores ids that do not exist', async () => {
-      await requestWithAuth(app, 'post', `/test-runs/delete`, user.token).send([uuidAPIKey.create().uuid]).expect(201);
+      await requestWithAuth(app, 'post', `/test-runs/delete`, user.token).send([randomUUID()]).expect(201);
     });
 
     it('403 for a guest', async () => {
@@ -439,7 +437,7 @@ describe('TestRuns review API (e2e)', () => {
 
     it('404 for an unknown id', async () => {
       await requestWithAuth(app, 'post', `/test-runs/ignoreAreas/update`, user.token)
-        .send({ ids: [uuidAPIKey.create().uuid], ignoreAreas: [area] })
+        .send({ ids: [randomUUID()], ignoreAreas: [area] })
         .expect(404);
     });
   });
@@ -655,7 +653,7 @@ describe('TestRuns review API (e2e)', () => {
     }, 60000);
 
     it('404 for an unknown id', async () => {
-      await matching(uuidAPIKey.create().uuid).expect(404);
+      await matching(randomUUID()).expect(404);
     });
 
     it('400 for an id that is not a uuid', async () => {
@@ -663,7 +661,7 @@ describe('TestRuns review API (e2e)', () => {
     });
 
     it('401 without a token', async () => {
-      await requestWithAuth(app, 'get', `/test-runs/matchingSiblings/${uuidAPIKey.create().uuid}`, '').expect(401);
+      await requestWithAuth(app, 'get', `/test-runs/matchingSiblings/${randomUUID()}`, '').expect(401);
     });
   });
 });

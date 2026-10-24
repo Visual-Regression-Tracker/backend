@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { Project, TestStatus } from '@prisma/client';
 import { existsSync } from 'fs';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 import { AppModule } from '../src/app.module';
 import { CLEANUP_LOCK_KEY, TasksService } from '../src/shared/tasks/tasks.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -64,7 +64,7 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
   const haveProject = async (maxBranchLifetime: number): Promise<Project> => {
     const project = await projectsService.create({
       ...TEST_PROJECT,
-      name: `Tasks E2E ${uuidAPIKey.create().uuid}`,
+      name: `Tasks E2E ${randomUUID()}`,
       maxBuildAllowed: 100,
       maxBranchLifetime,
       autoApproveFeature: false,

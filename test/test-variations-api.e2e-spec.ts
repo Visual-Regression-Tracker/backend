@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Baseline, Build, Project, TestStatus } from '@prisma/client';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 import { TEST_PROJECT } from '../src/_data_';
 import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -40,7 +40,7 @@ describe('TestVariations API (e2e)', () => {
       ...TEST_PROJECT,
       autoApproveFeature: false,
       maxBuildAllowed: 100,
-      name: `TestVariations API E2E ${uuidAPIKey.create().uuid}`,
+      name: `TestVariations API E2E ${randomUUID()}`,
     });
   });
 
@@ -75,7 +75,7 @@ describe('TestVariations API (e2e)', () => {
     it('lists the variations of every branch of the project', async () => {
       const master = (await haveBaseline(project.mainBranchName, WHITE))!;
       const feature = (await haveBaseline('feature', CHANGED))!;
-      const other = await projectsService.create({ ...TEST_PROJECT, name: `Other ${uuidAPIKey.create().uuid}` });
+      const other = await projectsService.create({ ...TEST_PROJECT, name: `Other ${randomUUID()}` });
       try {
         await testRunsService.postTestRun({
           createTestRequestDto: {
@@ -142,7 +142,7 @@ describe('TestVariations API (e2e)', () => {
     });
 
     it('404 for an unknown id', async () => {
-      const id = uuidAPIKey.create().uuid;
+      const id = randomUUID();
 
       const res = await requestWithAuth(app, 'get', `/test-variations/details/${id}`, user.token).expect(404);
 
@@ -278,7 +278,7 @@ describe('TestVariations API (e2e)', () => {
     });
 
     it('404 for an unknown id', async () => {
-      await requestWithAuth(app, 'delete', `/test-variations/${uuidAPIKey.create().uuid}`, user.token).expect(404);
+      await requestWithAuth(app, 'delete', `/test-variations/${randomUUID()}`, user.token).expect(404);
     });
 
     it('403 for a guest', async () => {

@@ -4,7 +4,7 @@ import { ImageComparison, Project, TestStatus } from '@prisma/client';
 import { existsSync, readFileSync, promises as fs } from 'fs';
 import { createServer } from 'net';
 import { PNG } from 'pngjs';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { ProjectsService } from '../src/projects/projects.service';
@@ -105,7 +105,7 @@ describe('Comparators (e2e)', () => {
   });
 
   const projectBody = (imageComparison: ImageComparison, imageComparisonConfig: string) => ({
-    name: `Comparators E2E ${imageComparison} ${uuidAPIKey.create().uuid}`,
+    name: `Comparators E2E ${imageComparison} ${randomUUID()}`,
     mainBranchName: 'master',
     autoApproveFeature: false,
     imageComparison,

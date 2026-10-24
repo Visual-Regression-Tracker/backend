@@ -9,7 +9,7 @@ import { Project } from '@prisma/client';
 import { BuildsService } from '../src/builds/builds.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
 import { TEST_PROJECT } from '../src/_data_';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 
 describe('TestVariations (e2e)', () => {
   let app: INestApplication;
@@ -41,7 +41,7 @@ describe('TestVariations (e2e)', () => {
     user = await haveUserLogged(usersService);
     project = await projecstService.create({
       ...TEST_PROJECT,
-      name: `TestVariations E2E test${uuidAPIKey.create().uuid}`,
+      name: `TestVariations E2E test${randomUUID()}`,
     });
   });
 
