@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+imageUploads
+secrets
+.git
+prisma/node_modules

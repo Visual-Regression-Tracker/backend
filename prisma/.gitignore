@@ -34,3 +34,5 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 /imageUploads
+# schema copy the client is generated from (see the generate script)
+/.generate

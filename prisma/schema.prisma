@@ -1,11 +1,14 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+  provider = "prisma-client-js"
+  // Pinned beside the schema rather than "the nearest @prisma/client": with
+  // prisma/node_modules installed that would be the migration package's copy.
+  // Every @prisma/client below this directory finds it by walking up.
+  output   = "../node_modules/.prisma/client"
 }
 
+// the connection URL lives in prisma.config.ts
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Build {

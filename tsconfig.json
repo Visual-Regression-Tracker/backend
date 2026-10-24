@@ -1,17 +1,35 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
     "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "target": "ES2021",
+    "target": "ES2023",
     "sourceMap": true,
-    "outDir": "./dist",
-    "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "types": [
+      "node",
+      "jest",
+      "multer"
+    ],
+    "strict": false,
+    "paths": {
+      "src/*": [
+        "./src/*"
+      ]
+    },
+    "useDefineForClassFields": false,
+    "outDir": "./dist",
+    "rootDir": "./"
   },
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "prisma"
+  ]
 }

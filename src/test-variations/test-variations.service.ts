@@ -4,11 +4,11 @@ import { TestVariation, Baseline, Build, TestRun, User } from '@prisma/client';
 import { StaticService } from '../static/static.service';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
-import { CreateTestRequestDto } from 'src/test-runs/dto/create-test-request.dto';
-import { BuildDto } from 'src/builds/dto/build.dto';
+import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
+import { BuildDto } from '../builds/dto/build.dto';
 import { getTestVariationUniqueData } from '../utils';
 import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
-import { BaselineDataDto } from 'src/shared/dto/baseline-data.dto';
+import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 
 @Injectable()
 export class TestVariationsService {

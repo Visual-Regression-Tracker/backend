@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { PNG } from 'pngjs';
-import { IgnoreAreaDto } from 'src/test-runs/dto/ignore-area.dto';
+import { IgnoreAreaDto } from '../../test-runs/dto/ignore-area.dto';
 
 export function scaleImageToSize(image: PNG, width: number, height: number): PNG {
   if (width > image.width || height > image.height) {
