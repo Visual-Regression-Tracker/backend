@@ -6,6 +6,7 @@ import prisma from '../client';
 jest.mock('../client', () => ({
   __esModule: true,
   default: mockDeep<PrismaClient>(),
+  prepareConnection: jest.fn().mockResolvedValue(undefined),
 }));
 
 beforeEach(() => {

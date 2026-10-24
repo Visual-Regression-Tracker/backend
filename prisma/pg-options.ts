@@ -1,25 +1,60 @@
+import { readFileSync } from 'fs';
+import { isAbsolute, resolve } from 'path';
+import { Client, ClientConfig } from 'pg';
+
 /**
- * The parts of the backend's getPgOptions (src/prisma/prisma.service.ts) the
- * seed needs, so it reaches the same database schema the migrations were just
- * applied to, over TLS the way Prisma 6 used it. This package is built on its
- * own and cannot import from src/.
+ * The TLS and schema handling of the backend's getPgOptions
+ * (src/prisma/prisma.service.ts), so the seed reaches the database the way the
+ * API does and Prisma 6 did. This package is built on its own and cannot
+ * import from src/.
  */
-export function getSeedPgOptions(databaseUrl: string | undefined): { connectionString?: string; schema?: string } {
+const PRISMA_SSL_PARAMS = ['sslmode', 'sslaccept', 'sslcert'];
+const PG_ONLY_SSL_PARAMS = ['sslrootcert', 'sslkey', 'uselibpqcompat'];
+
+export function getSeedPgOptions(databaseUrl: string | undefined): {
+  config: ClientConfig;
+  schema?: string;
+  preferSsl: boolean;
+} {
   let url: URL;
   try {
     url = new URL(databaseUrl ?? '');
   } catch {
-    return { connectionString: databaseUrl };
+    return { config: { connectionString: databaseUrl }, preferSsl: false };
   }
-  const sslmode = url.searchParams.get('sslmode');
-  // Prisma 6 encrypted without checking the certificate unless sslaccept=strict
-  if (
-    (sslmode === 'prefer' || sslmode === 'require') &&
-    url.searchParams.get('sslaccept') !== 'strict' &&
-    !url.searchParams.has('uselibpqcompat')
-  ) {
-    url.searchParams.set('uselibpqcompat', 'true');
-    return { connectionString: url.toString(), schema: url.searchParams.get('schema') ?? undefined };
+  const params = url.searchParams;
+  const schema = params.get('schema') ?? undefined;
+  const sslmode = params.get('sslmode') ?? 'prefer';
+  if (!['prefer', 'require', 'disable'].includes(sslmode) || PG_ONLY_SSL_PARAMS.some((name) => params.has(name))) {
+    // written for pg: its TLS settings are pg's to read
+    return { config: { connectionString: databaseUrl }, schema, preferSsl: false };
   }
-  return { connectionString: databaseUrl, schema: url.searchParams.get('schema') ?? undefined };
+  // Prisma 6: no certificate check unless sslaccept=strict, which checks
+  // against sslcert (relative to the prisma/ folder, this file's, wherever the
+  // seed is started from)
+  const sslcert = params.get('sslcert');
+  const ssl =
+    params.get('sslaccept') === 'strict'
+      ? { ...(sslcert && { ca: readFileSync(isAbsolute(sslcert) ? sslcert : resolve(__dirname, sslcert)) }) }
+      : { rejectUnauthorized: false };
+  PRISMA_SSL_PARAMS.forEach((name) => url.searchParams.delete(name));
+  return {
+    config: { connectionString: url.toString(), ssl: sslmode === 'disable' ? false : ssl },
+    schema,
+    preferSsl: sslmode === 'prefer',
+  };
+}
+
+/** sslmode=prefer: plaintext from now on if the server has no TLS at all. */
+export async function negotiatePreferredSsl(config: ClientConfig): Promise<void> {
+  const client = new Client(config);
+  try {
+    await client.connect();
+  } catch (error) {
+    if (error instanceof Error && error.message === 'The server does not support SSL connections') {
+      config.ssl = false;
+    }
+  } finally {
+    await client.end().catch(() => undefined);
+  }
 }
