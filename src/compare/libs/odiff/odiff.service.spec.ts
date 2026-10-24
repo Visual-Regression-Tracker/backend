@@ -202,6 +202,57 @@ describe('getDiff', () => {
     });
   });
 
+  it('passes ignore areas to odiff as regions', async () => {
+    const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
+    const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    compareMock.mockResolvedValueOnce({ match: true });
+    service = await initService({
+      getImagePathMock,
+      generateNewImageMock,
+    });
+
+    await service.getDiff(
+      {
+        baseline: 'baseline',
+        image: 'image',
+        diffTollerancePercent: 0.1,
+        ignoreAreas: [{ x: 1, y: 2, width: 3, height: 4 }],
+        saveDiffAsFile: true,
+      },
+      DEFAULT_CONFIG
+    );
+
+    expect(compareMock).toHaveBeenLastCalledWith('./baseline.png', './image.png', './diff.png', {
+      ...DEFAULT_CONFIG,
+      diffColor: '#cd2cc9',
+      ignoreRegions: [{ x1: 1, y1: 2, x2: 4, y2: 6 }],
+    });
+  });
+
+  it('does not pass empty ignore regions to odiff', async () => {
+    // odiff 4 rejects an empty --ignore= argument with "Invalid ignore regions format"
+    const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
+    const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');
+    compareMock.mockResolvedValueOnce({ match: true });
+    service = await initService({
+      getImagePathMock,
+      generateNewImageMock,
+    });
+
+    await service.getDiff(
+      {
+        baseline: 'baseline',
+        image: 'image',
+        diffTollerancePercent: 0.1,
+        ignoreAreas: [],
+        saveDiffAsFile: true,
+      },
+      DEFAULT_CONFIG
+    );
+
+    expect(compareMock.mock.lastCall[3]).not.toHaveProperty('ignoreRegions');
+  });
+
   it('ok', async () => {
     const generateNewImageMock = jest.fn().mockReturnValueOnce({ imagePath: './diff.png', imageName: 'diff.png' });
     const getImagePathMock = jest.fn().mockReturnValueOnce('./baseline.png').mockReturnValueOnce('./image.png');

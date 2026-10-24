@@ -49,7 +49,8 @@ export class OdiffService implements ImageComparator {
       {
         ...config,
         diffColor: '#cd2cc9',
-        ignoreRegions: ignoreAreaToRegionMapper(data.ignoreAreas),
+        // odiff rejects an empty --ignore= argument, so only pass regions when there are any
+        ...(data.ignoreAreas.length > 0 && { ignoreRegions: ignoreAreaToRegionMapper(data.ignoreAreas) }),
       }
     )) as OdiffResult;
 
