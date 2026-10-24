@@ -234,6 +234,23 @@ describe('TestRuns (e2e)', () => {
         .attach('image', image_v1)
         .expect(201);
     });
+
+    it('404 for a project that does not exist, storing nothing', async () => {
+      const build = await buildsService.findOrCreate({ projectId: project.id, branchName: project.mainBranchName });
+      const projectId = uuidAPIKey.create().uuid;
+
+      const res = await requestWithApiKey(app, 'post', url, user.apiKey)
+        .set('Content-type', 'multipart/form-data')
+        .field('name', 'Multipart image')
+        .field('branchName', project.mainBranchName)
+        .field('buildId', build.id)
+        .field('projectId', projectId)
+        .attach('image', image_v1)
+        .expect(404);
+
+      expect(res.body.message).toBe(`Project not found: ${projectId}`);
+      expect(await testRunsService.findMany(build.id)).toEqual([]);
+    });
   });
 
   describe('POST /approve', () => {
