@@ -20,6 +20,13 @@ const createHost = (url = '/some/path') => {
   return { host, response };
 };
 
+// the errors Prisma 7 raises through the pg adapter, as captured from PostgreSQL
+const prisma7UniqueConstraintError = (method: string, constraint: string) =>
+  new Prisma.PrismaClientKnownRequestError(
+    `\nInvalid \`this.prismaService.${method}\` invocation in\n/app/dist/x.js:1:1\n\n\nUnique constraint failed on the constraint: \`${constraint}\``,
+    { code: 'P2002', clientVersion: Prisma.prismaVersion.client }
+  );
+
 const uniqueConstraintError = (method: string) =>
   new Prisma.PrismaClientKnownRequestError(
     `\nInvalid \`prisma.${method}\` invocation:\n\n\nUnique constraint failed on the fields: (\`name\`)`,
@@ -167,6 +174,47 @@ describe('HttpExceptionFilter', () => {
 
     it('ignores other messages', () => {
       expect(filter.isUniqueConstraintException(new BadRequestException('nope'))).toBe(false);
+    });
+
+    it("detects Prisma 7's wording, which names the constraint instead of the fields", () => {
+      expect(
+        filter.isUniqueConstraintException(
+          prisma7UniqueConstraintError('project.create()', 'Project_name_key') as never
+        )
+      ).toBe(true);
+    });
+
+    it('detects the P2002 code whatever the message says', () => {
+      const error = new Prisma.PrismaClientKnownRequestError('reworded in some later version', {
+        code: 'P2002',
+        clientVersion: Prisma.prismaVersion.client,
+      });
+
+      expect(filter.isUniqueConstraintException(error as never)).toBe(true);
+    });
+
+    it('does not take another Prisma error code for a duplicate', () => {
+      const error = new Prisma.PrismaClientKnownRequestError('Record to update not found.', {
+        code: 'P2025',
+        clientVersion: Prisma.prismaVersion.client,
+      });
+
+      expect(filter.isUniqueConstraintException(error as never)).toBe(false);
+    });
+  });
+
+  describe.each([
+    ['build.update()', 'Build_projectId_ciBuildId_key', 'There is already a build with this ci build id.'],
+    ['project.create()', 'Project_name_key', 'Project exists with this name.'],
+    ['user.create()', 'User_email_key', 'This user already exists.'],
+  ])('a Prisma 7 duplicate from %s', (method, constraint, message) => {
+    it(`answers 400 "${message}"`, () => {
+      const { host, response } = createHost();
+
+      filter.catch(prisma7UniqueConstraintError(method, constraint) as never, host);
+
+      expect(response.status).toHaveBeenCalledWith(400);
+      expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ message }));
     });
   });
 
