@@ -11,6 +11,7 @@ import { OllamaService } from './libs/vlm/providers/ollama/ollama.service';
 import { GeminiService } from './libs/vlm/providers/gemini/gemini.service';
 import { StaticModule } from '../static/static.module';
 import { StaticService } from '../static/static.service';
+import { Dinov2Service } from './libs/dinov2/dinov2.service';
 import { ImageComparison, TestStatus } from '@prisma/client';
 import * as utils from '../static/utils';
 import { ImageCompareInput } from './libs/ImageCompareInput';
@@ -33,6 +34,7 @@ describe('CompareService', () => {
       providers: [
         CompareService,
         DiffWorkerPool,
+        Dinov2Service,
         OdiffService,
         PixelmatchService,
         LookSameService,
@@ -110,6 +112,7 @@ describe('CompareService with mocked collaborators', () => {
     projectFindUniqueMock = jest.fn(),
     diffWorkerPoolRunMock = jest.fn(),
     staticServiceMock = { getImageBuffer: jest.fn(), deleteImage: jest.fn() },
+    confirmsNoiseMock = jest.fn(),
   }) => {
     const pixelmatch = comparator('pixelmatch', true);
     const lookSame = comparator('lookSame');
@@ -125,6 +128,7 @@ describe('CompareService with mocked collaborators', () => {
         { provide: PrismaService, useValue: { project: { findUnique: projectFindUniqueMock } } },
         { provide: DiffWorkerPool, useValue: { run: diffWorkerPoolRunMock } },
         { provide: StaticService, useValue: staticServiceMock },
+        { provide: Dinov2Service, useValue: { confirmsNoise: confirmsNoiseMock } },
       ],
     }).compile();
 
@@ -185,6 +189,7 @@ describe('CompareService with mocked collaborators', () => {
       result = unresolved as object,
       measure = { amplitude: 40, solidPixels: 0, solidShare: 0 } as BlurredDifference | null,
       run = jest.fn().mockResolvedValue({ measure }),
+      confirmsNoiseMock = jest.fn(),
     } = {}) => {
       const staticServiceMock = {
         getImageBuffer: jest.fn().mockImplementation(async (name: string) => Buffer.from(name)),
@@ -195,12 +200,17 @@ describe('CompareService with mocked collaborators', () => {
         imageComparison,
         imageComparisonConfig: JSON.stringify({ libraryOption: 1, ...config }),
       });
-      const context = await initService({ projectFindUniqueMock, diffWorkerPoolRunMock: run, staticServiceMock });
+      const context = await initService({
+        projectFindUniqueMock,
+        diffWorkerPoolRunMock: run,
+        staticServiceMock,
+        confirmsNoiseMock,
+      });
       [context.pixelmatch, context.lookSame, context.odiff, context.vlm].forEach((c) => {
         c.parseConfig.mockImplementation((json: string) => JSON.parse(json));
         c.getDiff.mockResolvedValue(result);
       });
-      return { ...context, run, staticServiceMock };
+      return { ...context, run, staticServiceMock, confirmsNoiseMock };
     };
 
     const filter = { sigma: DEFAULT_BLUR_SIGMA, threshold: 80 };
@@ -343,6 +353,85 @@ describe('CompareService with mocked collaborators', () => {
 
       expect((await service.getDiff({ projectId: 'projectId', data })).status).toBe(TestStatus.ok);
       expect(staticServiceMock.deleteImage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rendering-noise filter with the DINOv2 check', () => {
+    const unresolved = {
+      status: TestStatus.unresolved,
+      diffName: 'diff.png',
+      pixelMisMatchCount: 10,
+      diffPercent: 5,
+      isSameDimension: true,
+    };
+    const checked = { blurAmplitudeFilter: true, dinov2Check: true };
+
+    const setup = async (imageComparison: ImageComparison, confirmsNoiseMock = jest.fn()) => {
+      const staticServiceMock = {
+        getImageBuffer: jest.fn().mockImplementation(async (name: string) => Buffer.from(name)),
+        deleteImage: jest.fn(),
+      };
+      const context = await initService({
+        projectFindUniqueMock: jest.fn().mockResolvedValue({
+          id: 'projectId',
+          imageComparison,
+          imageComparisonConfig: JSON.stringify(checked),
+        }),
+        diffWorkerPoolRunMock: jest
+          .fn()
+          .mockResolvedValue({ measure: { amplitude: 40, solidPixels: 0, solidShare: 0 } }),
+        staticServiceMock,
+        confirmsNoiseMock,
+      });
+      [context.pixelmatch, context.lookSame, context.odiff, context.vlm].forEach((c) => {
+        c.parseConfig.mockImplementation((json: string) => JSON.parse(json));
+        c.getDiff.mockResolvedValue(unresolved);
+      });
+      return { ...context, staticServiceMock };
+    };
+
+    const dinov2 = { threshold: 0.15 };
+
+    it('passes a looks-same failure DINOv2 confirms is only noise', async () => {
+      const confirmsNoise = jest.fn().mockResolvedValue({ noise: true, score: 0.04 });
+      const { service, staticServiceMock } = await setup(ImageComparison.lookSame, confirmsNoise);
+
+      const result = await service.getDiff({ projectId: 'projectId', data });
+
+      expect(confirmsNoise).toHaveBeenCalledWith(
+        Buffer.from('baseline.png'),
+        Buffer.from('image.png'),
+        data.ignoreAreas,
+        0.15
+      );
+      expect(result.status).toBe(TestStatus.ok);
+      expect(staticServiceMock.deleteImage).toHaveBeenCalledWith('diff.png');
+    });
+
+    it('keeps a looks-same failure in which DINOv2 sees a change of content', async () => {
+      const confirmsNoise = jest.fn().mockResolvedValue({ noise: false, score: 0.56 });
+      const { service, staticServiceMock } = await setup(ImageComparison.lookSame, confirmsNoise);
+
+      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(unresolved);
+      expect(staticServiceMock.deleteImage).not.toHaveBeenCalled();
+    });
+
+    // pixelmatch — and VLM through it — ask DINOv2 themselves, inside their
+    // own pass, where the diff is still at hand
+    it.each([
+      [ImageComparison.pixelmatch, 'pixelmatch'],
+      [ImageComparison.vlm, 'vlm'],
+    ] as const)('hands the check to %s', async (imageComparison, key) => {
+      const confirmsNoise = jest.fn();
+      const context = await setup(imageComparison, confirmsNoise);
+
+      await context.service.getDiff({ projectId: 'projectId', data });
+
+      expect(context[key].getDiff).toHaveBeenCalledWith(
+        { ...data, blurAmplitude: { sigma: DEFAULT_BLUR_SIGMA, threshold: 80, dinov2 } },
+        {}
+      );
+      expect(confirmsNoise).not.toHaveBeenCalled();
     });
   });
 
