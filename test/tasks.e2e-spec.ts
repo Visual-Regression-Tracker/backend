@@ -198,7 +198,7 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
 
   it('two instances running it at once remove each stale variation once', async () => {
     const project = await haveProject(5);
-    const stale = [];
+    const stale: string[] = [];
     for (const branchName of ['feature/a', 'feature/b', 'feature/c']) {
       const { variation } = await haveApprovedVariation(project, branchName);
       await ageBy(variation.id, 6);
