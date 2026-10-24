@@ -82,7 +82,7 @@ describe('Builds Controller', () => {
     const result = await controller.create(createBuildDto);
 
     expect(result).toStrictEqual(new BuildDto(buildWithNumber));
-    expect(deleteOldBuilds).toHaveBeenCalledWith(project.id, project.maxBuildAllowed);
+    expect(deleteOldBuilds).toHaveBeenCalledWith(project.id, project.maxBuildAllowed, createBuildDto.ciBuildId);
   });
 
   it('should reuse build', async () => {
@@ -219,7 +219,7 @@ describe('Builds Controller handlers', () => {
     const result = await controller.create({ project: TEST_PROJECT.name, ciBuildId: 'ci-1' } as CreateBuildDto);
 
     expect(projectsService.findOne).toHaveBeenCalledWith(TEST_PROJECT.name);
-    expect(buildsService.deleteOldBuilds).toHaveBeenCalledWith(TEST_PROJECT.id, TEST_PROJECT.maxBuildAllowed);
+    expect(buildsService.deleteOldBuilds).toHaveBeenCalledWith(TEST_PROJECT.id, TEST_PROJECT.maxBuildAllowed, 'ci-1');
     expect(buildsService.findOrCreate).toHaveBeenCalledWith({
       projectId: TEST_PROJECT.id,
       branchName: TEST_PROJECT.mainBranchName,

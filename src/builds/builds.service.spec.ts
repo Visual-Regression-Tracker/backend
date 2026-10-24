@@ -475,84 +475,84 @@ describe('BuildsService', () => {
 
   describe('deleteOldBuilds', () => {
     const projectId = 'someProjectId';
-    const build1 = { ...buildDto, id: 'build1', createdAt: new Date(Date.now() - 10000) };
-    const build2 = { ...buildDto, id: 'build2', createdAt: new Date(Date.now() - 5000) };
+    const orderBy = [{ createdAt: 'desc' }, { id: 'desc' }];
 
-    it('should delete old builds and keep the specified number', async () => {
-      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build1, build2]);
-      const buildCountMock = jest.fn().mockResolvedValueOnce(2);
-      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build1).mockResolvedValueOnce(build2);
-      mocked(BuildDto)
-        .mockReturnValueOnce(build1 as MockedObject<BuildDto>)
-        .mockReturnValueOnce(build2 as MockedObject<BuildDto>);
-      const testRunFindManyMock = jest.fn().mockResolvedValue([]);
-      const removeMock = jest.fn().mockResolvedValue(undefined);
-      const loggerDebugMock = jest.fn();
+    const init = async (oldBuilds: { id: string }[]) => {
+      const buildFindManyMock = jest.fn().mockResolvedValueOnce(oldBuilds);
+      service = await initService({ buildFindManyMock });
+      service.remove = jest.fn().mockResolvedValue(undefined);
+      return buildFindManyMock;
+    };
 
-      service = await initService({ buildFindManyMock, buildCountMock, buildFindUniqueMock, testRunFindManyMock });
-      service.remove = removeMock;
-      (service as any).logger = { debug: loggerDebugMock };
+    it('removes every build past the newest maxBuildAllowed - 1, making room for the new one', async () => {
+      const buildFindManyMock = await init([{ id: 'build1' }, { id: 'build2' }]);
 
-      await service.deleteOldBuilds(projectId, 2);
+      await service.deleteOldBuilds(projectId, 3);
 
-      expect(buildFindManyMock).toHaveBeenCalledWith({
-        where: { projectId },
-        take: undefined,
-        skip: 1,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      });
-      expect(removeMock).toHaveBeenCalledTimes(2);
-      expect(removeMock).toHaveBeenCalledWith(build1.id);
-      expect(removeMock).toHaveBeenCalledWith(build2.id);
-      expect(loggerDebugMock).toHaveBeenCalledWith(
-        `Starting to delete old builds for project ${projectId}, keeping 2 builds.`
+      expect(buildFindManyMock).toHaveBeenCalledWith({ where: { projectId }, orderBy, skip: 2, select: { id: true } });
+      expect(service.remove).toHaveBeenCalledTimes(2);
+      expect(service.remove).toHaveBeenCalledWith('build1');
+      expect(service.remove).toHaveBeenCalledWith('build2');
+    });
+
+    it.each([
+      [1, 0],
+      [0, 0],
+    ])('with maxBuildAllowed=%p keeps no old build at all', async (max, skip) => {
+      const buildFindManyMock = await init([]);
+
+      await service.deleteOldBuilds(projectId, max);
+
+      expect(buildFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ skip }));
+    });
+
+    it('never prunes the build a CI build id is about to reuse', async () => {
+      const buildFindManyMock = await init([]);
+
+      await service.deleteOldBuilds(projectId, 1, 'ci-1');
+
+      expect(buildFindManyMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { projectId, OR: [{ ciBuildId: null }, { ciBuildId: { not: 'ci-1' } }] },
+        })
       );
-      expect(loggerDebugMock).toHaveBeenCalledWith(`Finished deleting old builds for project ${projectId}.`);
     });
 
     it('should handle concurrent calls for the same project by returning the existing promise', async () => {
-      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build1, build2]);
-      const buildCountMock = jest.fn().mockResolvedValueOnce(2);
-      const removeMock = jest.fn().mockResolvedValue(undefined);
-      const testRunFindManyMock = jest.fn().mockResolvedValue([]);
-      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build1).mockResolvedValueOnce(build2);
-      mocked(BuildDto)
-        .mockReturnValueOnce(build1 as MockedObject<BuildDto>)
-        .mockReturnValueOnce(build2 as MockedObject<BuildDto>);
-      const loggerDebugMock = jest.fn();
-
-      service = await initService({ buildFindManyMock, buildCountMock, testRunFindManyMock, buildFindUniqueMock });
-      service.remove = removeMock;
-      (service as any).logger = { debug: loggerDebugMock };
+      const buildFindManyMock = await init([{ id: 'build1' }]);
 
       const promise1 = service.deleteOldBuilds(projectId, 2);
       const promise2 = service.deleteOldBuilds(projectId, 2);
 
       expect(promise1).toStrictEqual(promise2);
-      expect(loggerDebugMock).toHaveBeenCalledWith(
-        `Deletion for project ${projectId} is already in progress. Returning existing promise.`
-      );
-
-      await promise1; // Wait for the deletion to complete
-
-      expect(buildFindManyMock).toHaveBeenCalledTimes(1); // Only called once
-      expect(removeMock).toHaveBeenCalledTimes(2);
-      expect(loggerDebugMock).toHaveBeenCalledWith(`Finished deleting old builds for project ${projectId}.`);
+      await promise1;
+      expect(buildFindManyMock).toHaveBeenCalledTimes(1);
+      expect(service.remove).toHaveBeenCalledTimes(1);
     });
 
     it('should remove the promise from the map after completion (success)', async () => {
-      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build1]);
-      const buildCountMock = jest.fn().mockResolvedValueOnce(1);
-      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build1);
-      const removeMock = jest.fn().mockResolvedValue(undefined);
+      await init([{ id: 'build1' }]);
 
-      service = await initService({ buildFindManyMock, buildCountMock, buildFindUniqueMock });
-      service.remove = removeMock;
-
-      const projectId = 'testProject';
-      await service.deleteOldBuilds(projectId, 0);
+      await service.deleteOldBuilds(projectId, 1);
 
       expect(service['ongoingDeletions'].has(projectId)).toBe(false);
+    });
+
+    it('hands a failure to the caller and leaves no unhandled rejection behind', async () => {
+      const unhandled = jest.fn();
+      process.on('unhandledRejection', unhandled);
+      try {
+        const buildFindManyMock = jest.fn().mockRejectedValueOnce(new Error('db down'));
+        service = await initService({ buildFindManyMock });
+
+        await expect(service.deleteOldBuilds(projectId, 1)).rejects.toThrow('db down');
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(unhandled).not.toHaveBeenCalled();
+        expect(service['ongoingDeletions'].has(projectId)).toBe(false);
+      } finally {
+        process.off('unhandledRejection', unhandled);
+      }
     });
   });
 

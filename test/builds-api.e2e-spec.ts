@@ -367,16 +367,30 @@ describe('Builds API (e2e)', () => {
       expect(imageExists(run.imageName)).toBe(false);
     });
 
-    it('maxBuildAllowed=1', async () => {
+    it('maxBuildAllowed=1 keeps only the newest build', async () => {
       await prisma.project.update({ where: { id: project.id }, data: { maxBuildAllowed: 1 } });
 
       await createBuild();
       await createBuild();
-      await createBuild();
+      const newest = (await createBuild()).body;
 
-      // NOTE: current behavior — deleteOldBuilds keeps `max - 1` old builds only when max >= 2, so a project limited
-      // to one build keeps one old build plus the new one
-      expect(await listOrder()).toHaveLength(2);
+      expect(await listOrder()).toEqual([newest.id]);
+    });
+
+    it('never prunes the build a CI build id reuses, and counts it as one of those kept', async () => {
+      await prisma.project.update({ where: { id: project.id }, data: { maxBuildAllowed: 2 } });
+      const joinShared = () =>
+        requestWithApiKey(app, 'post', '/builds', user.apiKey)
+          .send({ project: project.id, ciBuildId: 'shared' })
+          .expect(201);
+      const shared = (await joinShared()).body;
+      const newer = (await createBuild()).body;
+
+      // a parallel CI job joins the shared build, which is now the older of the two
+      const joined = (await joinShared()).body;
+
+      expect(joined.id).toBe(shared.id);
+      expect((await listOrder()).sort()).toEqual([shared.id, newer.id].sort());
     });
   });
 });
