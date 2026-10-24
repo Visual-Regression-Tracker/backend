@@ -270,9 +270,9 @@ describe('Builds API (e2e)', () => {
         [fresh.id]: TestStatus.approved,
         [failed.id]: TestStatus.failed,
       });
-      // NOTE: current behavior — unlike POST /test-runs/approve, the build-wide approve records no approving user
+      // like POST /test-runs/approve, each new baseline records who approved it
       const baselines = await prisma.baseline.findMany({ where: { testRunId: { in: [unresolved.id, fresh.id] } } });
-      expect(baselines.map((baseline) => baseline.userId)).toEqual([null, null]);
+      expect(baselines.map((baseline) => baseline.userId)).toEqual([user.id, user.id]);
     });
 
     it('400 without merge', async () => {

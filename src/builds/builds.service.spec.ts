@@ -582,7 +582,7 @@ describe('BuildsService', () => {
     service = await initService({ buildFindUniqueMock, testRunApproveMock });
     service.findOne = jest.fn();
 
-    await service.approve('someId', true);
+    await service.approve('someId', true, 'user id');
 
     expect(buildFindUniqueMock).toHaveBeenCalledWith({
       where: { id: 'someId' },
@@ -596,7 +596,7 @@ describe('BuildsService', () => {
         },
       },
     });
-    expect(testRunApproveMock).toHaveBeenCalledWith(build.testRuns[0].id, true);
+    expect(testRunApproveMock).toHaveBeenCalledWith(build.testRuns[0].id, true, false, 'user id');
   });
 
   it('approve throws NotFoundException for an unknown build', async () => {
