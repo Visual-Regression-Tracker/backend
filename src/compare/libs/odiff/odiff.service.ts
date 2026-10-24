@@ -5,10 +5,10 @@ import { DiffResult } from '../../../test-runs/diffResult';
 import { parseConfig } from '../../utils';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
-import { DIFF_DIMENSION_RESULT, NO_BASELINE_RESULT } from '../consts';
+import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { compare } from 'odiff-bin';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { OdiffConfig, OdiffIgnoreRegions, OdiffResult } from './odiff.types';
+import { OdiffConfig, OdiffIgnoreRegions } from './odiff.types';
 import { HddService } from '../../../static/hdd/hdd.service';
 
 export const DEFAULT_CONFIG: OdiffConfig = {
@@ -41,37 +41,48 @@ export class OdiffService implements ImageComparator {
     }
 
     // compare
+    const baselinePath = this.hddService.getImagePath(data.baseline);
     const diff = this.hddService.generateNewImage('diff');
-    const compareResult = (await compare(
-      this.hddService.getImagePath(data.baseline),
-      this.hddService.getImagePath(data.image),
-      diff.imagePath,
-      {
-        ...config,
-        diffColor: '#cd2cc9',
-        // odiff rejects an empty --ignore= argument, so only pass regions when there are any
-        ...(data.ignoreAreas.length > 0 && { ignoreRegions: ignoreAreaToRegionMapper(data.ignoreAreas) }),
-      }
-    )) as OdiffResult;
+    const compareResult = await compare(baselinePath, this.hddService.getImagePath(data.image), diff.imagePath, {
+      ...config,
+      diffColor: '#cd2cc9',
+      // a missing file comes back as a result instead of an error naming the file
+      noFailOnFsErrors: true,
+      // odiff rejects an empty --ignore= argument, so only pass regions when there are any
+      ...(data.ignoreAreas.length > 0 && { ignoreRegions: ignoreAreaToRegionMapper(data.ignoreAreas) }),
+    });
 
+    if (compareResult.match === true) {
+      return EQUAL_RESULT;
+    }
+    if (compareResult.reason === 'file-not-exists') {
+      // same as the other comparators: a missing baseline file means there is nothing to compare with
+      if (compareResult.file === baselinePath) {
+        return NO_BASELINE_RESULT;
+      }
+      throw new Error(`Cannot get image: ${data.image}`);
+    }
     if (compareResult.reason === 'layout-diff') {
       return DIFF_DIMENSION_RESULT;
-    } else {
-      result.isSameDimension = true;
     }
-    result.diffPercent = compareResult.diffPercentage ?? 0;
-    result.pixelMisMatchCount = compareResult.diffCount ?? 0;
+
+    // pixel diff: odiff has written the diff image
+    result.isSameDimension = true;
+    result.diffPercent = compareResult.diffPercentage;
+    result.pixelMisMatchCount = compareResult.diffCount;
 
     // process result
-    if (result.diffPercent > data.diffTollerancePercent) {
+    // odiff-bin leaves the numbers out when it cannot parse the binary output: keep the run for review
+    if (!(result.diffPercent <= data.diffTollerancePercent)) {
       // save diff
       if (data.saveDiffAsFile) {
         result.diffName = diff.imageName;
       } else {
-        this.staticService.deleteImage(diff.imagePath);
+        await this.staticService.deleteImage(diff.imageName);
       }
       result.status = TestStatus.unresolved;
     } else {
+      await this.staticService.deleteImage(diff.imageName);
       result.status = TestStatus.ok;
     }
     return result;

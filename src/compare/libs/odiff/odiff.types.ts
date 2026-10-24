@@ -1,12 +1,3 @@
-export type OdiffResult = {
-  match: boolean;
-  reason: 'pixel-diff' | 'layout-diff';
-  /** Amount of different pixels */
-  diffCount: number;
-  /** Percentage of different pixels in the whole image */
-  diffPercentage: number;
-};
-
 export type OdiffConfig = {
   /** Output full diff image. */
   outputDiffMask: boolean;
