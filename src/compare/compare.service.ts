@@ -1,4 +1,4 @@
-import { ImageComparison, Project } from '@prisma/client';
+import { ImageComparison, Project, TestStatus } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
 import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
 import { ImageComparator } from './libs/image-comparator.interface';
@@ -11,6 +11,9 @@ import { VlmService } from './libs/vlm/vlm.service';
 import { isHddStaticServiceConfigured } from '../static/utils';
 import { DiffWorkerPool } from './diff-worker-pool';
 import { SignatureJobInput, SignatureJobOutput } from './libs/pixelmatch/signature.core';
+import { BlurAmplitudeOptions } from './libs/pixelmatch/blur-amplitude.core';
+import { splitBlurAmplitudeConfig } from './libs/blur-amplitude.config';
+import { StaticService } from '../static/static.service';
 
 @Injectable()
 export class CompareService {
@@ -22,14 +25,75 @@ export class CompareService {
     private readonly odiffService: OdiffService,
     private readonly vlmService: VlmService,
     private readonly prismaService: PrismaService,
-    private readonly diffWorkerPool: DiffWorkerPool
+    private readonly diffWorkerPool: DiffWorkerPool,
+    private readonly staticService: StaticService
   ) {}
 
   async getDiff({ projectId, data }: { projectId: string; data: ImageCompareInput }): Promise<DiffResult> {
     const project: Project = (await this.prismaService.project.findUnique({ where: { id: projectId } }))!;
     const comparator = this.getComparator(project.imageComparison);
-    const config = comparator.parseConfig(project.imageComparisonConfig);
-    return comparator.getDiff(data, config);
+    // the rendering-noise filter is switched on in the library's config but is
+    // applied here, for every library alike; the library gets the rest
+    const { blurAmplitude, comparatorConfig } = splitBlurAmplitudeConfig(
+      comparator.parseConfig(project.imageComparisonConfig),
+      this.logger
+    );
+    if (!blurAmplitude) {
+      return comparator.getDiff(data, comparatorConfig);
+    }
+    if (comparator.appliesBlurAmplitudeFilter) {
+      return comparator.getDiff({ ...data, blurAmplitude }, comparatorConfig);
+    }
+
+    const result = await comparator.getDiff(data, comparatorConfig);
+    return this.filterRenderingNoise(data, result, blurAmplitude);
+  }
+
+  /**
+   * Overturns a failing verdict whose change, blurred, is no stronger than
+   * anti-aliasing and sub-pixel rendering noise. The filter can only ever pass
+   * a run, never fail one, so anything that keeps it from measuring — a missing
+   * screenshot, a full queue, different sizes — leaves the verdict as it was.
+   */
+  private async filterRenderingNoise(
+    data: ImageCompareInput,
+    result: DiffResult,
+    { sigma, threshold }: BlurAmplitudeOptions
+  ): Promise<DiffResult> {
+    // a size change is a finding of its own, and there is nothing to line up
+    if (result.status !== TestStatus.unresolved || !result.isSameDimension) {
+      return result;
+    }
+    try {
+      const [baseline, image] = await Promise.all([
+        this.staticService.getImageBuffer(data.baseline),
+        this.staticService.getImageBuffer(data.image),
+      ]);
+      if (!baseline || !image) {
+        return result;
+      }
+      const { amplitude } = await this.diffWorkerPool.run({
+        kind: 'blur-amplitude',
+        baseline,
+        image,
+        ignoreAreas: data.ignoreAreas,
+        sigma,
+      });
+      if (amplitude === null || amplitude > threshold) {
+        return result;
+      }
+      this.logger.debug(
+        `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${amplitude.toFixed(1)})`
+      );
+      // nothing will ever point at the diff of a run that passed
+      if (result.diffName) {
+        this.staticService.deleteImage(result.diffName);
+      }
+      return { ...result, status: TestStatus.ok, diffName: null };
+    } catch (error) {
+      this.logger.warn(`Rendering-noise filter skipped: ${error instanceof Error ? error.message : error}`);
+      return result;
+    }
   }
 
   /**

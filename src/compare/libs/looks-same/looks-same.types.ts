@@ -1,4 +1,6 @@
-export interface LooksSameConfig {
+import { BlurAmplitudeConfig } from '../blur-amplitude.config';
+
+export interface LooksSameConfig extends BlurAmplitudeConfig {
   /**
    * strict comparsion
    */

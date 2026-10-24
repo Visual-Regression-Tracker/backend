@@ -1,4 +1,6 @@
-export type OdiffConfig = {
+import { BlurAmplitudeConfig } from '../blur-amplitude.config';
+
+export type OdiffConfig = BlurAmplitudeConfig & {
   /** Output full diff image. */
   outputDiffMask: boolean;
   /** Do not compare images and produce output if images layout is different. */

@@ -2,6 +2,7 @@ import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { applyIgnoreAreas, scaleImageToSize } from '../../utils';
+import { BlurAmplitudeOptions, maxBlurredDifference } from './blur-amplitude.core';
 import { signatureOfDecoded } from './signature.core';
 import { encodeThumbnail } from './thumbnail.core';
 
@@ -35,6 +36,11 @@ export interface PixelmatchJobInput {
    * CSS shrink them is what made opening the variations dialog cost megabytes.
    */
   withThumbnails?: boolean;
+  /**
+   * Prototype: pass a change that is over tolerance but, once blurred, no
+   * stronger than rendering noise (see blur-amplitude.core.ts). Off when absent.
+   */
+  blurAmplitude?: BlurAmplitudeOptions;
 }
 
 export interface PixelmatchJobOutput {
@@ -50,6 +56,10 @@ export interface PixelmatchJobOutput {
   // nothing to show
   imageThumbnail?: Buffer | Uint8Array;
   diffThumbnail?: Buffer | Uint8Array;
+  // absent unless the blur-amplitude filter was asked for and the change was
+  // over tolerance — the only case where its verdict could matter
+  blurAmplitude?: number;
+  renderingNoiseOnly?: boolean;
 }
 
 // postMessage turns Buffers into Uint8Array views over their own ArrayBuffer.
@@ -91,9 +101,16 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
   });
   const diffPercent = (pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
 
+  const overTolerance = diffPercent > input.diffTolerancePercent;
+  const blurAmplitude =
+    input.blurAmplitude && overTolerance
+      ? maxBlurredDifference(baselineIgnored, imageIgnored, input.blurAmplitude.sigma)
+      : undefined;
+  const renderingNoiseOnly = blurAmplitude === undefined ? undefined : blurAmplitude <= input.blurAmplitude.threshold;
+
   // A build is mostly runs that pass, so anything produced for a diff that is
   // about to be thrown away is work nobody ever sees the result of.
-  const keepingTheDiff = diffPercent > input.diffTolerancePercent && input.saveDiff;
+  const keepingTheDiff = overTolerance && !renderingNoiseOnly && input.saveDiff;
 
   let diffBuffer: Buffer | undefined;
   if (keepingTheDiff) {
@@ -124,5 +141,6 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
     diffBuffer,
     ...(signature ? { signature } : {}),
     ...thumbnails,
+    ...(blurAmplitude === undefined ? {} : { blurAmplitude, renderingNoiseOnly }),
   };
 }

@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialia
 @Injectable()
 export class PixelmatchService implements ImageComparator {
   private readonly logger: Logger = new Logger(PixelmatchService.name);
+  readonly appliesBlurAmplitudeFilter = true;
 
   constructor(
     private readonly staticService: StaticService,
@@ -56,6 +57,8 @@ export class PixelmatchService implements ImageComparator {
       // making thumbnails for those would burn the CPU and, worse, store two
       // objects per attempt that nothing ever references or deletes.
       withThumbnails: data.saveDiffAsFile,
+      // measured here, next to the diff, while the images are decoded anyway
+      ...(data.blurAmplitude ? { blurAmplitude: data.blurAmplitude } : {}),
     });
 
     if (output.equal) {
@@ -80,6 +83,16 @@ export class PixelmatchService implements ImageComparator {
           }
         : {}),
     };
+
+    // The mismatch stays on the run as measured, so a reviewer can still see
+    // the pixels moved; only the verdict is the filter's.
+    if (output.renderingNoiseOnly) {
+      this.logger.debug(
+        `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${output.blurAmplitude?.toFixed(1)})`
+      );
+      result.status = TestStatus.ok;
+      return result;
+    }
 
     if (result.diffPercent! > data.diffTollerancePercent) {
       if (output.diffBuffer) {

@@ -101,6 +101,34 @@ describe('VlmService', () => {
     expect(ollamaGenerateMock).not.toHaveBeenCalled(); // VLM should not be called
   });
 
+  // CompareService leaves the rendering-noise filter to VLM, which hands it to
+  // the pixelmatch pass it runs first: noise then passes before any model sees it
+  it('applies the rendering-noise filter through pixelmatch, before the model', async () => {
+    const blurAmplitude = { sigma: 1, threshold: 80 };
+    const pixelmatchGetDiffMock = jest
+      .fn()
+      .mockResolvedValue(createPixelmatchResult({ status: TestStatus.ok, diffName: null }));
+    const ollamaGenerateMock = jest.fn();
+    const service = await initService({ pixelmatchGetDiffMock, ollamaGenerateMock });
+
+    const result = await service.getDiff(
+      {
+        baseline: 'baseline',
+        image: 'image',
+        diffTollerancePercent: 0,
+        ignoreAreas: [],
+        saveDiffAsFile: true,
+        blurAmplitude,
+      },
+      DEFAULT_CONFIG
+    );
+
+    expect(service.appliesBlurAmplitudeFilter).toBe(true);
+    expect(pixelmatchGetDiffMock).toHaveBeenCalledWith(expect.objectContaining({ blurAmplitude }), expect.anything());
+    expect(result.status).toBe(TestStatus.ok);
+    expect(ollamaGenerateMock).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
       'override to OK when VLM says not noticeable',
