@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { mocked } from 'jest-mock';
 import { Test, TestingModule } from '@nestjs/testing';
 import { SIGNATURE_CONCURRENCY, TestRunsService } from './test-runs.service';
@@ -1280,10 +1281,10 @@ describe('TestRunsService', () => {
       expect(copyImageMock).not.toHaveBeenCalled();
     });
 
-    it('throws a TypeError when the run does not exist', async () => {
+    it('throws NotFoundException when the run does not exist', async () => {
       const { built } = await initApproveService(null);
 
-      await expect(built.approve('id')).rejects.toThrow(TypeError);
+      await expect(built.approve('id')).rejects.toThrow(new NotFoundException('Test run not found: id'));
     });
 
     it('copies the image as the new baseline of the same-branch variation and marks the run approved', async () => {
@@ -1790,7 +1791,9 @@ describe('TestRunsService', () => {
     it('throws for an unknown test run', async () => {
       const { built } = await initEdgeService({ testRun: null });
 
-      await expect(built.getMatchingVariations('missing')).rejects.toThrow('No test run found: missing');
+      await expect(built.getMatchingVariations('missing')).rejects.toThrow(
+        new NotFoundException('Test run not found: missing')
+      );
     });
 
     it('returns only the run itself when the run has no project', async () => {

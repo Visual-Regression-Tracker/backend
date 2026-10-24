@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GUARDS_METADATA, INTERCEPTORS_METADATA, PIPES_METADATA } from '@nestjs/common/constants';
-import { ValidationPipe } from '@nestjs/common';
+import { NotFoundException, ValidationPipe } from '@nestjs/common';
 import { Role, TestStatus, User } from '@prisma/client';
 import { TestRunsController } from './test-runs.controller';
 import { TestRunsService } from './test-runs.service';
@@ -62,6 +62,15 @@ describe('TestRuns Controller', () => {
     expect(findOne).toHaveBeenCalledWith(testRun.id);
     // NOTE: current behavior — returned raw (no TestRunDto mapping), so it also carries testVariation etc.
     expect(result).toBe(testRun);
+  });
+
+  it('throws NotFoundException for an unknown test run', async () => {
+    const findOne = jest.fn().mockResolvedValueOnce(null);
+    controller = await initController({ findOne });
+
+    await expect(controller.getDetails('missing')).rejects.toThrow(
+      new NotFoundException('Test run not found: missing')
+    );
   });
 
   describe('approveTestRun', () => {

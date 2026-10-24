@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../static/static.service';
@@ -101,6 +101,9 @@ export class TestRunsService {
   async approve(id: string, merge = false, autoApprove = false, userId?: string): Promise<TestRun> {
     this.logger.log(`Approving testRun: ${id} merge: ${merge} autoApprove: ${autoApprove}`);
     const testRun = await this.findOne(id);
+    if (!testRun) {
+      throw new NotFoundException(`Test run not found: ${id}`);
+    }
     let { testVariation } = testRun;
     if (!testVariation) {
       throw new Error('No test variation found. Re-create test run');
@@ -177,7 +180,7 @@ export class TestRunsService {
   ): Promise<{ testRun: TestRun; matching: TestRun[]; skipped: SkippedSibling[] }> {
     const testRun = await this.findOne(id);
     if (!testRun) {
-      throw new Error(`No test run found: ${id}`);
+      throw new NotFoundException(`Test run not found: ${id}`);
     }
 
     const project = testRun.projectId
@@ -523,6 +526,9 @@ export class TestRunsService {
 
   async addIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
     const testRun = await this.findOne(id);
+    if (!testRun) {
+      throw new NotFoundException(`Test run not found: ${id}`);
+    }
     const oldIgnoreAreas: IgnoreAreaDto[] = JSON.parse(testRun.ignoreAreas) ?? [];
     return this.updateIgnoreAreas(id, oldIgnoreAreas.concat(ignoreAreas));
   }

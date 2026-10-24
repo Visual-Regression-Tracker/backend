@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -88,7 +89,7 @@ describe('TestVariationsService', () => {
   describe('getDetails', () => {
     it('can find one', async () => {
       const id = 'test id';
-      const variationfindUniqueMock = jest.fn();
+      const variationfindUniqueMock = jest.fn().mockResolvedValueOnce(generateTestVariation({ id }, []));
       service = await initModule({ variationfindUniqueMock });
 
       await service.getDetails(id);
@@ -107,6 +108,15 @@ describe('TestVariationsService', () => {
           },
         },
       });
+    });
+
+    it('throws NotFoundException for an unknown id', async () => {
+      const variationfindUniqueMock = jest.fn().mockResolvedValueOnce(null);
+      service = await initModule({ variationfindUniqueMock });
+
+      await expect(service.getDetails('missing')).rejects.toThrow(
+        new NotFoundException('Test variation not found: missing')
+      );
     });
   });
 

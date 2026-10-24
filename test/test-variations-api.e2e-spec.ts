@@ -142,16 +142,12 @@ describe('TestVariations API (e2e)', () => {
       expect(res.body.baselines[0].user).not.toHaveProperty('apiKey');
     });
 
-    it('unknown id', async () => {
-      // NOTE: current behavior — a missing variation is a 200 with an empty body, not a 404
-      const res = await requestWithAuth(
-        app,
-        'get',
-        `/test-variations/details/${uuidAPIKey.create().uuid}`,
-        user.token
-      ).expect(200);
+    it('404 for an unknown id', async () => {
+      const id = uuidAPIKey.create().uuid;
 
-      expect(res.text).toBe('');
+      const res = await requestWithAuth(app, 'get', `/test-variations/details/${id}`, user.token).expect(404);
+
+      expect(res.body.message).toBe(`Test variation not found: ${id}`);
     });
 
     it('400 for an id that is not a uuid', async () => {
@@ -282,9 +278,8 @@ describe('TestVariations API (e2e)', () => {
       expect(next.testVariationId).not.toBe(first.testVariationId);
     });
 
-    it('unknown id', async () => {
-      // NOTE: current behavior — deleting a missing variation is a 500 (TypeError on the null variation), not a 404
-      await requestWithAuth(app, 'delete', `/test-variations/${uuidAPIKey.create().uuid}`, user.token).expect(500);
+    it('404 for an unknown id', async () => {
+      await requestWithAuth(app, 'delete', `/test-variations/${uuidAPIKey.create().uuid}`, user.token).expect(404);
     });
 
     it('403 for a guest', async () => {

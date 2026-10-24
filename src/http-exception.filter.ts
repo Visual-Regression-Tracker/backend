@@ -12,7 +12,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const isUniqueConstaintException = this.isUniqueConstraintException(exception);
     const isForbiddenException = this.isForbiddenException(exception);
     try {
-      status = isUniqueConstaintException ? HttpStatus.BAD_REQUEST : exception.getStatus();
+      status = isUniqueConstaintException
+        ? HttpStatus.BAD_REQUEST
+        : this.isRecordNotFoundException(exception)
+          ? HttpStatus.NOT_FOUND
+          : exception.getStatus();
     } catch {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
     }
@@ -34,6 +38,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   isForbiddenException(exception: HttpException): boolean {
     return exception.message.includes('Forbidden resource');
+  }
+
+  // P2025: an update or delete found no row to act on — the id the client sent
+  // names nothing, which is a 404 like any other lookup that comes back empty
+  isRecordNotFoundException(exception: HttpException): boolean {
+    return (exception as { code?: unknown }).code === 'P2025';
   }
 
   // ValidationPipe puts the reasons in the response body and leaves the

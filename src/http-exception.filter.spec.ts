@@ -106,6 +106,21 @@ describe('HttpExceptionFilter', () => {
       );
     });
 
+    it('answers 404 when Prisma finds no record to update or delete (P2025)', () => {
+      const { host, response } = createHost();
+      const exception = new Prisma.PrismaClientKnownRequestError('No record was found for an update.', {
+        code: 'P2025',
+        clientVersion: Prisma.prismaVersion.client,
+      });
+
+      filter.catch(exception as unknown as HttpException, host);
+
+      expect(response.status).toHaveBeenCalledWith(HttpStatus.NOT_FOUND);
+      expect(response.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'No record was found for an update.', exception })
+      );
+    });
+
     it('answers 500 when getStatus itself throws', () => {
       const { host, response } = createHost();
       const exception = new HttpException('Weird', 418);

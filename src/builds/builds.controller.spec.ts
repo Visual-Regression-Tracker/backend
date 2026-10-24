@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { BuildsController } from './builds.controller';
 import { BuildsService } from './builds.service';
@@ -188,6 +189,12 @@ describe('Builds Controller handlers', () => {
 
     await expect(controller.remove(TEST_BUILD.id)).resolves.toBe(TEST_BUILD);
     expect(buildsService.remove).toHaveBeenCalledWith(TEST_BUILD.id);
+  });
+
+  it('throws NotFoundException when there is no build to remove', async () => {
+    buildsService.remove.mockResolvedValue(undefined);
+
+    await expect(controller.remove('missing')).rejects.toThrow(new NotFoundException('Build not found: missing'));
   });
 
   it('updates a build with the body', async () => {

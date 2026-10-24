@@ -13,6 +13,7 @@ import {
   ParseBoolPipe,
   forwardRef,
   Inject,
+  NotFoundException,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
@@ -70,8 +71,15 @@ export class BuildsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Build> {
-    return this.buildsService.remove(id);
+  async remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Build> {
+    // remove() answers nothing for a build that is not there, and retention
+    // relies on that when two requests prune the same build; a client asking
+    // for it by id is told it does not exist
+    const build = await this.buildsService.remove(id);
+    if (!build) {
+      throw new NotFoundException(`Build not found: ${id}`);
+    }
+    return build;
   }
 
   @Post()

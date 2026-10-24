@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Build, Prisma, TestStatus } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
@@ -33,6 +33,9 @@ export class BuildsService {
       }),
       getBuildsStats(this.prismaService, [id]),
     ]);
+    if (!build) {
+      throw new NotFoundException(`Build not found: ${id}`);
+    }
     return new BuildDto(build, stats.get(id));
   }
 
@@ -190,6 +193,10 @@ export class BuildsService {
         },
       },
     });
+
+    if (!build) {
+      throw new NotFoundException(`Build not found: ${id}`);
+    }
 
     for (const testRun of build.testRuns) {
       await this.testRunsService.approve(testRun.id, merge);
