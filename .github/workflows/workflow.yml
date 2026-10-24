@@ -5,19 +5,32 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
-    
+
+# a new push to a pull request supersedes its running checks; master runs to completion
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
-  build:
+  checks:
     # https://github.com/actions/runner-images#available-images
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            prisma/package-lock.json
 
       - name: Install npm dependencies
         run: npm ci
@@ -34,51 +47,84 @@ jobs:
       - name: Unit tests
         run: npm run test:cov
 
+  integration:
+    name: integration (${{ matrix.suite }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # acceptance tests call the api container, e2e tests run the app in-process against its database
+          - suite: e2e
+            compose-file: docker-compose.yml
+            test: npm run test:acceptance && npm run test:e2e
+          - suite: ldap
+            compose-file: docker-compose.yml:docker-compose.ldap.yml
+            test: npm run test:ldap
+          - suite: oidc
+            compose-file: docker-compose.yml:docker-compose.oidc.yml
+            test: npm run test:oidc
+    env:
+      # read by every docker compose command below
+      COMPOSE_FILE: ${{ matrix.compose-file }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            prisma/package-lock.json
+
+      - name: Install npm dependencies
+        run: npm ci
+
       - name: Build and run containers
         run: docker compose up --build -d
 
-      - name: Run acceptance tests
-        run: npm run test:acceptance
+      - name: Wait for migrations and the api
+        run: |
+          # the migration container applies the migrations, seeds the default user and exits
+          status=$(docker wait vrt_migration)
+          if [ "$status" != 0 ]; then
+            echo "::error::migration container exited with $status"
+            exit 1
+          fi
+          curl --fail --silent --show-error --output /dev/null \
+            --retry 30 --retry-delay 2 --retry-all-errors http://localhost:4200/health
 
-      - name: Wait for services to be ready with migrations
-        run: sleep 30
-
-      - name: Run e2e tests
-        run: npm run test:e2e
+      - name: Run ${{ matrix.suite }} tests
+        run: ${{ matrix.test }}
 
       - name: Dump docker logs on failure
         if: failure()
-        uses: jwalton/gh-docker-logs@v2
+        run: docker compose logs --no-color --timestamps
 
       - name: Stop containers
         if: always()
-        run: docker compose down
-
-      - name: Run ldap containers
-        run: docker compose -f docker-compose.yml -f docker-compose.ldap.yml up -d
-
-      - name: Run ldap test
-        run: npm run test:ldap
-
-      - name: Dump docker logs on failure
-        if: failure()
-        uses: jwalton/gh-docker-logs@v2
-
-      - name: Stop ldap containers
-        if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.ldap.yml down
+        run: docker compose down --volumes
 
   test-migrations:
     # See: https://github.com/Visual-Regression-Tracker/backend/issues/273
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            prisma/package-lock.json
 
       - name: Install npm dependencies
         working-directory: prisma
@@ -87,3 +133,21 @@ jobs:
       - name: Static analysis
         working-directory: prisma
         run: npm run test
+
+  # Branch protection requires a check named "build": it passes only when every job above did,
+  # so the required check keeps covering the whole pipeline after the split.
+  build:
+    if: ${{ !cancelled() }}
+    needs: [checks, integration, test-migrations]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: All jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for result in $RESULTS; do
+            [ "$result" = success ] || exit 1
+          done
