@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Project, Role } from '@prisma/client';
 import request from 'supertest';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -25,7 +25,7 @@ describe('Project favourites (e2e)', () => {
   };
 
   const haveProject = async (): Promise<Project> => {
-    const project = await projectsService.create({ ...TEST_PROJECT, name: `Favourite ${uuidAPIKey.create().uuid}` });
+    const project = await projectsService.create({ ...TEST_PROJECT, name: `Favourite ${randomUUID()}` });
     projectIds.push(project.id);
     return project;
   };
@@ -58,8 +58,8 @@ describe('Project favourites (e2e)', () => {
 
   it.each([
     ['get', '/projects/favorites'],
-    ['put', `/projects/${uuidAPIKey.create().uuid}/favorite`],
-    ['delete', `/projects/${uuidAPIKey.create().uuid}/favorite`],
+    ['put', `/projects/${randomUUID()}/favorite`],
+    ['delete', `/projects/${randomUUID()}/favorite`],
   ] as const)('401 on %s %s without a token', (method, url) => request(app.getHttpServer())[method](url).expect(401));
 
   it('starts with no favourites', async () => {
@@ -101,7 +101,7 @@ describe('Project favourites (e2e)', () => {
   it('answers 404 for adding an unknown project', async () => {
     const user = await haveUser();
 
-    await requestWithAuth(app, 'put', `/projects/${uuidAPIKey.create().uuid}/favorite`, user.token).expect(404);
+    await requestWithAuth(app, 'put', `/projects/${randomUUID()}/favorite`, user.token).expect(404);
 
     await expect(favoritesOf(user)).resolves.toEqual([]);
   });
@@ -109,7 +109,7 @@ describe('Project favourites (e2e)', () => {
   it('answers 204 for removing an unknown project', async () => {
     const user = await haveUser();
 
-    await requestWithAuth(app, 'delete', `/projects/${uuidAPIKey.create().uuid}/favorite`, user.token).expect(204);
+    await requestWithAuth(app, 'delete', `/projects/${randomUUID()}/favorite`, user.token).expect(204);
   });
 
   it('answers 400 for an id that is not a UUID', async () => {

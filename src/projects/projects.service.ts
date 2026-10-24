@@ -4,7 +4,7 @@ import { BuildsService } from '../builds/builds.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Project } from '@prisma/client';
-import uuidAPIKey from 'uuid-apikey';
+import { isUuidShaped } from '../utils/random-key';
 import { UpdateProjectDto } from './dto/update-project.dto';
 
 @Injectable()
@@ -20,7 +20,7 @@ export class ProjectsService {
   ) {}
 
   async findOne(idOrName: string): Promise<Project | null> {
-    const isUUID = uuidAPIKey.isUUID(idOrName);
+    const isUUID = isUuidShaped(idOrName);
     const project: Project | null = await this.prismaService.project.findUnique({
       where: {
         id: isUUID ? idOrName : undefined,

@@ -1,4 +1,3 @@
-import uuidAPIKey from 'uuid-apikey';
 import { generateNewImageName, isHddStaticServiceConfigured, isPngBuffer, isS3ServiceConfigured } from './utils';
 
 describe('static utils', () => {
@@ -40,8 +39,7 @@ describe('static utils', () => {
       const name = generateNewImageName(type);
       const [key, suffix, extension] = name.split('.');
 
-      expect(uuidAPIKey.isAPIKey(key)).toBe(true);
-      expect(key).toMatch(/^[0-9A-Z]{28}$/);
+      expect(key).toMatch(/^[0-9A-HJKMNP-TV-Z]{28}$/);
       expect(suffix).toBe(type);
       expect(extension).toBe('png');
     });

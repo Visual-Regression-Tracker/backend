@@ -51,7 +51,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "compression": "^1.8.2",
-    "ldapts": "^7.1.0",
+    "ldapts": "^9.2.0",
     "lodash": "^4.17.21",
     "looks-same": "^10.0.1",
     "odiff-bin": "^4.5.0",
@@ -66,7 +66,6 @@
     "redis": "^4.7.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "uuid-apikey": "^1.5.3",
     "zod": "^4.6.7",
     "zod-to-json-schema": "^3.25.0"
   },

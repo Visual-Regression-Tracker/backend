@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
-import uuidAPIKey from 'uuid-apikey';
+import { generateRandomKey } from '../src/utils/random-key';
 import request, { Test } from 'supertest';
 import { BuildsService } from 'src/builds/builds.service';
 import { TestRunsService } from 'src/test-runs/test-runs.service';
@@ -14,7 +14,7 @@ import { UserLoginResponseDto } from 'src/users/dto/user-login-response.dto';
 export type LoggedUser = UserLoginResponseDto & { token: string };
 
 export const generateUser = (password: string): CreateUserDto => ({
-  email: `email+${uuidAPIKey.create().apiKey.toLocaleLowerCase()}@example.com`,
+  email: `email+${generateRandomKey().toLocaleLowerCase()}@example.com`,
   password,
   firstName: 'fName',
   lastName: 'lName',

@@ -4,7 +4,7 @@ import { Role, TestStatus } from '@prisma/client';
 import request from 'supertest';
 import { createHash, generateKeyPairSync, KeyObject, randomUUID, sign } from 'crypto';
 import { createServer, IncomingMessage, Server } from 'http';
-import uuidAPIKey from 'uuid-apikey';
+import { generateRandomKey } from '../src/utils/random-key';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -239,7 +239,7 @@ describe('Users admin and RBAC (e2e)', () => {
       const projectsService = app.get(ProjectsService);
       const project = await projectsService.create({
         ...TEST_PROJECT,
-        name: `Users admin E2E ${uuidAPIKey.create().uuid}`,
+        name: `Users admin E2E ${randomUUID()}`,
       });
       try {
         const { testRun } = await haveTestRunCreated(
@@ -422,7 +422,7 @@ describe('Users OIDC (e2e)', () => {
   });
 
   const newEmail = () => {
-    const email = `oidc+${uuidAPIKey.create().apiKey.toLowerCase()}@example.com`;
+    const email = `oidc+${generateRandomKey().toLowerCase()}@example.com`;
     emails.push(email);
     return email;
   };

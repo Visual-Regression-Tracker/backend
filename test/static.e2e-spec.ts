@@ -3,7 +3,7 @@ import { Project, TestStatus } from '@prisma/client';
 import { readFileSync } from 'fs';
 import { PNG } from 'pngjs';
 import request from 'supertest';
-import uuidAPIKey from 'uuid-apikey';
+import { randomUUID } from 'crypto';
 import { TEST_PROJECT } from '../src/_data_';
 import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -47,7 +47,7 @@ describe('Images (e2e)', () => {
     project = await projectsService.create({
       ...TEST_PROJECT,
       autoApproveFeature: false,
-      name: `Images E2E ${uuidAPIKey.create().uuid}`,
+      name: `Images E2E ${randomUUID()}`,
     });
   });
 

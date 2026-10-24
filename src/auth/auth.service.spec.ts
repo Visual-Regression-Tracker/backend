@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import { compare } from 'bcryptjs';
-import uuidAPIKey from 'uuid-apikey';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 
@@ -53,11 +52,11 @@ describe('AuthService', () => {
   });
 
   describe('generateApiKey', () => {
-    it('returns a valid uuid-apikey without dashes', () => {
+    it('returns a key in the format keys were always issued in', () => {
       const apiKey = service.generateApiKey();
 
-      expect(apiKey).toMatch(/^[0-9A-Z]{28}$/);
-      expect(uuidAPIKey.isAPIKey(apiKey)).toBe(true);
+      // 28 Crockford base32 digits, upper case, no dashes
+      expect(apiKey).toMatch(/^[0-9A-HJKMNP-TV-Z]{28}$/);
     });
 
     it('returns a new key on every call', () => {
