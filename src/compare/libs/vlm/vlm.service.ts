@@ -7,11 +7,11 @@ import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { VlmConfig, OllamaVlmConfig } from './vlm.types';
 import { VlmProvider } from './vlm-provider.interface';
+import { VlmComparisonResultSchema } from './vlm-result.schema';
 import { OllamaService } from './providers/ollama/ollama.service';
 import { GeminiService } from './providers/gemini/gemini.service';
 import { PixelmatchService, DEFAULT_CONFIG as PIXELMATCH_DEFAULT_CONFIG } from '../pixelmatch/pixelmatch.service';
 import { PNG } from 'pngjs';
-import z from 'zod/v3';
 
 export const DEFAULT_PROMPT = `You are provided with three images:
 1. First image: baseline screenshot
@@ -22,10 +22,7 @@ Spot any difference in text, color, shape and position of elements - treat as di
 Ignore minor rendering artifacts that are imperceptible to users like antialiasing.
 Describe the difference in about 100 words.`;
 
-export const VlmComparisonResultSchema = z.object({
-  identical: z.boolean(),
-  description: z.string(),
-});
+export { VlmComparisonResultSchema } from './vlm-result.schema';
 
 export const DEFAULT_CONFIG: OllamaVlmConfig = {
   provider: 'ollama',

@@ -4,7 +4,7 @@ import { Ollama, ChatRequest, ChatResponse, ListResponse, ModelResponse } from '
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { VlmProvider, VlmProviderResponse } from '../../vlm-provider.interface';
 import { VlmConfig, OllamaVlmConfig } from '../../vlm.types';
-import { VlmComparisonResultSchema } from '../../vlm.service';
+import { VlmComparisonResultSchema } from '../../vlm-result.schema';
 
 @Injectable()
 export class OllamaService implements VlmProvider {

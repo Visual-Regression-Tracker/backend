@@ -12,7 +12,7 @@ COPY package*.json ./
 ENV NODE_TLS_REJECT_UNAUTHORIZED='0'
 RUN npm ci
 
-COPY tsconfig*.json nest-cli.json ./
+COPY tsconfig*.json nest-cli.json .swcrc ./
 COPY src ./src
 
 # Dev dependencies are only needed to build; the generated Prisma client

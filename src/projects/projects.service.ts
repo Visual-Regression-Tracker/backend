@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Project } from '@prisma/client';
 import { isUuidShaped } from '../utils/random-key';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import type { WrapperType } from '../shared/wrapper-type';
 
 @Injectable()
 export class ProjectsService {
@@ -14,9 +15,9 @@ export class ProjectsService {
   constructor(
     private prismaService: PrismaService,
     @Inject(forwardRef(() => BuildsService))
-    private buildsService: BuildsService,
+    private buildsService: WrapperType<BuildsService>,
     @Inject(forwardRef(() => TestVariationsService))
-    private testVariationsService: TestVariationsService
+    private testVariationsService: WrapperType<TestVariationsService>
   ) {}
 
   async findOne(idOrName: string): Promise<Project | null> {

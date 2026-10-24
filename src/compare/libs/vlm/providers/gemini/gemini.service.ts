@@ -3,7 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { VlmProvider, VlmProviderResponse } from '../../vlm-provider.interface';
 import { VlmConfig, GeminiVlmConfig } from '../../vlm.types';
-import { VlmComparisonResultSchema } from '../../vlm.service';
+import { VlmComparisonResultSchema } from '../../vlm-result.schema';
 
 @Injectable()
 export class GeminiService implements VlmProvider {
