@@ -1,4 +1,4 @@
-import { OnModuleDestroy } from '@nestjs/common';
+import { Logger, OnApplicationShutdown } from '@nestjs/common';
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { TestRun } from '@prisma/client';
@@ -8,9 +8,11 @@ import { debounce } from 'lodash';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @WebSocketGateway({ cors: true })
-export class EventsGateway implements OnModuleDestroy {
+export class EventsGateway implements OnApplicationShutdown {
   @WebSocketServer()
   server: Server;
+
+  private readonly logger = new Logger(EventsGateway.name);
 
   constructor(private prismaService: PrismaService) {}
 
@@ -55,8 +57,9 @@ export class EventsGateway implements OnModuleDestroy {
   }
 
   // A batch still waiting for its debounce would otherwise fire after shutdown
-  // and query a database pool that is already closed.
-  onModuleDestroy(): void {
+  // and query a database pool that is already closed. Runs once the HTTP
+  // server has drained, so no request queues another batch after it.
+  onApplicationShutdown(): void {
     this.testRunCreatedDebounced.cancel();
     this.testRunUpdatedDebounced.cancel();
     this.testRunDeletedDebounced.cancel();
@@ -109,12 +112,16 @@ export class EventsGateway implements OnModuleDestroy {
       Promise.all([
         this.prismaService.build.findMany({ where: { id: { in: buildIds } } }),
         getBuildsStats(this.prismaService, buildIds),
-      ]).then(([builds, stats]) => {
-        this.server.emit(
-          'build_updated',
-          builds.map((build) => new BuildDto(build, stats.get(build.id)))
-        );
-      });
+      ])
+        .then(([builds, stats]) => {
+          this.server.emit(
+            'build_updated',
+            builds.map((build) => new BuildDto(build, stats.get(build.id)))
+          );
+        })
+        // nothing awaits this chain: unhandled, a failed query would take the
+        // whole process down
+        .catch((error) => this.logger.error(`Cannot emit build_updated: ${error}`));
     },
     this.debounceTimeout,
     {

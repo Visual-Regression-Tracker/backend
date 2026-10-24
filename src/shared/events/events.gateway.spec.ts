@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Build, TestStatus } from '@prisma/client';
 import { Server } from 'socket.io';
@@ -168,7 +169,7 @@ describe('EventsGateway', () => {
     });
   });
 
-  describe('onModuleDestroy', () => {
+  describe('onApplicationShutdown', () => {
     it('drops the batches still waiting for their debounce', async () => {
       const buildFindManyMock = jest.fn().mockResolvedValue([]);
       const { gateway, emitMock } = await initGateway({ buildFindManyMock });
@@ -180,7 +181,7 @@ describe('EventsGateway', () => {
       emitMock.mockClear();
       buildFindManyMock.mockClear();
 
-      gateway.onModuleDestroy();
+      gateway.onApplicationShutdown();
       jest.advanceTimersByTime(3000);
       await flushPromises();
 
@@ -217,6 +218,24 @@ describe('EventsGateway', () => {
         new BuildDto(build, { passedCount: 3, unresolvedCount: 0, failedCount: 1, merge: true }),
       ]);
       expect(payloads[0][0]).toMatchObject({ status: 'failed', passedCount: 3, failedCount: 1, merge: true });
+    });
+
+    it('logs a failed read instead of leaving the rejection unhandled', async () => {
+      const buildFindManyMock = jest.fn().mockRejectedValue(new Error('Connection terminated'));
+      const { gateway, emitMock } = await initGateway({ buildFindManyMock });
+      const logError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      const unhandled = jest.fn();
+      process.on('unhandledRejection', unhandled);
+
+      gateway.buildUpdated('buildX');
+      await flushPromises();
+      await flushPromises();
+      process.off('unhandledRejection', unhandled);
+
+      expect(logError).toHaveBeenCalledWith('Cannot emit build_updated: Error: Connection terminated');
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(emitsOf(emitMock, 'build_updated')).toEqual([]);
+      logError.mockRestore();
     });
 
     it('deduplicates the queued build ids before reading them', async () => {

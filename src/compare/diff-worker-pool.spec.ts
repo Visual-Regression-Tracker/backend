@@ -22,7 +22,7 @@ describe('DiffWorkerPool', () => {
   });
 
   afterEach(async () => {
-    await pool.onModuleDestroy();
+    await pool.onApplicationShutdown();
   });
 
   it('answers a diff job with the pixel mismatch it found', async () => {

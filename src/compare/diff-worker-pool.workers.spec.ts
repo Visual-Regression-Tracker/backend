@@ -102,7 +102,7 @@ describe('DiffWorkerPool with worker threads', () => {
   });
 
   afterEach(async () => {
-    await pool?.onModuleDestroy();
+    await pool?.onApplicationShutdown();
     pool = undefined;
     process.env = { ...originalEnv };
     jest.restoreAllMocks();
@@ -236,7 +236,7 @@ describe('DiffWorkerPool with worker threads', () => {
 
       await expect(pool.run(job(999))).rejects.toThrow('Image diff queue is full (256 jobs)');
 
-      await pool.onModuleDestroy();
+      await pool.onApplicationShutdown();
       expect((await Promise.all(pending)).every(({ error }) => error?.message.includes('shutting down'))).toBe(true);
     });
   });
@@ -294,7 +294,7 @@ describe('DiffWorkerPool with worker threads', () => {
       expect(mockWorkers).toHaveLength(1);
       expect(mockWorkers[0].postMessage).toHaveBeenLastCalledWith(job(2));
 
-      await pool.onModuleDestroy();
+      await pool.onApplicationShutdown();
       expect((await pending).error).toEqual(new Error('Image diff worker pool is shutting down'));
     });
 
@@ -404,13 +404,13 @@ describe('DiffWorkerPool with worker threads', () => {
     });
   });
 
-  describe('onModuleDestroy', () => {
+  describe('onApplicationShutdown', () => {
     it('rejects queued and in-flight jobs and terminates every worker', async () => {
       createPool({ workers: '2' });
 
       const jobs = [1, 2, 3, 4].map((id) => settle(pool.run(job(id))));
 
-      await pool.onModuleDestroy();
+      await pool.onApplicationShutdown();
 
       const shutdownError = new Error('Image diff worker pool is shutting down');
       expect((await Promise.all(jobs)).map(({ error }) => error)).toEqual([
@@ -426,7 +426,7 @@ describe('DiffWorkerPool with worker threads', () => {
       createPool();
       settle(pool.run(job(1)));
 
-      await pool.onModuleDestroy();
+      await pool.onApplicationShutdown();
 
       await expect(pool.run(job(2))).rejects.toThrow('Image diff worker pool is shut down');
       expect(mockWorkers).toHaveLength(1);
@@ -436,7 +436,7 @@ describe('DiffWorkerPool with worker threads', () => {
       createPool();
       const pending = settle(pool.run(job(1)));
 
-      await pool.onModuleDestroy();
+      await pool.onApplicationShutdown();
       const [worker] = mockWorkers;
       worker.emit('error', new Error('terminated'));
       worker.emit('exit', 1);
@@ -450,7 +450,7 @@ describe('DiffWorkerPool with worker threads', () => {
     it('resolves without terminating anything when no worker was ever started', async () => {
       createPool();
 
-      await expect(pool.onModuleDestroy()).resolves.toBeUndefined();
+      await expect(pool.onApplicationShutdown()).resolves.toBeUndefined();
       expect(WorkerMock).not.toHaveBeenCalled();
     });
   });
