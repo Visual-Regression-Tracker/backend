@@ -86,7 +86,7 @@ describe('splitBlurAmplitudeConfig with the DINOv2 check', () => {
   it('adds the check at its default threshold', () => {
     const { blurAmplitude } = splitBlurAmplitudeConfig({ blurAmplitudeFilter: true, dinov2Check: true }, logger);
 
-    expect(blurAmplitude.dinov2).toEqual({ threshold: DEFAULT_DINOV2_THRESHOLD });
+    expect(blurAmplitude?.dinov2).toEqual({ threshold: DEFAULT_DINOV2_THRESHOLD });
   });
 
   it("uses the config's threshold", () => {
@@ -95,7 +95,7 @@ describe('splitBlurAmplitudeConfig with the DINOv2 check', () => {
       logger
     );
 
-    expect(blurAmplitude.dinov2).toEqual({ threshold: 0.3 });
+    expect(blurAmplitude?.dinov2).toEqual({ threshold: 0.3 });
   });
 
   // it double-checks what the blur would pass; with no blur filter there is
@@ -107,10 +107,10 @@ describe('splitBlurAmplitudeConfig with the DINOv2 check', () => {
   });
 
   it('is off unless asked for', () => {
-    expect(splitBlurAmplitudeConfig({ blurAmplitudeFilter: true }, logger).blurAmplitude.dinov2).toBeUndefined();
+    expect(splitBlurAmplitudeConfig({ blurAmplitudeFilter: true }, logger).blurAmplitude?.dinov2).toBeUndefined();
     expect(
       splitBlurAmplitudeConfig({ blurAmplitudeFilter: true, dinov2Check: 'true' as unknown as boolean }, logger)
-        .blurAmplitude.dinov2
+        .blurAmplitude?.dinov2
     ).toBeUndefined();
   });
 
@@ -122,7 +122,7 @@ describe('splitBlurAmplitudeConfig with the DINOv2 check', () => {
         logger
       );
 
-      expect(blurAmplitude.dinov2.threshold).toBe(DEFAULT_DINOV2_THRESHOLD);
+      expect(blurAmplitude?.dinov2?.threshold).toBe(DEFAULT_DINOV2_THRESHOLD);
       expect(logger.warn).toHaveBeenCalledTimes(1);
     }
   );
