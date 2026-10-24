@@ -7,6 +7,16 @@ import { DiffWorkerPool } from '../../diff-worker-pool';
 const PATCH = 14;
 const TILE_PATCHES = 16;
 const DEFAULT_TIMEOUT_MS = 60_000;
+// the status is asked for while a form opens: a service this slow to say it
+// is up counts as down
+const STATUS_TIMEOUT_MS = 3_000;
+
+export interface Dinov2Status {
+  // DINOV2_URL is set: a project may turn the check on
+  configured: boolean;
+  // the service answered its health check just now
+  available: boolean;
+}
 
 export interface Dinov2Verdict {
   // true only when DINOv2 looked and saw no change of content
@@ -69,13 +79,32 @@ export class Dinov2Service {
     private readonly diffWorkerPool: DiffWorkerPool
   ) {}
 
+  /**
+   * Whether this server can run the check, for the project form: a project
+   * that turns it on without a service sends every run the filter would pass
+   * to review.
+   */
+  async status(): Promise<Dinov2Status> {
+    const url = this.serviceUrl();
+    if (!url) {
+      return { configured: false, available: false };
+    }
+    try {
+      const response = await fetch(`${url}/health`, { signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
+      return { configured: true, available: response.ok };
+    } catch (error) {
+      this.logger.warn(`DINOv2 service is not answering: ${(error as Error)?.message ?? error}`);
+      return { configured: true, available: false };
+    }
+  }
+
   async confirmsNoise(
     baseline: Buffer,
     image: Buffer,
     ignoreAreas: IgnoreAreaDto[],
     threshold: number
   ): Promise<Dinov2Verdict> {
-    const url = this.configService.get<string>('DINOV2_URL');
+    const url = this.serviceUrl();
     if (!url) {
       this.logger.warn('dinov2Check is on but DINOV2_URL is not set: the run goes to review');
       return { noise: false };
@@ -96,7 +125,7 @@ export class Dinov2Service {
         return { noise: true, score: 0 };
       }
 
-      const response = await fetch(`${url.replace(/\/$/, '')}/v1/patch-distances`, {
+      const response = await fetch(`${url}/v1/patch-distances`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,5 +157,10 @@ export class Dinov2Service {
       );
       return { noise: false };
     }
+  }
+
+  // an unset variable reads as empty; a trailing slash is the operator's choice
+  private serviceUrl(): string | undefined {
+    return this.configService.get<string>('DINOV2_URL')?.replace(/\/$/, '') || undefined;
   }
 }
