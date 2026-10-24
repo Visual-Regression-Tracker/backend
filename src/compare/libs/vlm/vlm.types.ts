@@ -1,7 +1,9 @@
+import { BlurAmplitudeConfig } from '../blur-amplitude.config';
+
 /**
  * Base configuration shared by all VLM providers
  */
-export interface BaseVlmConfig {
+export interface BaseVlmConfig extends BlurAmplitudeConfig {
   /**
    * Custom prompt for image comparison.
    */

@@ -407,3 +407,95 @@ describe('change signature', () => {
     expect((await compare(service)).changeSignature).toBeUndefined();
   });
 });
+
+describe('blur-amplitude filter', () => {
+  // The filter itself is pinned in pixelmatch.core.spec and
+  // blur-amplitude.core.spec, and whether a project has it on is
+  // CompareService's business; here only the plumbing: what the service asks
+  // the worker for, and what it makes of the answer.
+  const init = async (output: Record<string, unknown>) => {
+    const run = jest.fn().mockResolvedValue(output);
+    const saveImage = jest.fn().mockResolvedValue('diff.png');
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PixelmatchService,
+        { provide: DiffWorkerPool, useValue: { run } },
+        {
+          provide: StaticService,
+          useValue: {
+            getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('png')),
+            saveImage,
+            deleteImage: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+    return { service: module.get<PixelmatchService>(PixelmatchService), run, saveImage };
+  };
+
+  const filter = { sigma: 1, threshold: 80 };
+  const compare = (service: PixelmatchService, blurAmplitude?: typeof filter) =>
+    service.getDiff(
+      {
+        baseline: 'baseline.png',
+        image: 'image.png',
+        ignoreAreas: [],
+        diffTollerancePercent: 0,
+        saveDiffAsFile: true,
+        ...(blurAmplitude ? { blurAmplitude } : {}),
+      },
+      DEFAULT_CONFIG
+    );
+
+  const overTolerance = { equal: false, isSameDimension: true, pixelMisMatchCount: 10, diffPercent: 5 };
+
+  // so CompareService does not measure the same pair a second time
+  it('applies the filter itself', async () => {
+    const { service } = await init(overTolerance);
+
+    expect(service.appliesBlurAmplitudeFilter).toBe(true);
+  });
+
+  it('asks for no measurement when the comparison does not carry the filter', async () => {
+    const { service, run } = await init(overTolerance);
+
+    await compare(service);
+
+    expect(run.mock.calls[0][0].blurAmplitude).toBeUndefined();
+  });
+
+  it('measures with the settings the comparison carries', async () => {
+    const { service, run } = await init(overTolerance);
+
+    await compare(service, { sigma: 2, threshold: 50 });
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ blurAmplitude: { sigma: 2, threshold: 50 } }));
+  });
+
+  // the measured mismatch stays on the run, so a reviewer can still see the
+  // pixels moved; only the verdict changes
+  it('passes a run whose change is only rendering noise', async () => {
+    const { service, saveImage } = await init({ ...overTolerance, blurAmplitude: 40, renderingNoiseOnly: true });
+
+    const result = await compare(service, filter);
+
+    expect(result.status).toBe(TestStatus.ok);
+    expect(result.diffPercent).toBe(5);
+    expect(result.diffName).toBeNull();
+    expect(saveImage).not.toHaveBeenCalled();
+  });
+
+  it('fails a run whose change is stronger than rendering noise', async () => {
+    const { service } = await init({
+      ...overTolerance,
+      blurAmplitude: 200,
+      renderingNoiseOnly: false,
+      diffBuffer: Buffer.from('the diff'),
+    });
+
+    const result = await compare(service, filter);
+
+    expect(result.status).toBe(TestStatus.unresolved);
+    expect(result.diffName).toBe('diff.png');
+  });
+});
