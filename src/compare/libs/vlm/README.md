@@ -93,6 +93,8 @@ Optional custom prompt (replaces default system prompt):
 
 ## API Endpoints
 
+Both endpoints require a logged-in user (JWT `Authorization: Bearer <token>`) with the `admin` or `editor` role.
+
 ```bash
 # List available models
 GET /ollama/models
