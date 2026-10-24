@@ -277,6 +277,20 @@ describe('compare', () => {
 
     expect(result).toBeUndefined();
   });
+
+  it('compares with the defaults when Looks-Same refuses the project config', async () => {
+    service = await initService({});
+    const baseline = new PNG({ width: 2, height: 1 });
+    const changed = new PNG({ width: 2, height: 1 });
+    baseline.data.fill(255);
+    changed.data.fill(255);
+    changed.data[0] = 0;
+
+    // looks-same refuses strict together with tolerance
+    const result = await service.compare(baseline, changed, { ...DEFAULT_CONFIG, strict: true, tolerance: 5 });
+
+    expect(result).toMatchObject({ equal: false, differentPixels: 1, totalPixels: 2 });
+  });
 });
 
 describe('saveDiff', () => {
