@@ -15,9 +15,11 @@ RUN npm ci
 COPY tsconfig*.json nest-cli.json .swcrc ./
 COPY src ./src
 
-# Dev dependencies are only needed to build; the generated Prisma client
-# under node_modules/.prisma survives the prune
-RUN npm run build && npm prune --omit=dev
+# SWC compiles without checking types, so the image is gated on the type
+# check here, as tsc's build used to gate it. Dev dependencies are only needed
+# to build; the generated Prisma client under node_modules/.prisma survives
+# the prune
+RUN npm run typecheck && npm run build && npm prune --omit=dev
 
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production
