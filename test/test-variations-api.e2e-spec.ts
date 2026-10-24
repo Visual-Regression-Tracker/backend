@@ -211,16 +211,16 @@ describe('TestVariations API (e2e)', () => {
       await haveBaseline(project.mainBranchName, WHITE);
       await haveBaseline('feature', CHANGED);
 
-      // NOTE: current behavior — find() hands back the newer main-branch variation, so merge tries to create a
-      // second 'release' variation and hits the unique constraint: the filter answers 400 with Prisma's message
-      // (there is no friendly one for testVariation.create), and the merge build it opened is left running.
-      const res = await merge('feature', 'release');
+      const res = await merge('feature', 'release').expect(200);
 
-      expect(res.status).toBe(400);
-      expect(res.body.message).toContain('Unique constraint failed');
+      // compared against release's own baseline, not main's newer one
+      expect(res.body).toMatchObject({ branchName: 'release', isRunning: false, merge: true, unresolvedCount: 1 });
+      const [release] = await prisma.testVariation.findMany({
+        where: { projectId: project.id, branchName: 'release' },
+      });
+      const [run] = await prisma.testRun.findMany({ where: { buildId: res.body.id } });
+      expect(run).toMatchObject({ testVariationId: release.id, baselineBranchName: 'release' });
       expect(await prisma.testVariation.count({ where: { projectId: project.id, branchName: 'release' } })).toBe(1);
-      const releaseBuilds = await prisma.build.findMany({ where: { projectId: project.id, branchName: 'release' } });
-      expect(releaseBuilds.map((build) => build.isRunning)).toContain(true);
     });
 
     it('400 without the branches', async () => {
