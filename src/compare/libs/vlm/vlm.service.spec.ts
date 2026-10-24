@@ -291,11 +291,18 @@ describe('VlmService', () => {
   it.each([
     ['empty string', '', DEFAULT_CONFIG],
     ['invalid JSON', 'invalid', DEFAULT_CONFIG],
-    ['partial config', '{"model":"llava:7b"}', { model: 'llava:7b' }],
+    ['partial config, over the defaults', '{"model":"llava:7b"}', { ...DEFAULT_CONFIG, model: 'llava:7b' }],
+    [
+      // what a project created without a config holds: the column default is pixelmatch's
+      'the pixelmatch column default, over the defaults',
+      '{ "threshold": 0.1, "ignoreAntialiasing": true, "allowDiffDimensions": false }',
+      { ...DEFAULT_CONFIG, threshold: 0.1, ignoreAntialiasing: true, allowDiffDimensions: false },
+    ],
     [
       'full config',
       '{"model":"llava:13b","prompt":"Custom prompt","temperature":0.2,"useThinking":true}',
       {
+        provider: 'ollama',
         model: 'llava:13b',
         prompt: 'Custom prompt',
         temperature: 0.2,

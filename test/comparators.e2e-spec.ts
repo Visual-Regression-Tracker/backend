@@ -16,6 +16,7 @@ import { OllamaService } from '../src/compare/libs/vlm/providers/ollama/ollama.s
 import { IgnoreAreaDto } from '../src/test-runs/dto/ignore-area.dto';
 import { DEFAULT_CONFIG as LOOKS_SAME_DEFAULT_CONFIG } from '../src/compare/libs/looks-same/looks-same.service';
 import { DEFAULT_CONFIG as ODIFF_DEFAULT_CONFIG } from '../src/compare/libs/odiff/odiff.service';
+import { DEFAULT_CONFIG as VLM_DEFAULT_CONFIG } from '../src/compare/libs/vlm/vlm.service';
 import { Response } from 'supertest';
 import { haveUserLogged, requestWithApiKey, requestWithAuth, LoggedUser } from './preconditions';
 
@@ -623,7 +624,7 @@ describe('Comparators (e2e)', () => {
         expect(res.body.vlmDescription).toBe('Button moved');
         expect(res.body.pixelMisMatchCount).toBeGreaterThan(0);
         expect(diffExists(res.body.diffName)).toBe(true);
-        expect(generate).toHaveBeenCalledWith(JSON.parse(vlmConfig), [
+        expect(generate).toHaveBeenCalledWith({ ...VLM_DEFAULT_CONFIG, ...JSON.parse(vlmConfig) }, [
           expect.any(Uint8Array),
           expect.any(Uint8Array),
           expect.any(Uint8Array),
@@ -731,14 +732,12 @@ describe('Comparators (e2e)', () => {
         const res = await postTestRun(project, imageEdited);
 
         expect(res.body).toMatchObject({ status: TestStatus.unresolved, vlmDescription: 'Changed' });
-        // NOTE: current behavior — parseConfig does not merge DEFAULT_CONFIG in, so a vlm
-        // project that kept the column default sends a pixelmatch config to Ollama: no
-        // model and no prompt (the request would fail against a real Ollama)
+        // the column default is pixelmatch's, laid over the VLM defaults: Ollama still gets a model and a prompt
         expect(generate).toHaveBeenCalledTimes(1);
-        expect(generate.mock.calls[0][0]).toEqual({
-          threshold: 0.1,
-          ignoreAntialiasing: true,
-          allowDiffDimensions: false,
+        expect(generate.mock.calls[0][0]).toMatchObject({
+          model: VLM_DEFAULT_CONFIG.model,
+          prompt: VLM_DEFAULT_CONFIG.prompt,
+          temperature: VLM_DEFAULT_CONFIG.temperature,
         });
       },
       SLOW_TEST

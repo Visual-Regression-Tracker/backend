@@ -26,9 +26,18 @@ export function applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): PNG 
   return image;
 }
 
-export const parseConfig = <T>(configJson: string, defaultConfig: T, logger: Logger) => {
+// The stored config is laid over the comparator's defaults, not used in their
+// place: a project that sets one option keeps the others, and a VLM project
+// still holding the column's pixelmatch default still gets a model and prompt.
+export const parseConfig = <T>(configJson: string, defaultConfig: T, logger: Logger): T => {
   try {
-    return JSON.parse(configJson) ?? defaultConfig;
+    const config = JSON.parse(configJson);
+    if (config !== null && typeof config === 'object' && !Array.isArray(config)) {
+      return { ...defaultConfig, ...config };
+    }
+    if (config !== null) {
+      logger.error('Config is not a JSON object, fallback to default one');
+    }
   } catch (ex) {
     logger.error('Cannot parse config, fallback to default one ' + ex);
   }
