@@ -355,7 +355,7 @@ describe('Comparators (e2e)', () => {
     );
 
     it(
-      'unresolved without numbers when looks-same rejects the config',
+      'falls back to the default config when looks-same rejects the config',
       async () => {
         // looks-same refuses strict together with tolerance
         const project = await haveProject(ImageComparison.lookSame, JSON.stringify({ strict: true, tolerance: 5 }));
@@ -363,14 +363,9 @@ describe('Comparators (e2e)', () => {
 
         const res = await postTestRun(project, imageEdited);
 
-        // NOTE: current behavior — a project config looks-same cannot use is only logged: every
-        // changed screenshot becomes unresolved with no numbers and no diff to look at
-        expect(res.body).toMatchObject({
-          status: TestStatus.unresolved,
-          diffName: null,
-          diffPercent: null,
-          pixelMisMatchCount: null,
-        });
+        // the same numbers as with the default config (see the config that is not JSON)
+        expect(res.body).toMatchObject({ status: TestStatus.unresolved, pixelMisMatchCount: 31068 });
+        expect(diffExists(res.body.diffName)).toBe(true);
       },
       SLOW_TEST
     );

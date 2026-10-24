@@ -87,12 +87,22 @@ export class LookSameService implements ImageComparator {
     image: PNG,
     config: LooksSameConfig
   ): Promise<looksSame.LooksSameResult<true> | undefined> {
-    return looksSame(PNG.sync.write(baseline), PNG.sync.write(image), { ...config, createDiffImage: true }).catch(
-      (error): undefined => {
-        this.logger.error(error.message);
-        return undefined;
-      }
-    );
+    const [baselinePng, imagePng] = [PNG.sync.write(baseline), PNG.sync.write(image)];
+    const run = (options: LooksSameConfig) => looksSame(baselinePng, imagePng, { ...options, createDiffImage: true });
+    try {
+      return await run(config);
+    } catch (error) {
+      this.logger.error((error as Error).message);
+    }
+    // Most likely a project config looks-same refuses ("strict" together with
+    // "tolerance", say). That is the project's problem, not this screenshot's:
+    // compare with the defaults, as for a config that is not JSON, rather than
+    // leave every changed screenshot without numbers.
+    this.logger.error('Looks-Same cannot compare with the project config, fallback to default one');
+    return run(DEFAULT_CONFIG).catch((error): undefined => {
+      this.logger.error(error.message);
+      return undefined;
+    });
   }
 
   async saveDiff(diffImage: looksSame.DiffImage): Promise<string | null> {
