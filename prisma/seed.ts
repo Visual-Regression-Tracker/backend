@@ -5,9 +5,10 @@ import type { Prisma } from '@prisma/client';
 import { Role } from '@prisma/client';
 import { genSalt, hash } from 'bcryptjs';
 
-import prisma from './client';
+import prisma, { prepareConnection } from './client';
 
 export async function seed() {
+  await prepareConnection();
   await prisma.$connect();
   console.log('Seeding default data...');
   await Promise.all([createDefaultUser(), createDefaultProject()]);
