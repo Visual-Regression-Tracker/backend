@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit, OnApplicationShutdown } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { readFileSync } from 'fs';
 import { availableParallelism } from 'os';
 import { PoolConfig } from 'pg';
 
@@ -15,6 +16,34 @@ const UNSUPPORTED_PRISMA_PARAMS = [
   'sslidentity',
   'sslpassword',
 ];
+
+const readCpuinfo = (): string => {
+  try {
+    return readFileSync('/proc/cpuinfo', 'utf8');
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Physical cores, counted the way Prisma 6 sized its default pool
+ * (`num_physical_cpus * 2 + 1`, Rust's num_cpus::get_physical): distinct
+ * (physical id, core id) pairs in /proc/cpuinfo. Hyper-threads would double a
+ * logical count, and with it every replica's share of max_connections. Where
+ * cpuinfo has no such fields (ARM, macOS) it falls back to the logical count,
+ * as num_cpus does.
+ */
+export function physicalCpuCount(cpuinfo: string = readCpuinfo()): number {
+  const cores = new Set<string>();
+  for (const block of cpuinfo.split(/\n\s*\n/)) {
+    const physicalId = block.match(/^physical id\s*:\s*(\d+)/m)?.[1];
+    const coreId = block.match(/^core id\s*:\s*(\d+)/m)?.[1];
+    if (physicalId !== undefined && coreId !== undefined) {
+      cores.add(`${physicalId}:${coreId}`);
+    }
+  }
+  return cores.size || availableParallelism();
+}
 
 /**
  * Pool settings for the `pg` driver Prisma 7 talks to the database through.
@@ -64,7 +93,7 @@ export function getPgOptions(databaseUrl: string | undefined): {
   return {
     pool: {
       connectionString,
-      max: connectionLimit > 0 ? connectionLimit : availableParallelism() * 2 + 1,
+      max: connectionLimit > 0 ? connectionLimit : physicalCpuCount() * 2 + 1,
       // Prisma 6 waited up to 5s to open a connection and 10s for a free one;
       // pg has a single timeout for both, so take the longer, and none at all
       // when either was switched off
