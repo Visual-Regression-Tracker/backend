@@ -185,6 +185,49 @@ describe('computePixelmatchDiff with the blur-amplitude filter', () => {
     expect(result.imageThumbnail).toBeDefined();
   });
 
+  // faint, so under the threshold, but a whole panel of it: not noise
+  it('lets a faint but solid change through', () => {
+    const panel = png((set) => {
+      for (let y = 0; y < HEIGHT; y++) {
+        for (let x = 0; x < WIDTH; x++) {
+          set(x, y, [224, 224, 224]);
+        }
+      }
+    });
+
+    const result = withFilter(blank, panel);
+
+    expect(result.blurAmplitude).toBeLessThan(DEFAULT_BLUR_AMPLITUDE_THRESHOLD);
+    expect(result.renderingNoiseOnly).toBe(false);
+  });
+
+  // as CompareService does for the other comparators: a size change is a
+  // finding of its own, whatever the padded pixels look like
+  it('does not judge screenshots of different sizes', () => {
+    const taller = (() => {
+      const image = new PNG({ width: WIDTH, height: HEIGHT + 5 });
+      image.data.fill(255);
+      return PNG.sync.write(image);
+    })();
+
+    const result = computePixelmatchDiff({
+      kind: 'diff',
+      baseline: blank,
+      image: taller,
+      ignoreAreas: [],
+      threshold: 0.1,
+      includeAA: true,
+      allowDiffDimensions: true,
+      diffTolerancePercent: 0,
+      saveDiff: true,
+      blurAmplitude: filter,
+    });
+
+    expect(result.isSameDimension).toBe(false);
+    expect(result.renderingNoiseOnly).toBeUndefined();
+    expect(result.blurAmplitude).toBeUndefined();
+  });
+
   it('measures nothing when the filter is off', () => {
     const result = diffJob(hairline(10), hairline(11), false, false, { includeAA: true });
 

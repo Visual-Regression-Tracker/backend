@@ -88,7 +88,7 @@ export class PixelmatchService implements ImageComparator {
     // the pixels moved; only the verdict is the filter's.
     if (output.renderingNoiseOnly) {
       this.logger.debug(
-        `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${output.blurAmplitude?.toFixed(1)})`
+        `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${output.blurAmplitude?.toFixed(1)}, ${output.solidPixels} solid pixels)`
       );
       result.status = TestStatus.ok;
       return result;
