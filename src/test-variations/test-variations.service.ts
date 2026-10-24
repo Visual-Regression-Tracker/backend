@@ -25,14 +25,18 @@ export class TestVariationsService {
 
   async getDetails(
     id: string
-  ): Promise<TestVariation & { baselines: (Baseline & { testRun: TestRun; user: User })[] }> {
+  ): Promise<
+    TestVariation & { baselines: (Baseline & { testRun: TestRun; user: Omit<User, 'password' | 'apiKey'> })[] }
+  > {
     return this.prismaService.testVariation.findUnique({
       where: { id },
       include: {
         baselines: {
           include: {
             testRun: true,
-            user: true,
+            // who approved the baseline, for the history list — never their
+            // credentials: any signed-in user, guests included, can read this
+            user: { omit: { password: true, apiKey: true } },
           },
           orderBy: {
             createdAt: 'desc',

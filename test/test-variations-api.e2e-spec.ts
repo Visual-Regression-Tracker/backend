@@ -128,9 +128,14 @@ describe('TestVariations API (e2e)', () => {
       expect(res.body.baselineName).toBe(res.body.baselines[0].baselineName);
       expect(res.body.baselines[0].testRun.id).toBe(second.id);
       expect(res.body.baselines[0].user.id).toBe(user.id);
-      // NOTE: current behavior — the approving user is embedded whole, password hash and API key included
-      expect(res.body.baselines[0].user).toHaveProperty('password');
-      expect(res.body.baselines[0].user.apiKey).toBe(user.apiKey);
+      // who approved, but never their credentials: any signed-in user can read this
+      expect(res.body.baselines[0].user).toMatchObject({
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      });
+      expect(res.body.baselines[0].user).not.toHaveProperty('password');
+      expect(res.body.baselines[0].user).not.toHaveProperty('apiKey');
     });
 
     it('unknown id', async () => {
