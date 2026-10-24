@@ -555,13 +555,9 @@ describe('Comparators (e2e)', () => {
             process.env.STATIC_SERVICE = previous;
           }
         }
-        // NOTE: current behavior — the run was stored before the comparison failed, so a
-        // run that will never get a verdict stays in the build as "new"
-        const runs = await prismaService.testRun.findMany({
-          where: { projectId: project.id },
-          orderBy: { createdAt: 'asc' },
-        });
-        expect(runs.map((run) => run.status)).toEqual([TestStatus.approved, TestStatus.new]);
+        // refused before the run was stored: only the baseline's run is there
+        const runs = await prismaService.testRun.findMany({ where: { projectId: project.id } });
+        expect(runs.map((run) => run.status)).toEqual([TestStatus.approved]);
       },
       SLOW_TEST
     );

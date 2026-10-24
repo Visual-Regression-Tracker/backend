@@ -59,7 +59,14 @@ export class TestRunsService {
     createTestRequestDto: CreateTestRequestDto;
     imageBuffer: Buffer;
   }): Promise<TestRunResultDto> {
-    const project = (await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } }))!;
+    const project = await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } });
+    if (!project) {
+      throw new NotFoundException(`Project not found: ${createTestRequestDto.projectId}`);
+    }
+    // A comparator that cannot run on this server (odiff without HDD storage)
+    // fails the request here, before the run is stored: afterwards it would
+    // stay in the build as "new", never to get a verdict.
+    this.compareService.getComparator(project.imageComparison);
 
     let testVariation = await this.testVariationService.find(createTestRequestDto);
     // creates variatioin if does not exist

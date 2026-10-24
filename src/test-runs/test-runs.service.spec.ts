@@ -47,6 +47,7 @@ const initService = async ({
   projectFindUniqueMock = jest.fn(),
   compareGetDiffMock = jest.fn(),
   compareGetChangeSignatureMock = jest.fn(),
+  compareGetComparatorMock = jest.fn(),
   getImageBufferMock = jest.fn(),
   copyImageMock = jest.fn(),
   testVariationServiceCreateMock = jest.fn(),
@@ -120,6 +121,7 @@ const initService = async ({
         useValue: {
           getDiff: compareGetDiffMock,
           getChangeSignature: compareGetChangeSignatureMock,
+          getComparator: compareGetComparatorMock,
         },
       },
     ],
@@ -1226,14 +1228,26 @@ describe('TestRunsService', () => {
       expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(afterNew, variation);
     });
 
-    it('fails only after the run is created and diffed when the project does not exist', async () => {
+    it('throws NotFoundException before storing anything when the project does not exist', async () => {
       const { built } = await initPostService({ project: null, existingVariation: generateTestVariation() });
 
-      // NOTE: current behavior — a missing project is not checked up front; the run is created and
-      // diffed, then reading project.autoApproveFeature throws a TypeError
-      await expect(built.postTestRun({ createTestRequestDto, imageBuffer })).rejects.toThrow(TypeError);
-      expect(built.create).toHaveBeenCalled();
-      expect(built.calculateDiff).toHaveBeenCalled();
+      await expect(built.postTestRun({ createTestRequestDto, imageBuffer })).rejects.toThrow(
+        new NotFoundException(`Project not found: ${createTestRequestDto.projectId}`)
+      );
+      expect(built.create).not.toHaveBeenCalled();
+    });
+
+    it("fails before storing anything when the project's comparator cannot run here", async () => {
+      const { built } = await initPostService({ existingVariation: generateTestVariation() });
+      built['compareService'].getComparator = jest.fn(() => {
+        throw new Error('Odiff can only be used with HDD static service.');
+      });
+
+      await expect(built.postTestRun({ createTestRequestDto, imageBuffer })).rejects.toThrow(
+        'Odiff can only be used with HDD static service.'
+      );
+      expect(built.create).not.toHaveBeenCalled();
+      expect(built.delete).not.toHaveBeenCalled();
     });
   });
 
