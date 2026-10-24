@@ -1,7 +1,11 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: "/"
+    # the api and the migration image (prisma/) are separate packages; one entry keeps
+    # their shared dependencies, prisma above all, bumped in the same pull request
+    directories:
+      - "/"
+      - "/prisma"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -13,14 +17,51 @@ updates:
         update-types:
           - minor
           - patch
-      # majors are batched separately since they usually need code changes
+      # majors usually need code changes, so each framework family gets its own PR
+      # instead of arriving bundled with unrelated majors
+      nestjs-major:
+        patterns:
+          - "@nestjs/*"
+        update-types:
+          - major
+      prisma-major:
+        patterns:
+          - "prisma"
+          - "@prisma/*"
+        update-types:
+          - major
       npm-major:
         patterns:
           - "*"
+        exclude-patterns:
+          - "@nestjs/*"
+          - "prisma"
+          - "@prisma/*"
         update-types:
           - major
       # security fixes (mostly transitive deps) in a single PR too
       npm-security:
         applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    # base images of the api (Dockerfile) and the migration image (prisma/Dockerfile)
+    directories:
+      - "/"
+      - "/prisma"
+    schedule:
+      interval: weekly
+    groups:
+      docker:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
         patterns:
           - "*"

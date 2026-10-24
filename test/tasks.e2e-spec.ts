@@ -4,12 +4,13 @@ import { Project, TestStatus } from '@prisma/client';
 import { existsSync } from 'fs';
 import uuidAPIKey from 'uuid-apikey';
 import { AppModule } from '../src/app.module';
-import { TasksService } from '../src/shared/tasks/tasks.service';
+import { CLEANUP_LOCK_KEY, TasksService } from '../src/shared/tasks/tasks.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { BuildsService } from '../src/builds/builds.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { HddService } from '../src/static/hdd/hdd.service';
+import { TestVariationsService } from '../src/test-variations/test-variations.service';
 import { TEST_PROJECT } from '../src/_data_';
 import { haveTestRunCreated } from './preconditions';
 
@@ -30,6 +31,7 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
   let buildsService: BuildsService;
   let testRunsService: TestRunsService;
   let hddService: HddService;
+  let testVariationsService: TestVariationsService;
   const projectIds: string[] = [];
 
   beforeAll(async () => {
@@ -44,10 +46,12 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     buildsService = moduleFixture.get(BuildsService);
     testRunsService = moduleFixture.get(TestRunsService);
     hddService = moduleFixture.get(HddService);
+    testVariationsService = moduleFixture.get(TestVariationsService);
     await app.init();
   });
 
   afterEach(async () => {
+    jest.restoreAllMocks();
     for (const id of projectIds.splice(0)) {
       await projectsService.remove(id);
     }
@@ -83,9 +87,13 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     return { variation, testRun: approved };
   };
 
-  const ageBy = (variationId: string, days: number) =>
+  // the variation and the runs compared against it, as if last used days ago
+  const ageBy = async (variationId: string, days: number) => {
+    const then = new Date(Date.now() - days * DAY);
     // @updatedAt would be overwritten by an update through Prisma
-    prismaService.$executeRaw`UPDATE "TestVariation" SET "updatedAt" = ${new Date(Date.now() - days * DAY)} WHERE "id" = ${variationId}`;
+    await prismaService.$executeRaw`UPDATE "TestVariation" SET "updatedAt" = ${then} WHERE "id" = ${variationId}`;
+    await prismaService.testRun.updateMany({ where: { testVariationId: variationId }, data: { createdAt: then } });
+  };
 
   const waitUntil = async (condition: () => boolean, timeout = 5000) => {
     const start = Date.now();
@@ -97,7 +105,7 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     }
   };
 
-  it('removes feature-branch variations not updated within maxBranchLifetime, with their baselines', async () => {
+  it('removes feature-branch variations not used within maxBranchLifetime, with their baselines', async () => {
     const project = await haveProject(5);
     const old = await haveApprovedVariation(project, 'feature/old');
     const fresh = await haveApprovedVariation(project, 'feature/fresh');
@@ -170,19 +178,63 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     expect(await prismaService.testVariation.findUnique({ where: { id: feature.variation.id } })).not.toBeNull();
   });
 
-  it('a branch still receiving passing test runs is removed all the same', async () => {
+  it('a branch still receiving passing test runs is kept, though its variation is not updated', async () => {
     const project = await haveProject(5);
     const feature = await haveApprovedVariation(project, 'feature/active');
     await ageBy(feature.variation.id, 10);
     const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'feature/active', image);
     expect(testRun.status).toBe(TestStatus.ok);
+    // a run that matches the baseline leaves the variation as it was
+    const { updatedAt } = await prismaService.testVariation.findUnique({ where: { id: feature.variation.id } });
+    expect(updatedAt.getTime()).toBeLessThan(Date.now() - 5 * DAY);
 
     await tasksService.cleanOldTestVariations();
 
-    // NOTE: current behavior — the age is the variation's updatedAt, which only an approval
-    // or an edit of the variation moves; a run that matches the baseline does not, so the
-    // baseline of a branch that is still in active use is dropped and its next run is "new"
-    expect(await prismaService.testVariation.findUnique({ where: { id: feature.variation.id } })).toBeNull();
-    expect((await prismaService.testRun.findUnique({ where: { id: testRun.id } })).testVariationId).toBeNull();
+    expect(await prismaService.testVariation.findUnique({ where: { id: feature.variation.id } })).not.toBeNull();
+    expect((await prismaService.testRun.findUnique({ where: { id: testRun.id } })).testVariationId).toBe(
+      feature.variation.id
+    );
+  });
+
+  it('two instances running it at once remove each stale variation once', async () => {
+    const project = await haveProject(5);
+    const stale = [];
+    for (const branchName of ['feature/a', 'feature/b', 'feature/c']) {
+      const { variation } = await haveApprovedVariation(project, branchName);
+      await ageBy(variation.id, 6);
+      stale.push(variation.id);
+    }
+    const deleteSpy = jest.spyOn(testVariationsService, 'delete');
+
+    // each run opens its own lock connection, as on two instances
+    await Promise.all([tasksService.cleanOldTestVariations(), tasksService.cleanOldTestVariations()]);
+
+    const deleted = deleteSpy.mock.calls.map(([id]) => id).filter((id) => stale.includes(id));
+    expect(deleted.sort()).toEqual([...stale].sort());
+    expect(await prismaService.testVariation.count({ where: { projectId: project.id } })).toBe(0);
+  });
+
+  it('skips while another instance holds the cleanup lock', async () => {
+    const project = await haveProject(5);
+    const { variation } = await haveApprovedVariation(project, 'feature/old');
+    await ageBy(variation.id, 6);
+    const otherInstance = prismaService.dedicatedClient();
+    await otherInstance.connect();
+    try {
+      await otherInstance.query('BEGIN');
+      const { rows } = await otherInstance.query('SELECT pg_try_advisory_xact_lock($1) AS locked', [CLEANUP_LOCK_KEY]);
+      expect(rows[0].locked).toBe(true);
+
+      await tasksService.cleanOldTestVariations();
+
+      expect(await prismaService.testVariation.findUnique({ where: { id: variation.id } })).not.toBeNull();
+    } finally {
+      await otherInstance.end();
+    }
+
+    // released with the other instance's connection
+    await tasksService.cleanOldTestVariations();
+
+    expect(await prismaService.testVariation.findUnique({ where: { id: variation.id } })).toBeNull();
   });
 });
