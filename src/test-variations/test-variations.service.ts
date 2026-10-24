@@ -188,7 +188,7 @@ export class TestVariationsService {
     } catch (e) {
       // the build is stopped either way, so a failed merge does not stay
       // "running" in the list forever; the cause still reaches the client
-      await this.buildsService.update(build.id, { isRunning: false }).catch(() => undefined);
+      await this.buildsService.update(build.id, { isRunning: false }).catch((): void => undefined);
       throw e;
     }
 
