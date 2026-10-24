@@ -18,7 +18,7 @@ describe('Users Controller', () => {
     generateNewApiKey: jest.Mock;
     changePassword: jest.Mock;
     update: jest.Mock;
-    delete: jest.Mock;
+    deleteMany: jest.Mock;
     assignRole: jest.Mock;
   };
   let prismaService: { user: { findMany: jest.Mock } };
@@ -48,7 +48,7 @@ describe('Users Controller', () => {
       generateNewApiKey: jest.fn(),
       changePassword: jest.fn(),
       update: jest.fn(),
-      delete: jest.fn(),
+      deleteMany: jest.fn(),
       assignRole: jest.fn(),
     };
     prismaService = { user: { findMany: jest.fn() } };
@@ -324,21 +324,18 @@ describe('Users Controller', () => {
       expect(result[0]).not.toHaveProperty('password');
     });
 
-    it('deletes the users one after another', async () => {
-      const order: string[] = [];
-      usersService.delete.mockImplementation(async (id: string) => order.push(id));
+    it('deletes the users in one go', async () => {
+      usersService.deleteMany.mockResolvedValueOnce(undefined);
 
       await expect(controller.delete(['1', '2', '3'])).resolves.toBeUndefined();
 
-      expect(order).toEqual(['1', '2', '3']);
+      expect(usersService.deleteMany).toHaveBeenCalledWith(['1', '2', '3']);
     });
 
-    it('stops deleting at the first failure', async () => {
-      usersService.delete.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('not found'));
+    it('passes a failure on', async () => {
+      usersService.deleteMany.mockRejectedValueOnce(new Error('not found'));
 
       await expect(controller.delete(['1', '2', '3'])).rejects.toThrow('not found');
-
-      expect(usersService.delete).toHaveBeenCalledTimes(2);
     });
 
     it('assigns a role', async () => {
