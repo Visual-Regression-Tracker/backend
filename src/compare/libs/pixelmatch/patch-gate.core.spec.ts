@@ -40,7 +40,7 @@ describe('computePatchGate', () => {
 
   // what the project has masked out must not decide the verdict
   it('leaves out what the ignore areas cover', () => {
-    expect(computePatchGate(job({ ignoreAreas: [{ x: 28, y: 14, width: 14, height: 14 }] })).gate.cells).toEqual([]);
+    expect(computePatchGate(job({ ignoreAreas: [{ x: 28, y: 14, width: 14, height: 14 }] })).gate?.cells).toEqual([]);
   });
 
   it('has no answer for screenshots of different sizes', () => {
@@ -56,9 +56,9 @@ describe('computePatchGate', () => {
 
   // what a Buffer arrives as on the far side of postMessage
   it('reads the Uint8Array views a worker message turns Buffers into', () => {
-    expect(computePatchGate(job({ baseline: new Uint8Array(blank), image: new Uint8Array(block) })).gate.cells).toEqual(
-      [7]
-    );
+    expect(
+      computePatchGate(job({ baseline: new Uint8Array(blank), image: new Uint8Array(block) })).gate?.cells
+    ).toEqual([7]);
   });
 
   it('is what the worker runs for a patch-gate job', () => {
