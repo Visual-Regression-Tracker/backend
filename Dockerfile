@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS builder
+FROM node:26-bookworm-slim AS builder
 # Create app directory
 WORKDIR /app
 
@@ -21,7 +21,7 @@ COPY src ./src
 # the prune
 RUN npm run typecheck && npm run build && npm prune --omit=dev
 
-FROM node:24-bookworm-slim
+FROM node:26-bookworm-slim
 ENV NODE_ENV=production
 # tini as PID 1: the kernel ignores a signal PID 1 has no handler for, so the
 # SIGTERM Nest re-raises after its shutdown hooks would never end a node PID 1.
