@@ -217,7 +217,7 @@ describe('TestRunsService', () => {
       baselineName: 'baselineName',
       diffTollerancePercent: 1,
       ignoreAreas: '[]',
-      diffName: null,
+      diffName: null as string | null,
     };
     const testVariation = {
       id: '123',

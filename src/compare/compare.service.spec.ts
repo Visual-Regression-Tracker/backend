@@ -12,6 +12,7 @@ import { GeminiService } from './libs/vlm/providers/gemini/gemini.service';
 import { StaticModule } from '../static/static.module';
 import { ImageComparison } from '@prisma/client';
 import * as utils from '../static/utils';
+import { ImageCompareInput } from './libs/ImageCompareInput';
 
 jest.mock('zod/v3', () => {
   const actualZod = jest.requireActual('zod');
@@ -118,7 +119,7 @@ describe('CompareService with mocked collaborators', () => {
     return { service: module.get<CompareService>(CompareService), pixelmatch, lookSame };
   };
 
-  const data = {
+  const data: ImageCompareInput = {
     baseline: 'baseline.png',
     image: 'image.png',
     diffTollerancePercent: 0.5,

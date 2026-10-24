@@ -1,11 +1,12 @@
 import { INestApplication } from '@nestjs/common';
-import { Build, Project, TestStatus } from '@prisma/client';
+import { Baseline, Build, Project, TestStatus } from '@prisma/client';
 import uuidAPIKey from 'uuid-apikey';
 import { TEST_PROJECT } from '../src/_data_';
 import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
+import { TestVariationDto } from '../src/test-variations/dto/test-variation.dto';
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { UsersService } from '../src/users/users.service';
 import { createE2eApp, imageExists, pngBuffer, RED, waitFor } from './api-helpers';
@@ -91,10 +92,13 @@ describe('TestVariations API (e2e)', () => {
           200
         );
 
-        expect(res.body.map((variation) => variation.id).sort()).toEqual(
+        expect(res.body.map((variation: TestVariationDto) => variation.id).sort()).toEqual(
           [master.testVariationId, feature.testVariationId].sort()
         );
-        expect(res.body.map((variation) => variation.branchName).sort()).toEqual(['feature', 'master']);
+        expect(res.body.map((variation: TestVariationDto) => variation.branchName).sort()).toEqual([
+          'feature',
+          'master',
+        ]);
         expect(res.body[0]).not.toHaveProperty('baselines');
       } finally {
         await projectsService.remove(other.id);
@@ -124,7 +128,7 @@ describe('TestVariations API (e2e)', () => {
       ).expect(200);
 
       expect(res.body.id).toBe(first.testVariationId);
-      expect(res.body.baselines.map((baseline) => baseline.testRunId)).toEqual([second.id, first.id]);
+      expect(res.body.baselines.map((baseline: Baseline) => baseline.testRunId)).toEqual([second.id, first.id]);
       expect(res.body.baselineName).toBe(res.body.baselines[0].baselineName);
       expect(res.body.baselines[0].testRun.id).toBe(second.id);
       expect(res.body.baselines[0].user.id).toBe(user.id);

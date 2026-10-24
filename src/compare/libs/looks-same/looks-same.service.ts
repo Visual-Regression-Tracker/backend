@@ -83,7 +83,7 @@ export class LookSameService implements ImageComparator {
     config: LooksSameConfig
   ): Promise<looksSame.LooksSameResult<true> | undefined> {
     return looksSame(PNG.sync.write(baseline), PNG.sync.write(image), { ...config, createDiffImage: true }).catch(
-      (error) => {
+      (error): undefined => {
         this.logger.error(error.message);
         return undefined;
       }
@@ -94,7 +94,7 @@ export class LookSameService implements ImageComparator {
     try {
       return await this.staticService.saveImage('diff', await diffImage.createBuffer('png'));
     } catch (error) {
-      this.logger.error(error.message);
+      this.logger.error(error instanceof Error ? error.message : String(error));
       return null;
     }
   }

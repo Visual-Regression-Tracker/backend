@@ -5,6 +5,7 @@ import { StaticService } from '../../../static/static.service';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, LookSameService } from './looks-same.service';
 import { LooksSameConfig } from './looks-same.types';
+import { ImageCompareInput } from '../ImageCompareInput';
 
 const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn(), deleteImageMock = jest.fn() }) => {
   const module: TestingModule = await Test.createTestingModule({
@@ -119,7 +120,7 @@ describe('getDiff', () => {
     expect(result).toStrictEqual(DIFF_DIMENSION_RESULT);
   });
 
-  const input = {
+  const input: Omit<ImageCompareInput, 'saveDiffAsFile'> = {
     baseline: 'image',
     image: 'image',
     diffTollerancePercent: 0.1,

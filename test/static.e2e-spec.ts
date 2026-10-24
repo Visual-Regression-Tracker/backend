@@ -25,10 +25,12 @@ describe('Images (e2e)', () => {
   const get = (path: string) => request(app.getHttpServer()).get(path);
 
   /** Binary response bodies as a Buffer. */
-  const asBuffer = (res, callback) => {
+  const asBuffer = (res: request.Response, callback: (err: Error | null, body: Buffer) => void) => {
+    // in Node the parser is handed the raw response stream, which superagent's types do not model
+    const stream = res as unknown as NodeJS.ReadableStream;
     const chunks: Buffer[] = [];
-    res.on('data', (chunk: Buffer) => chunks.push(chunk));
-    res.on('end', () => callback(null, Buffer.concat(chunks)));
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+    stream.on('end', () => callback(null, Buffer.concat(chunks)));
   };
 
   beforeAll(async () => {

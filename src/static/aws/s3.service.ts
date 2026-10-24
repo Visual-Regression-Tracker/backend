@@ -68,7 +68,8 @@ export class AWSS3Service implements Static {
       this.logger.error(`Error from read : Cannot get image: ${fileName}. ${ex}`);
       // only a missing object means "no image"; credentials, throttling and
       // network failures have to stay errors instead of reading as absence
-      if (ex?.name === 'NoSuchKey' || ex?.$metadata?.httpStatusCode === 404) {
+      const error = ex as { name?: string; $metadata?: { httpStatusCode?: number } } | undefined;
+      if (error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404) {
         return null;
       }
       throw ex;

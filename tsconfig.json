@@ -18,6 +18,8 @@
       "multer"
     ],
     "strict": false,
+    "noImplicitAny": true,
+    "useUnknownInCatchVariables": true,
     "paths": {
       "src/*": [
         "./src/*"

@@ -63,7 +63,7 @@ export class HddService implements Static {
       this.logger.error(`Cannot get image: ${imageName}. ${ex}`);
       // an absent file is the only case that means "no image"; a permission or
       // I/O failure has to stay an error rather than read as a missing image
-      if (ex?.code === 'ENOENT') {
+      if ((ex as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
         return null;
       }
       throw ex;

@@ -13,6 +13,7 @@ import { BuildsService } from '../src/builds/builds.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { TEST_PROJECT } from '../src/_data_';
 import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
+import { UserDto } from '../src/users/dto/user.dto';
 import { generateUser, haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
 
 const FORBIDDEN = 'You do not have permission to perform this operation.';
@@ -105,7 +106,7 @@ describe('Users admin and RBAC (e2e)', () => {
           },
         ])
       );
-      expect(res.body.every((user) => !('password' in user))).toBe(true);
+      expect(res.body.every((user: UserDto) => !('password' in user))).toBe(true);
     });
   });
 
@@ -364,7 +365,7 @@ describe('Users OIDC (e2e)', () => {
     await new Promise<void>((resolve) => idp.listen(0, '127.0.0.1', resolve));
     issuer = `http://127.0.0.1:${(idp.address() as { port: number }).port}`;
 
-    const env = {
+    const env: Record<string, string> = {
       OIDC_ENABLED: 'true',
       OIDC_ISSUER_URL: issuer,
       OIDC_CLIENT_ID: CLIENT_ID,
