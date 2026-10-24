@@ -103,7 +103,8 @@ describe('DiffWorkerPool with worker threads', () => {
 
   afterEach(async () => {
     await pool?.onApplicationShutdown();
-    pool = undefined;
+    // each test makes its own pool; the shutdown above skips a test that made none
+    pool = undefined as unknown as DiffWorkerPool;
     process.env = { ...originalEnv };
     jest.restoreAllMocks();
   });

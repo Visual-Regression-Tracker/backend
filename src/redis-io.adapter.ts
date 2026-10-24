@@ -12,7 +12,7 @@ import { ServerOptions } from 'socket.io';
  */
 export class RedisIoAdapter extends IoAdapter {
   private static readonly logger = new Logger(RedisIoAdapter.name);
-  private adapterConstructor: ReturnType<typeof createAdapter>;
+  private adapterConstructor!: ReturnType<typeof createAdapter>;
 
   constructor(app: INestApplicationContext) {
     super(app);

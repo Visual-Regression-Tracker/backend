@@ -27,7 +27,8 @@ function getHttpsOptions(): HttpsOptions | null {
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     cors: true,
-    httpsOptions: getHttpsOptions(),
+    // null leaves HTTPS off, as undefined would
+    httpsOptions: getHttpsOptions() as HttpsOptions | undefined,
   });
   app.useGlobalPipes(new ValidationPipe());
   // On SIGTERM, close the server and run the providers' teardown (diff

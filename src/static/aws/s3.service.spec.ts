@@ -233,7 +233,7 @@ describe('AWSS3Service', () => {
     it.each(['', undefined, null])('returns null for an empty name (%p) without calling S3', async (fileName) => {
       const service = new AWSS3Service();
 
-      await expect(service.getImageBuffer(fileName)).resolves.toBeNull();
+      await expect(service.getImageBuffer(fileName as string | null)).resolves.toBeNull();
       expect(mockSend).not.toHaveBeenCalled();
     });
 

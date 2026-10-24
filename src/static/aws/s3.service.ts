@@ -44,7 +44,7 @@ export class AWSS3Service implements Static {
     }
   }
 
-  async getImage(fileName: string): Promise<PNGWithMetadata> {
+  async getImage(fileName: string | null): Promise<PNGWithMetadata | null | undefined> {
     if (!fileName) return null;
     try {
       // the comparison pipeline treats an unreadable image as a missing
@@ -57,7 +57,7 @@ export class AWSS3Service implements Static {
     }
   }
 
-  async getImageBuffer(fileName: string): Promise<Buffer | null> {
+  async getImageBuffer(fileName: string | null): Promise<Buffer | null> {
     if (!fileName) return null;
     try {
       const command = new GetObjectCommand({ Bucket: this.AWS_S3_BUCKET_NAME, Key: fileName });
@@ -122,7 +122,7 @@ export class AWSS3Service implements Static {
     });
   }
 
-  async deleteImage(imageName: string): Promise<boolean> {
+  async deleteImage(imageName: string | null): Promise<boolean> {
     if (!imageName) return false;
     try {
       await this.s3Client.send(new DeleteObjectCommand({ Bucket: this.AWS_S3_BUCKET_NAME, Key: imageName }));

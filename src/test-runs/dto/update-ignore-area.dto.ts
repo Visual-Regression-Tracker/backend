@@ -6,10 +6,10 @@ import { ValidateNested, IsString } from 'class-validator';
 export class UpdateIgnoreAreasDto {
   @ApiProperty({ type: String, isArray: true })
   @IsString({ each: true })
-  readonly ids: string[];
+  readonly ids!: string[];
 
   @ApiProperty({ type: IgnoreAreaDto, isArray: true })
   @Type(() => IgnoreAreaDto)
   @ValidateNested({ each: true })
-  readonly ignoreAreas: IgnoreAreaDto[];
+  readonly ignoreAreas!: IgnoreAreaDto[];
 }

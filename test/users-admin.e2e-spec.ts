@@ -12,9 +12,15 @@ import { ProjectsService } from '../src/projects/projects.service';
 import { BuildsService } from '../src/builds/builds.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { TEST_PROJECT } from '../src/_data_';
-import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { UserDto } from '../src/users/dto/user.dto';
-import { generateUser, haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
+import {
+  generateUser,
+  haveTestRunCreated,
+  haveUserLogged,
+  requestWithApiKey,
+  requestWithAuth,
+  LoggedUser,
+} from './preconditions';
 
 const FORBIDDEN = 'You do not have permission to perform this operation.';
 
@@ -24,7 +30,7 @@ describe('Users admin and RBAC (e2e)', () => {
   let prismaService: PrismaService;
   const userIds: string[] = [];
 
-  const haveUser = async (role: Role): Promise<UserLoginResponseDto> => {
+  const haveUser = async (role: Role): Promise<LoggedUser> => {
     const user = await haveUserLogged(usersService, role);
     userIds.push(user.id);
     return user;
@@ -119,7 +125,7 @@ describe('Users admin and RBAC (e2e)', () => {
         .send({ id: target.id, role: Role.admin })
         .expect(403);
 
-      expect((await usersService.findOne(target.id)).role).toBe(Role.guest);
+      expect((await usersService.findOne(target.id))!.role).toBe(Role.guest);
     });
 
     it('admin changes the role, which takes effect on the next request with the same token', async () => {
@@ -132,7 +138,7 @@ describe('Users admin and RBAC (e2e)', () => {
         .expect(200);
 
       expect(res.body).toEqual(expect.objectContaining({ id: target.id, email: target.email, role: Role.admin }));
-      expect((await usersService.findOne(target.id)).role).toBe(Role.admin);
+      expect((await usersService.findOne(target.id))!.role).toBe(Role.admin);
       // the role is read from the database on every request, not from the token
       await requestWithAuth(app, 'get', '/users/all', target.token).expect(200);
     });
@@ -158,7 +164,7 @@ describe('Users admin and RBAC (e2e)', () => {
         .send({ id: target.id, role: Role.editor, ...override })
         .expect(400);
 
-      expect((await usersService.findOne(target.id)).role).toBe(Role.guest);
+      expect((await usersService.findOne(target.id))!.role).toBe(Role.guest);
     });
 
     it('404 for a user that does not exist', async () => {
@@ -251,9 +257,9 @@ describe('Users admin and RBAC (e2e)', () => {
 
         await requestWithAuth(app, 'delete', '/users', admin.token).send([editor.id]).expect(200);
 
-        const after = await prismaService.baseline.findUnique({ where: { id: baseline.id } });
+        const after = (await prismaService.baseline.findUnique({ where: { id: baseline.id } }))!;
         expect(after.userId).toBeNull();
-        expect((await prismaService.testRun.findUnique({ where: { id: testRun.id } })).status).toBe(
+        expect((await prismaService.testRun.findUnique({ where: { id: testRun.id } }))!.status).toBe(
           TestStatus.approved
         );
       } finally {
@@ -301,7 +307,7 @@ describe('Users OIDC (e2e)', () => {
   let privateKey: KeyObject;
   let discoveryDown = false;
   const tokenRequests: URLSearchParams[] = [];
-  const codes = new Map<string, { challenge: string; claims: Record<string, unknown> }>();
+  const codes = new Map<string, { challenge: string | null; claims: Record<string, unknown> }>();
   const emails: string[] = [];
   const previousEnv: Record<string, string | undefined> = {};
 
@@ -354,8 +360,8 @@ describe('Users OIDC (e2e)', () => {
       if (req.url === '/token' && req.method === 'POST') {
         const params = new URLSearchParams(await readBody(req));
         tokenRequests.push(params);
-        const issued = codes.get(params.get('code'));
-        codes.delete(params.get('code'));
+        const issued = codes.get(params.get('code') ?? '');
+        codes.delete(params.get('code') ?? '');
         const challenge = base64url(
           createHash('sha256')
             .update(params.get('code_verifier') ?? '')
@@ -516,12 +522,12 @@ describe('Users OIDC (e2e)', () => {
 
     const second = await startLogin({ email, email_verified: 'true' });
     tokenFrom((await callback(`code=${second.code}&state=${second.state}`, second.cookie)).headers.location);
-    expect((await prismaService.user.findUnique({ where: { email } })).role).toBe(Role.admin);
+    expect((await prismaService.user.findUnique({ where: { email } }))!.role).toBe(Role.admin);
 
     const third = await startLogin({ email, email_verified: true, groups: ['developers'] });
     tokenFrom((await callback(`code=${third.code}&state=${third.state}`, third.cookie)).headers.location);
     // OIDC_DEFAULT_ROLE defaults to editor
-    expect((await prismaService.user.findUnique({ where: { email } })).role).toBe(Role.editor);
+    expect((await prismaService.user.findUnique({ where: { email } }))!.role).toBe(Role.editor);
   });
 
   it('rejects an email the provider has not verified', async () => {

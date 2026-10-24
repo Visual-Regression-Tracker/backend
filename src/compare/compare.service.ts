@@ -26,7 +26,7 @@ export class CompareService {
   ) {}
 
   async getDiff({ projectId, data }: { projectId: string; data: ImageCompareInput }): Promise<DiffResult> {
-    const project: Project = await this.prismaService.project.findUnique({ where: { id: projectId } });
+    const project: Project = (await this.prismaService.project.findUnique({ where: { id: projectId } }))!;
     const comparator = this.getComparator(project.imageComparison);
     const config = comparator.parseConfig(project.imageComparisonConfig);
     return comparator.getDiff(data, config);

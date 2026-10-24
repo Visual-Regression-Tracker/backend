@@ -41,7 +41,8 @@ export class BuildsService {
 
   async findMany(
     projectId: string,
-    take: number,
+    // undefined reads every build, which is how deleteOldBuilds finds the ones past the limit
+    take: number | undefined,
     skip: number,
     ciBuildId?: string,
     aroundBuildId?: string
@@ -55,7 +56,8 @@ export class BuildsService {
 
     // A link carries a build, not a page, so the page has to be worked out from
     // the build before anything is read.
-    const pageSkip = aroundBuildId ? ((await this.skipToPageWith(where, take, aroundBuildId)) ?? skip) : skip;
+    // the controller always sends take with aroundBuildId; deleteOldBuilds sends neither
+    const pageSkip = aroundBuildId ? ((await this.skipToPageWith(where, take!, aroundBuildId)) ?? skip) : skip;
 
     const [total, buildList] = await Promise.all([
       this.prismaService.build.count({ where }),
@@ -70,7 +72,8 @@ export class BuildsService {
     return {
       data: await Promise.all(buildList.map((build) => this.findOne(build.id))),
       total,
-      take,
+      // only deleteOldBuilds leaves take unset, and it reads just the data
+      take: take!,
       skip: pageSkip,
     };
   }
@@ -117,7 +120,7 @@ export class BuildsService {
     return this.findOne(id);
   }
 
-  async remove(id: string): Promise<Build> {
+  async remove(id: string): Promise<Build | undefined> {
     if (!id) {
       this.logger.warn(`Attempted to remove build with undefined ID.`);
       return;
@@ -222,7 +225,8 @@ export class BuildsService {
         }
       : { id: projectId };
 
-    let build: Build;
+    // left unset when the upsert fails with anything but P2002, and then reading it throws
+    let build!: Build;
     try {
       build = await this.prismaService.build.upsert({
         where,

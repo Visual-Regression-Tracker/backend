@@ -355,7 +355,7 @@ describe('BuildsService', () => {
       service = await initService({ buildFindUniqueMock });
       (service as any).logger = { warn: loggerWarnMock }; // Mock the logger
 
-      await service.remove(undefined);
+      await service.remove(undefined as unknown as string);
 
       expect(loggerWarnMock).toHaveBeenCalledWith('Attempted to remove build with undefined ID.');
       expect(buildFindUniqueMock).not.toHaveBeenCalled();

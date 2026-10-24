@@ -81,7 +81,7 @@ export class PixelmatchService implements ImageComparator {
         : {}),
     };
 
-    if (result.diffPercent > data.diffTollerancePercent) {
+    if (result.diffPercent! > data.diffTollerancePercent) {
       if (output.diffBuffer) {
         result.diffName = await this.staticService.saveImage('diff', Buffer.from(output.diffBuffer));
       }

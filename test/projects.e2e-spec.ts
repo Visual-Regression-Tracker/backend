@@ -2,10 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
-import { requestWithAuth, haveUserLogged } from './preconditions';
+import { requestWithAuth, haveUserLogged, LoggedUser } from './preconditions';
 import { ProjectsService } from '../src/projects/projects.service';
 import uuidAPIKey from 'uuid-apikey';
-import { UserLoginResponseDto } from 'src/users/dto/user-login-response.dto';
 import { ProjectDto } from 'src/projects/dto/project.dto';
 
 const project: ProjectDto = {
@@ -34,7 +33,7 @@ const projectServiceMock = {
 describe('Projects (e2e)', () => {
   let app: INestApplication;
   let usersService: UsersService;
-  let loggedUser: UserLoginResponseDto;
+  let loggedUser: LoggedUser;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({

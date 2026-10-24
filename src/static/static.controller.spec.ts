@@ -84,7 +84,7 @@ describe('getUrlAndRedirect', () => {
     await controller.getUrlAndRedirect('image.png', res);
 
     const [, value] = res.set.mock.calls.find(([header]) => header === 'Cache-Control');
-    expect(Number(/max-age=(\d+)/.exec(value)[1])).toBeLessThan(3600);
+    expect(Number(/max-age=(\d+)/.exec(value)![1])).toBeLessThan(3600);
   });
 
   it('sets a private cache header of exactly 3000 seconds before redirecting', async () => {

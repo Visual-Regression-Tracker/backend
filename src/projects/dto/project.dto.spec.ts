@@ -44,6 +44,6 @@ describe('ProjectDto', () => {
 
     expect(errors).toHaveLength(1);
     expect(errors[0].property).toBe(property);
-    expect(Object.keys(errors[0].constraints)).toEqual([constraint]);
+    expect(Object.keys(errors[0].constraints!)).toEqual([constraint]);
   });
 });

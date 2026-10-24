@@ -13,7 +13,7 @@ jest.mock('ldapts', () => {
   const mockLdapClient = {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     search: jest.fn((_searchDN, searchOptions: SearchOptions): Promise<SearchResult> => {
-      if (searchOptions.filter.toString().includes('exists@example.com')) {
+      if (searchOptions.filter!.toString().includes('exists@example.com')) {
         return Promise.resolve({
           searchEntries: [
             {
@@ -99,7 +99,7 @@ describe('LdapUsersService match from ldap', () => {
   });
 
   it('should create new user on login', async () => {
-    jest.spyOn(prismaService.user, 'findUnique').mockResolvedValue(undefined);
+    jest.spyOn(prismaService.user, 'findUnique').mockResolvedValue(null);
     const prismaUserCreateMock = jest.spyOn(prismaService.user, 'create').mockResolvedValue(user);
     await service.login({ email: 'exists@example.com', password: 'password' });
     expect(prismaUserCreateMock).toHaveBeenCalled();

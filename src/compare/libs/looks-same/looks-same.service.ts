@@ -33,7 +33,8 @@ export class LookSameService implements ImageComparator {
     };
 
     const baseline = await this.staticService.getImage(data.baseline);
-    const image = await this.staticService.getImage(data.image);
+    // a missing checkpoint image is not expected here, and fails on first use
+    const image = (await this.staticService.getImage(data.image))!;
 
     if (!baseline) {
       return NO_BASELINE_RESULT;

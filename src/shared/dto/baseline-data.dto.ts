@@ -4,7 +4,7 @@ import { IsString, IsOptional } from 'class-validator';
 export class BaselineDataDto {
   @ApiProperty()
   @IsString()
-  name: string;
+  name!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -33,5 +33,5 @@ export class BaselineDataDto {
 
   @ApiProperty()
   @IsString()
-  branchName: string;
+  branchName!: string;
 }

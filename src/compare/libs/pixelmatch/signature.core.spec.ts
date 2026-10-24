@@ -71,7 +71,7 @@ describe('computeChangeSignature', () => {
   });
 
   it('concentrates on the color the changed pixels took in the new image', () => {
-    const signature = signatureOf(blank, block(0, 0, RED));
+    const signature = signatureOf(blank, block(0, 0, RED))!;
 
     const brightest = signature.indexOf(Math.max(...signature));
     // 4 buckets per channel: pure red is the last red bucket, first green/blue
@@ -118,17 +118,17 @@ describe('computeChangeSignature with structured-clone input', () => {
 
 describe('signaturesMatch', () => {
   it('matches a signature with itself', () => {
-    const signature = signatureOf(blank, block(0, 0, RED));
+    const signature = signatureOf(blank, block(0, 0, RED))!;
 
     expect(signaturesMatch(signature, signature)).toBe(true);
   });
 
   it('matches the same change in another place', () => {
-    expect(signaturesMatch(signatureOf(blank, block(0, 0, RED)), signatureOf(blank, block(24, 28, RED)))).toBe(true);
+    expect(signaturesMatch(signatureOf(blank, block(0, 0, RED))!, signatureOf(blank, block(24, 28, RED))!)).toBe(true);
   });
 
   it('does not match a change of another color', () => {
-    expect(signaturesMatch(signatureOf(blank, block(0, 0, RED)), signatureOf(blank, block(0, 0, BLUE)))).toBe(false);
+    expect(signaturesMatch(signatureOf(blank, block(0, 0, RED))!, signatureOf(blank, block(0, 0, BLUE))!)).toBe(false);
   });
 
   it('matches at a cosine similarity of at least 0.9', () => {

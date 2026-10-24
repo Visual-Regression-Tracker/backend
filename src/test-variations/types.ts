@@ -2,9 +2,9 @@ import { IsNotEmpty, IsUUID } from 'class-validator';
 
 export class MergeParams {
   @IsUUID()
-  projectId: string;
+  projectId!: string;
   @IsNotEmpty()
-  fromBranch: string;
+  fromBranch!: string;
   @IsNotEmpty()
-  toBranch: string;
+  toBranch!: string;
 }

@@ -6,10 +6,9 @@ import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunDto } from '../src/test-runs/dto/testRun.dto';
-import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { UsersService } from '../src/users/users.service';
 import { BLUE, createE2eApp, imageExists, pngBuffer, RED, Rect, TEST_RUN_DTO_KEYS, waitFor } from './api-helpers';
-import { haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
+import { haveUserLogged, requestWithApiKey, requestWithAuth, LoggedUser } from './preconditions';
 
 describe('TestRuns review API (e2e)', () => {
   let app: INestApplication;
@@ -17,7 +16,7 @@ describe('TestRuns review API (e2e)', () => {
   let projectsService: ProjectsService;
   let buildsService: BuildsService;
   let prisma: PrismaService;
-  let user: UserLoginResponseDto;
+  let user: LoggedUser;
   let project: Project;
 
   const WHITE = pngBuffer();
@@ -190,12 +189,12 @@ describe('TestRuns review API (e2e)', () => {
 
       await approve([run.id]);
 
-      const stored = await prisma.testRun.findUnique({ where: { id: run.id } });
+      const stored = (await prisma.testRun.findUnique({ where: { id: run.id } }))!;
       expect(stored.status).toBe(TestStatus.approved);
-      const variation = await prisma.testVariation.findUnique({
+      const variation = (await prisma.testVariation.findUnique({
         where: { id: run.testVariationId },
         include: { baselines: true },
-      });
+      }))!;
       expect(variation.baselines).toHaveLength(1);
       expect(variation.baselines[0]).toMatchObject({ testRunId: run.id, userId: user.id });
       expect(variation.baselineName).toBe(variation.baselines[0].baselineName);
@@ -214,13 +213,13 @@ describe('TestRuns review API (e2e)', () => {
 
       await approve([featureRun.id]);
 
-      const stored = await prisma.testRun.findUnique({ where: { id: featureRun.id } });
+      const stored = (await prisma.testRun.findUnique({ where: { id: featureRun.id } }))!;
       expect(stored.status).toBe(TestStatus.approved);
       expect(stored.testVariationId).not.toBe(masterRun.testVariationId);
-      const featureVariation = await prisma.testVariation.findUnique({
-        where: { id: stored.testVariationId },
+      const featureVariation = (await prisma.testVariation.findUnique({
+        where: { id: stored.testVariationId! },
         include: { baselines: true },
-      });
+      }))!;
       expect(featureVariation.branchName).toBe('feature');
       expect(featureVariation.comment).toBe('feature comment');
       expect(featureVariation.baselines).toHaveLength(1);
@@ -237,7 +236,7 @@ describe('TestRuns review API (e2e)', () => {
 
       await approve([featureRun.id], true);
 
-      const stored = await prisma.testRun.findUnique({ where: { id: featureRun.id } });
+      const stored = (await prisma.testRun.findUnique({ where: { id: featureRun.id } }))!;
       expect(stored.status).toBe(TestStatus.approved);
       expect(stored.merge).toBe(true);
       expect(stored.testVariationId).toBe(masterRun.testVariationId);
@@ -257,7 +256,7 @@ describe('TestRuns review API (e2e)', () => {
 
       await approve([featureRun.id]);
 
-      const stored = await prisma.testRun.findUnique({ where: { id: featureRun.id } });
+      const stored = (await prisma.testRun.findUnique({ where: { id: featureRun.id } }))!;
       expect(stored.testVariationId).toBe(featureBaseline.testVariationId);
       expect(await prisma.baseline.count({ where: { testVariationId: featureBaseline.testVariationId } })).toBe(2);
       expect(await prisma.baseline.count({ where: { testVariationId: masterBaseline.testVariationId } })).toBe(1);
@@ -273,7 +272,7 @@ describe('TestRuns review API (e2e)', () => {
         .expect(500);
 
       expect(res.body.message).toBe('No test variation found. Re-create test run');
-      expect((await prisma.testRun.findUnique({ where: { id: run.id } })).status).toBe(TestStatus.new);
+      expect((await prisma.testRun.findUnique({ where: { id: run.id } }))!.status).toBe(TestStatus.new);
     });
 
     it('400 without the merge query parameter', async () => {
@@ -282,7 +281,7 @@ describe('TestRuns review API (e2e)', () => {
 
       await requestWithAuth(app, 'post', `/test-runs/approve`, user.token).send([run.id]).expect(400);
 
-      expect((await prisma.testRun.findUnique({ where: { id: run.id } })).status).toBe(TestStatus.new);
+      expect((await prisma.testRun.findUnique({ where: { id: run.id } }))!.status).toBe(TestStatus.new);
     });
 
     it('403 for a guest', async () => {
@@ -333,7 +332,7 @@ describe('TestRuns review API (e2e)', () => {
       const build = await newBuild();
       const run = await runAgainstBaseline(build, WHITE, pngBuffer([redAt(5, 5)]));
       expect(run.status).toBe(TestStatus.unresolved);
-      const stored = await prisma.testRun.findUnique({ where: { id: run.id } });
+      const stored = (await prisma.testRun.findUnique({ where: { id: run.id } }))!;
       const files = [stored.imageName, stored.diffName, stored.imageThumbnailName, stored.diffThumbnailName];
       expect(files.every((name) => imageExists(name))).toBe(true);
       const baselineName = stored.baselineName;
@@ -368,15 +367,15 @@ describe('TestRuns review API (e2e)', () => {
       const build = await newBuild();
       const run = await runAgainstBaseline(build, WHITE, pngBuffer([redAt(5, 5)]));
       expect(run.status).toBe(TestStatus.unresolved);
-      const before = await prisma.testRun.findUnique({ where: { id: run.id } });
+      const before = (await prisma.testRun.findUnique({ where: { id: run.id } }))!;
 
       await requestWithAuth(app, 'post', `/test-runs/ignoreAreas/update`, user.token)
         .send({ ids: [run.id], ignoreAreas: [area] })
         .expect(201);
 
-      const after = await prisma.testRun.findUnique({ where: { id: run.id }, include: { testVariation: true } });
+      const after = (await prisma.testRun.findUnique({ where: { id: run.id }, include: { testVariation: true } }))!;
       expect(JSON.parse(after.ignoreAreas)).toEqual([area]);
-      expect(JSON.parse(after.testVariation.ignoreAreas)).toEqual([area]);
+      expect(JSON.parse(after.testVariation!.ignoreAreas)).toEqual([area]);
       // the change is now masked: the run passes and its diff pictures are gone
       expect(after.status).toBe(TestStatus.ok);
       expect(after.diffName).toBeNull();
@@ -399,9 +398,9 @@ describe('TestRuns review API (e2e)', () => {
         .send({ ids: [run.id], ignoreAreas: [otherArea] })
         .expect(201);
 
-      const stored = await prisma.testRun.findUnique({ where: { id: run.id }, include: { testVariation: true } });
+      const stored = (await prisma.testRun.findUnique({ where: { id: run.id }, include: { testVariation: true } }))!;
       expect(JSON.parse(stored.ignoreAreas)).toEqual([area, otherArea]);
-      expect(JSON.parse(stored.testVariation.ignoreAreas)).toEqual([area, otherArea]);
+      expect(JSON.parse(stored.testVariation!.ignoreAreas)).toEqual([area, otherArea]);
       // no baseline: still new after the recompute
       expect(stored.status).toBe(TestStatus.new);
 
@@ -409,7 +408,7 @@ describe('TestRuns review API (e2e)', () => {
         .send({ ids: [run.id], ignoreAreas: [] })
         .expect(201);
 
-      const cleared = await prisma.testRun.findUnique({ where: { id: run.id } });
+      const cleared = (await prisma.testRun.findUnique({ where: { id: run.id } }))!;
       expect(JSON.parse(cleared.ignoreAreas)).toEqual([]);
     });
 
@@ -421,10 +420,10 @@ describe('TestRuns review API (e2e)', () => {
       const masked = await postRun(build, pngBuffer([redAt(5, 5)]), { ignoreAreas: [area] });
 
       expect(masked.status).toBe(TestStatus.ok);
-      const stored = await prisma.testRun.findUnique({ where: { id: masked.id }, include: { testVariation: true } });
+      const stored = (await prisma.testRun.findUnique({ where: { id: masked.id }, include: { testVariation: true } }))!;
       expect(JSON.parse(stored.tempIgnoreAreas)).toEqual([area]);
       expect(JSON.parse(stored.ignoreAreas)).toEqual([]);
-      expect(JSON.parse(stored.testVariation.ignoreAreas)).toEqual([]);
+      expect(JSON.parse(stored.testVariation!.ignoreAreas)).toEqual([]);
       // the previous unresolved run of the same variation in the build was replaced
       expect(await prisma.testRun.findUnique({ where: { id: run.id } })).toBeNull();
     });
@@ -455,7 +454,7 @@ describe('TestRuns review API (e2e)', () => {
         .expect(200);
 
       expect(res.body.comment).toBe('looks fine');
-      const variation = await prisma.testVariation.findUnique({ where: { id: run.testVariationId } });
+      const variation = (await prisma.testVariation.findUnique({ where: { id: run.testVariationId } }))!;
       expect(variation.comment).toBe('looks fine');
     });
 

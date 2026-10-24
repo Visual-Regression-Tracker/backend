@@ -19,7 +19,7 @@ export interface PixelmatchJobInput {
   ignoreAreas: IgnoreAreaDto[];
   threshold: number;
   includeAA: boolean;
-  allowDiffDimensions: boolean;
+  allowDiffDimensions?: boolean;
   diffTolerancePercent: number;
   saveDiff: boolean;
   /**
@@ -95,7 +95,7 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
   // about to be thrown away is work nobody ever sees the result of.
   const keepingTheDiff = diffPercent > input.diffTolerancePercent && input.saveDiff;
 
-  let diffBuffer: Buffer;
+  let diffBuffer: Buffer | undefined;
   if (keepingTheDiff) {
     diffBuffer = PNG.sync.write(diff);
   }

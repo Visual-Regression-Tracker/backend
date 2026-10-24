@@ -21,11 +21,11 @@ export class StaticService {
     return this.staticService.saveImage(type, imageBuffer);
   }
 
-  async getImage(imageName: string): Promise<PNGWithMetadata> {
+  async getImage(imageName: string | null): Promise<PNGWithMetadata | null | undefined> {
     return this.staticService.getImage(imageName);
   }
 
-  async getImageBuffer(imageName: string): Promise<Buffer | null> {
+  async getImageBuffer(imageName: string | null): Promise<Buffer | null> {
     return this.staticService.getImageBuffer(imageName);
   }
 
@@ -33,7 +33,7 @@ export class StaticService {
     return this.staticService.copyImage(type, sourceImageName);
   }
 
-  async deleteImage(imageName: string): Promise<boolean> {
+  async deleteImage(imageName: string | null): Promise<boolean | undefined> {
     return this.staticService.deleteImage(imageName);
   }
 

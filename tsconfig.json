@@ -17,9 +17,7 @@
       "jest",
       "multer"
     ],
-    "strict": false,
-    "noImplicitAny": true,
-    "useUnknownInCatchVariables": true,
+    "strict": true,
     "paths": {
       "src/*": [
         "./src/*"

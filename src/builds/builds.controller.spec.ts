@@ -10,6 +10,7 @@ import { TEST_BUILD, TEST_PROJECT } from '../_data_';
 import { Build } from '@prisma/client';
 import { BuildDto } from './dto/build.dto';
 import { CreateBuildDto } from './dto/build-create.dto';
+import { ModifyBuildDto } from './dto/build-modify.dto';
 import { EventsGateway } from '../shared/events/events.gateway';
 
 const initController = async ({
@@ -110,7 +111,7 @@ describe('Builds Controller', () => {
       const buildUpdateMock = jest.fn().mockResolvedValueOnce(new BuildDto(TEST_BUILD));
       controller = await initController({ buildUpdateMock });
 
-      await controller.update(TEST_BUILD.id, body);
+      await controller.update(TEST_BUILD.id, body as ModifyBuildDto);
 
       expect(buildUpdateMock).toHaveBeenCalledWith(TEST_BUILD.id, { isRunning: false });
     });

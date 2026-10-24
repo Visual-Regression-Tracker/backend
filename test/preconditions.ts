@@ -8,6 +8,10 @@ import { readFileSync } from 'fs';
 import { TestRunResultDto } from 'src/test-runs/dto/testRunResult.dto';
 import { Build, Role } from '@prisma/client';
 import { CreateUserDto } from 'src/users/dto/user-create.dto';
+import { UserLoginResponseDto } from 'src/users/dto/user-login-response.dto';
+
+/** A signed-in user: login always issues a token, only creating a user answers without one. */
+export type LoggedUser = UserLoginResponseDto & { token: string };
 
 export const generateUser = (password: string): CreateUserDto => ({
   email: `email+${uuidAPIKey.create().apiKey.toLocaleLowerCase()}@example.com`,
@@ -33,7 +37,7 @@ export const requestWithApiKey = (
   apiKey: string
 ): Test => request(app.getHttpServer())[method](url).set('apiKey', apiKey);
 
-export const haveUserLogged = async (usersService: UsersService, role: Role = 'admin') => {
+export const haveUserLogged = async (usersService: UsersService, role: Role = 'admin'): Promise<LoggedUser> => {
   const password = '123456';
   const user = await usersService.create(generateUser(password));
 
@@ -42,7 +46,7 @@ export const haveUserLogged = async (usersService: UsersService, role: Role = 'a
   return usersService.login({
     email: user.email,
     password,
-  });
+  }) as Promise<LoggedUser>;
 };
 
 export const haveTestRunCreated = async (
@@ -57,7 +61,7 @@ export const haveTestRunCreated = async (
   const testRun = await testRunsService.postTestRun({
     createTestRequestDto: {
       projectId: build.projectId,
-      branchName: build.branchName,
+      branchName: build.branchName!,
       buildId: build.id,
       name: 'Image name',
       merge,

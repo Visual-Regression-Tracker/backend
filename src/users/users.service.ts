@@ -57,7 +57,7 @@ export class UsersService {
     return this.oidcUsersService.handleCallback(params, checks);
   }
 
-  oidcBuildFrontendRedirect(token?: string, error?: string): string {
+  oidcBuildFrontendRedirect(token?: string | null, error?: string): string {
     return this.oidcUsersService.buildFrontendRedirect(token, error);
   }
 
@@ -68,7 +68,7 @@ export class UsersService {
     return this.usersService;
   }
 
-  async findOne(id: string): Promise<User> {
+  async findOne(id: string): Promise<User | null> {
     return this.prismaService.user.findUnique({ where: { id } });
   }
 
@@ -95,7 +95,7 @@ export class UsersService {
 
   async get(id: string): Promise<UserDto> {
     const user = await this.findOne(id);
-    return new UserDto(user);
+    return new UserDto(user!);
   }
 
   async assignRole(data: AssignRoleDto): Promise<UserDto> {

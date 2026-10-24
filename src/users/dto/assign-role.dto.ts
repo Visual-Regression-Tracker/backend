@@ -5,9 +5,9 @@ import { Role } from '@prisma/client';
 export class AssignRoleDto {
   @ApiProperty()
   @IsUUID()
-  readonly id: string;
+  readonly id!: string;
 
   @ApiProperty()
   @IsEnum(Role)
-  readonly role: Role;
+  readonly role!: Role;
 }

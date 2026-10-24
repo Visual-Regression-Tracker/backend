@@ -5,7 +5,7 @@ import { SIGNATURE_CONCURRENCY, TestRunsService } from './test-runs.service';
 import { SIGNATURE_LENGTH } from '../compare/libs/pixelmatch/signature.core';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../static/static.service';
-import { Prisma, TestStatus, TestRun, TestVariation } from '@prisma/client';
+import { Prisma, Project, TestStatus, TestRun, TestVariation } from '@prisma/client';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { DiffResult } from './diffResult';
@@ -1133,7 +1133,7 @@ describe('TestRunsService', () => {
     };
 
     const initPostService = async ({
-      project = { ...TEST_PROJECT, autoApproveFeature: false },
+      project = { ...TEST_PROJECT, autoApproveFeature: false } as Project | null,
       existingVariation = null as TestVariation | null,
       previousRuns = [] as TestRun[],
     }) => {
@@ -1876,7 +1876,7 @@ describe('TestRunsService', () => {
       await built.getMatchingVariations(testRun.id);
 
       expect(compareGetChangeSignatureMock).toHaveBeenCalledWith({
-        baseline: Buffer.from(testRun.baselineName),
+        baseline: Buffer.from(testRun.baselineName!),
         image: Buffer.from(testRun.imageName),
         ignoreAreas,
         threshold: 0.3,

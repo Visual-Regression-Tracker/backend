@@ -19,9 +19,9 @@ export class ProjectsService {
     private testVariationsService: TestVariationsService
   ) {}
 
-  async findOne(idOrName: string): Promise<Project> {
+  async findOne(idOrName: string): Promise<Project | null> {
     const isUUID = uuidAPIKey.isUUID(idOrName);
-    const project: Project = await this.prismaService.project.findUnique({
+    const project: Project | null = await this.prismaService.project.findUnique({
       where: {
         id: isUUID ? idOrName : undefined,
         name: !isUUID ? idOrName : undefined,
@@ -73,13 +73,13 @@ export class ProjectsService {
 
   async remove(id: string): Promise<Project> {
     this.logger.debug(`Going to remove Project ${id}`);
-    const project = await this.prismaService.project.findUnique({
+    const project = (await this.prismaService.project.findUnique({
       where: { id },
       include: {
         builds: true,
         testVariations: true,
       },
-    });
+    }))!;
 
     for (const build of project.builds) {
       await this.buildsService.remove(build.id);

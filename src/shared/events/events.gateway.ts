@@ -10,7 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 @WebSocketGateway({ cors: true })
 export class EventsGateway implements OnApplicationShutdown {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   private readonly logger = new Logger(EventsGateway.name);
 

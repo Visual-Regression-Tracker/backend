@@ -37,7 +37,7 @@ describe('PrismaModule', () => {
 
   it('injects the same PrismaService into every consumer', () => {
     const modules = [...moduleRef.get(ModulesContainer).values()];
-    const prisma = modules.find((module) => module.metatype === PrismaModule).providers.get(PrismaService).instance;
+    const prisma = modules.find((module) => module.metatype === PrismaModule)!.providers.get(PrismaService)!.instance;
     const consumers = modules
       .flatMap((module) => [...module.providers.values(), ...module.controllers.values()])
       .map((wrapper) => (wrapper.instance as { prismaService?: unknown })?.prismaService)

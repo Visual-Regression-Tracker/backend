@@ -10,47 +10,47 @@ export class TestRunDto {
   imageName: string;
   // small copies for the card grids; null on runs ingested before these existed
   @ApiPropertyOptional()
-  imageThumbnailName?: string;
+  imageThumbnailName?: string | null;
   @ApiPropertyOptional()
-  diffThumbnailName?: string;
+  diffThumbnailName?: string | null;
   @ApiProperty()
-  diffName: string;
+  diffName: string | null;
   @ApiProperty()
-  diffPercent: number;
+  diffPercent: number | null;
   @ApiProperty()
   diffTollerancePercent: number;
   @ApiProperty()
   status: TestStatus;
   @ApiProperty()
-  testVariationId: string;
+  testVariationId: string | null;
   @ApiProperty()
   name: string;
   @ApiProperty()
-  baselineName: string;
+  baselineName: string | null;
   @ApiProperty()
-  os: string;
+  os: string | null;
   @ApiProperty()
-  browser: string;
+  browser: string | null;
   @ApiProperty()
-  viewport: string;
+  viewport: string | null;
   @ApiProperty()
-  device: string;
+  device: string | null;
   @ApiProperty()
-  customTags: string;
+  customTags: string | null;
   @ApiProperty()
   ignoreAreas: string;
   @ApiProperty()
   tempIgnoreAreas: string;
   @ApiPropertyOptional()
-  comment?: string;
+  comment?: string | null;
   @ApiProperty()
   branchName: string;
   @ApiProperty()
-  baselineBranchName: string;
+  baselineBranchName: string | null;
   @ApiProperty()
   merge: boolean;
   @ApiPropertyOptional()
-  vlmDescription?: string;
+  vlmDescription?: string | null;
 
   constructor(testRun: TestRun) {
     this.id = testRun.id;

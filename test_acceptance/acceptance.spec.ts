@@ -13,8 +13,8 @@ let user: Partial<User> = {
     lastName: 'lName',
 };
 const loginData: UserLoginRequestDto = {
-    email: user.email,
-    password: user.password,
+    email: user.email!,
+    password: user.password!,
 }
 
 describe('Acceptance', () => {

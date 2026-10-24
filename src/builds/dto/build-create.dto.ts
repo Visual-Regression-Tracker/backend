@@ -16,5 +16,5 @@ export class CreateBuildDto {
 
   @ApiProperty()
   @IsString()
-  readonly project: string;
+  readonly project!: string;
 }

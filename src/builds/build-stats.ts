@@ -38,7 +38,8 @@ export async function getBuildsStats(prisma: PrismaService, buildIds: string[]):
   ]);
 
   for (const row of statusCounts) {
-    const buildStats = stats.get(row.buildId);
+    // every row belongs to one of buildIds, and the map holds an entry for each
+    const buildStats = stats.get(row.buildId)!;
     const count = row._count._all;
     if (PASSED_STATUSES.includes(row.status)) {
       buildStats.passedCount += count;
@@ -49,7 +50,7 @@ export async function getBuildsStats(prisma: PrismaService, buildIds: string[]):
     }
   }
   for (const row of mergeBuilds) {
-    stats.get(row.buildId).merge = true;
+    stats.get(row.buildId)!.merge = true;
   }
   return stats;
 }

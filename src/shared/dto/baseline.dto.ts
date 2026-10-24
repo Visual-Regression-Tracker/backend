@@ -7,23 +7,23 @@ export class BaselineUserDto extends OmitType(UserDto, ['apiKey'] as const) {}
 
 export class BaselineDto {
   @ApiProperty()
-  id: string;
+  id!: string;
 
   @ApiProperty()
-  baselineName: string;
+  baselineName!: string;
 
   @ApiProperty()
-  testVariationId: string;
+  testVariationId!: string;
 
   @ApiProperty()
-  createdAt: Date;
+  createdAt!: Date;
 
   @ApiProperty()
-  updatedAt: Date;
+  updatedAt!: Date;
 
   @ApiProperty()
-  testRun: TestRunDto;
+  testRun!: TestRunDto | null;
 
   @ApiProperty({ type: BaselineUserDto })
-  user: BaselineUserDto;
+  user!: BaselineUserDto | null;
 }

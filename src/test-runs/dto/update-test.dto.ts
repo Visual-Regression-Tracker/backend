@@ -4,5 +4,5 @@ import { IsString } from 'class-validator';
 export class UpdateTestRunDto {
   @ApiProperty()
   @IsString()
-  readonly comment: string;
+  readonly comment!: string;
 }

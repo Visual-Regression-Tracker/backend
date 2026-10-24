@@ -45,7 +45,7 @@ export class HddService implements Static {
     return imageName;
   }
 
-  async getImage(imageName: string): Promise<PNGWithMetadata> {
+  async getImage(imageName: string | null): Promise<PNGWithMetadata | null | undefined> {
     const imageBuffer = await this.getImageBuffer(imageName);
     if (!imageBuffer) return;
     try {
@@ -55,7 +55,7 @@ export class HddService implements Static {
     }
   }
 
-  async getImageBuffer(imageName: string): Promise<Buffer | null> {
+  async getImageBuffer(imageName: string | null): Promise<Buffer | null> {
     if (!imageName) return null;
     try {
       return await fs.readFile(this.getImagePath(imageName));
@@ -76,7 +76,7 @@ export class HddService implements Static {
     return imageName;
   }
 
-  async deleteImage(imageName: string): Promise<boolean> {
+  async deleteImage(imageName: string | null): Promise<boolean | undefined> {
     if (!imageName) return;
     try {
       await fs.unlink(this.getImagePath(imageName));

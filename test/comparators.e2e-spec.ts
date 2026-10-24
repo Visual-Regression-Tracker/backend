@@ -13,12 +13,11 @@ import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { HddService } from '../src/static/hdd/hdd.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { OllamaService } from '../src/compare/libs/vlm/providers/ollama/ollama.service';
-import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
 import { IgnoreAreaDto } from '../src/test-runs/dto/ignore-area.dto';
 import { DEFAULT_CONFIG as LOOKS_SAME_DEFAULT_CONFIG } from '../src/compare/libs/looks-same/looks-same.service';
 import { DEFAULT_CONFIG as ODIFF_DEFAULT_CONFIG } from '../src/compare/libs/odiff/odiff.service';
 import { Response } from 'supertest';
-import { haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
+import { haveUserLogged, requestWithApiKey, requestWithAuth, LoggedUser } from './preconditions';
 
 /**
  * Every comparator end to end: a real project with the comparator selected,
@@ -70,7 +69,7 @@ describe('Comparators (e2e)', () => {
   let hddService: HddService;
   let prismaService: PrismaService;
   let ollamaService: OllamaService;
-  let user: UserLoginResponseDto;
+  let user: LoggedUser;
   const projectIds: string[] = [];
 
   beforeAll(async () => {
@@ -170,7 +169,9 @@ describe('Comparators (e2e)', () => {
     const res = await postTestRun(project, imageBuffer);
     expect(res.body.status).toBe(TestStatus.new);
     const approved = await testRunsService.approve(res.body.id);
-    const { baselineName } = await prismaService.testVariation.findUnique({ where: { id: approved.testVariationId } });
+    // approving gave the run a variation and the variation a baseline
+    const baselineName = (await prismaService.testVariation.findUnique({ where: { id: approved.testVariationId! } }))!
+      .baselineName!;
     expect(diffExists(baselineName)).toBe(true);
     return baselineName;
   };
@@ -722,7 +723,7 @@ describe('Comparators (e2e)', () => {
           .mockResolvedValue({ content: JSON.stringify({ identical: false, description: 'Changed' }) });
         // no imageComparisonConfig: the column default is a pixelmatch config
         const project = await projectsService.create({
-          ...projectBody(ImageComparison.vlm, undefined),
+          ...projectBody(ImageComparison.vlm, undefined as unknown as string),
         });
         projectIds.push(project.id);
         await haveBaseline(project);

@@ -2,8 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
-import { haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
-import { UserLoginResponseDto } from '../src/users/dto/user-login-response.dto';
+import { haveTestRunCreated, haveUserLogged, requestWithApiKey, requestWithAuth, LoggedUser } from './preconditions';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { Project, TestStatus } from '@prisma/client';
@@ -20,7 +19,7 @@ describe('TestRuns (e2e)', () => {
   let projecstService: ProjectsService;
   let buildsService: BuildsService;
   let testVariationsService: TestVariationsService;
-  let user: UserLoginResponseDto;
+  let user: LoggedUser;
   let project: Project;
 
   const image_v1 = './test/image.png';
@@ -250,7 +249,7 @@ describe('TestRuns (e2e)', () => {
       const result = await testRunsService.approve(testRun1.id);
 
       expect(result.status).toBe(TestStatus.approved);
-      const testVariation = await testVariationsService.getDetails(result.testVariationId);
+      const testVariation = (await testVariationsService.getDetails(result.testVariationId!))!;
       expect(testVariation.baselines).toHaveLength(1);
     });
 
@@ -266,7 +265,7 @@ describe('TestRuns (e2e)', () => {
       const result = await testRunsService.approve(testRun1.id);
 
       expect(result.status).toBe(TestStatus.approved);
-      const testVariation = await testVariationsService.getDetails(result.testVariationId);
+      const testVariation = (await testVariationsService.getDetails(result.testVariationId!))!;
       expect(testVariation.baselines).toHaveLength(1);
       expect(testVariation.branchName).toBe('develop');
     });
@@ -291,7 +290,7 @@ describe('TestRuns (e2e)', () => {
       const featureBranchResult = await testRunsService.approve(testRun2.id);
 
       expect(featureBranchResult.status).toBe(TestStatus.approved);
-      const testVariation = await testVariationsService.getDetails(featureBranchResult.testVariationId);
+      const testVariation = (await testVariationsService.getDetails(featureBranchResult.testVariationId!))!;
       expect(testVariation.baselines).toHaveLength(1);
       expect(testVariation.branchName).toBe('develop');
     });
@@ -325,7 +324,7 @@ describe('TestRuns (e2e)', () => {
 
       expect(result.status).toBe(TestStatus.approved);
       expect(result.baselineBranchName).toBe(project.mainBranchName);
-      const testVariation = await testVariationsService.getDetails(result.testVariationId);
+      const testVariation = (await testVariationsService.getDetails(result.testVariationId!))!;
       expect(testVariation.branchName).toBe('develop');
       expect(testVariation.baselines).toHaveLength(2);
     });
@@ -352,9 +351,9 @@ describe('TestRuns (e2e)', () => {
 
       expect(featureBranchResult.status).toBe(TestStatus.approved);
       expect(featureBranchResult.merge).toBe(true);
-      const mainBranchTestVariation = await testVariationsService.getDetails(mainBranchResult.testVariationId);
+      const mainBranchTestVariation = (await testVariationsService.getDetails(mainBranchResult.testVariationId!))!;
       expect(mainBranchTestVariation.baselines).toHaveLength(2);
-      expect(mainBranchTestVariation.baselines.shift().baselineName).toBe(mainBranchTestVariation.baselineName);
+      expect(mainBranchTestVariation.baselines.shift()!.baselineName).toBe(mainBranchTestVariation.baselineName);
     });
 
     it('approve feature branch testVariation', async () => {
@@ -377,7 +376,7 @@ describe('TestRuns (e2e)', () => {
       const featureBranchResult = await testRunsService.approve(testRun2.id);
 
       expect(featureBranchResult.status).toBe(TestStatus.approved);
-      const mainBranchTestVariation = await testVariationsService.getDetails(mainBranchResult.testVariationId);
+      const mainBranchTestVariation = (await testVariationsService.getDetails(mainBranchResult.testVariationId!))!;
       expect(mainBranchTestVariation.baselines).toHaveLength(1);
     });
 

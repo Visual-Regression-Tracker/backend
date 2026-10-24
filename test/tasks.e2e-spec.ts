@@ -78,10 +78,10 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, branchName, image);
     // merge keeps the variation on this branch instead of the main one
     const approved = await testRunsService.approve(testRun.id, true);
-    const variation = await prismaService.testVariation.findUnique({
-      where: { id: approved.testVariationId },
+    const variation = (await prismaService.testVariation.findUnique({
+      where: { id: approved.testVariationId! },
       include: { baselines: true },
-    });
+    }))!;
     expect(variation.branchName).toBe(branchName);
     expect(variation.baselines).toHaveLength(1);
     return { variation, testRun: approved };
@@ -125,7 +125,7 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     await waitUntil(() => !existsSync(oldBaselineFile));
 
     // the test runs stay in their builds, detached from the removed variation
-    const oldRun = await prismaService.testRun.findUnique({ where: { id: old.testRun.id } });
+    const oldRun = (await prismaService.testRun.findUnique({ where: { id: old.testRun.id } }))!;
     expect(oldRun).toMatchObject({ testVariationId: null, status: TestStatus.approved, branchName: 'feature/old' });
     expect(existsSync(hddService.getImagePath(oldRun.imageName))).toBe(true);
     // the kept variations keep their baselines
@@ -185,13 +185,13 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'feature/active', image);
     expect(testRun.status).toBe(TestStatus.ok);
     // a run that matches the baseline leaves the variation as it was
-    const { updatedAt } = await prismaService.testVariation.findUnique({ where: { id: feature.variation.id } });
+    const { updatedAt } = (await prismaService.testVariation.findUnique({ where: { id: feature.variation.id } }))!;
     expect(updatedAt.getTime()).toBeLessThan(Date.now() - 5 * DAY);
 
     await tasksService.cleanOldTestVariations();
 
     expect(await prismaService.testVariation.findUnique({ where: { id: feature.variation.id } })).not.toBeNull();
-    expect((await prismaService.testRun.findUnique({ where: { id: testRun.id } })).testVariationId).toBe(
+    expect((await prismaService.testRun.findUnique({ where: { id: testRun.id } }))!.testVariationId).toBe(
       feature.variation.id
     );
   });
