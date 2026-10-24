@@ -1,9 +1,10 @@
 name: Docker images
 
-# Builds visualregressiontracker/api and visualregressiontracker/migration for
-# linux/amd64 and linux/arm64 (Apple Silicon, Graviton), so docker compose runs
-# them natively instead of under emulation.
-# - pushing an api-vX.Y.Z or migration-vX.Y.Z tag publishes that image as X.Y.Z
+# Builds visualregressiontracker/api, visualregressiontracker/migration and
+# visualregressiontracker/dinov2 for linux/amd64 and linux/arm64 (Apple
+# Silicon, Graviton), so docker compose runs them natively instead of under
+# emulation.
+# - pushing an api-vX.Y.Z, migration-vX.Y.Z or dinov2-vX.Y.Z tag publishes that image as X.Y.Z
 # - "Run workflow" with an existing tag (re)publishes it, e.g. to add arm64 to a released version
 # - pull requests that touch the images only build them, without pushing
 # Publishing needs the DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets.
@@ -13,17 +14,19 @@ on:
     tags:
       - 'api-v*'
       - 'migration-v*'
+      - 'dinov2-v*'
   pull_request:
     branches: [master]
     paths:
       - Dockerfile
       - prisma/Dockerfile
       - prisma/schema.prisma
+      - dinov2/**
       - .github/workflows/docker.yml
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to publish, e.g. api-v5.7.0 or migration-v5.5.0
+        description: Existing tag to publish, e.g. api-v5.7.0, migration-v5.5.0 or dinov2-v1.0.0
         required: true
 
 # GITHUB_TOKEN is only used to check out the code; image pushes use the Docker Hub secrets
@@ -41,6 +44,8 @@ jobs:
             context: .
           - image: migration
             context: prisma
+          - image: dinov2
+            context: dinov2
 
     steps:
       - name: Resolve version

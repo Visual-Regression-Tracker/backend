@@ -390,7 +390,10 @@ export class TestRunsService {
           pixelMisMatchCount: diffResult && diffResult.pixelMisMatchCount,
           diffPercent: diffResult && diffResult.diffPercent,
           status: diffResult ? diffResult.status : TestStatus.new,
-          vlmDescription: diffResult && diffResult?.vlmDescription,
+          // null, not undefined: Prisma skips undefined, which would leave the
+          // previous comparison's analysis on a run recomputed without one —
+          // e.g. one the rendering-noise filter now passes before VLM is asked
+          vlmDescription: diffResult?.vlmDescription ?? null,
           // Always written, never merged: a recomputed diff — after the
           // reviewer edits the ignore areas, say — must not leave the previous
           // signature behind describing a change that no longer exists.
