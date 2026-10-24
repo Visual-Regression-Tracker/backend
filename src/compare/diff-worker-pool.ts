@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { Worker } from 'worker_threads';
 import { availableParallelism } from 'os';
 import { existsSync } from 'fs';
@@ -29,7 +29,7 @@ interface Job {
  * defaulting to cores - 1 (capped) so the main thread always has a core left.
  */
 @Injectable()
-export class DiffWorkerPool implements OnModuleDestroy {
+export class DiffWorkerPool implements OnApplicationShutdown {
   private readonly logger: Logger = new Logger(DiffWorkerPool.name);
   private readonly size = Math.max(
     1,
@@ -165,7 +165,9 @@ export class DiffWorkerPool implements OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy(): Promise<void> {
+  // After the HTTP server has stopped and drained its requests, so an upload
+  // still being compared at shutdown gets its result instead of an error
+  async onApplicationShutdown(): Promise<void> {
     this.destroyed = true;
     const shutdownError = new Error('Image diff worker pool is shutting down');
     for (const job of this.queue) {

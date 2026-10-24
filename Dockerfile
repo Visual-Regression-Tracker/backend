@@ -21,11 +21,16 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production
+# tini as PID 1: the kernel ignores a signal PID 1 has no handler for, so the
+# SIGTERM Nest re-raises after its shutdown hooks would never end a node PID 1.
+# It also reaps the processes odiff leaves behind.
+RUN apt-get update && apt-get install -y --no-install-recommends tini && rm -rf /var/lib/apt/lists/*
 # No WORKDIR: the app resolves imageUploads/ against /, where deployments
 # mount the image volume
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 EXPOSE 3000
-# node itself as PID 1 so SIGTERM reaches the app's shutdown hooks
+# node without npm in between, so SIGTERM reaches the app's shutdown hooks
+ENTRYPOINT [ "/usr/bin/tini", "--" ]
 CMD [ "node", "dist/main" ]

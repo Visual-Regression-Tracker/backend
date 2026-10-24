@@ -47,7 +47,7 @@ import { UsersService } from './users/users.service';
 
 type PrismaMock = {
   onModuleInit: jest.Mock;
-  onModuleDestroy: jest.Mock;
+  onApplicationShutdown: jest.Mock;
   $connect: jest.Mock;
   $disconnect: jest.Mock;
   $queryRaw: jest.Mock;
@@ -59,7 +59,7 @@ type PrismaMock = {
 // stand-ins: asserting they are called proves Nest still drives them
 const createPrismaMock = (): PrismaMock => ({
   onModuleInit: jest.fn().mockResolvedValue(undefined),
-  onModuleDestroy: jest.fn().mockResolvedValue(undefined),
+  onApplicationShutdown: jest.fn().mockResolvedValue(undefined),
   $connect: jest.fn().mockResolvedValue(undefined),
   $disconnect: jest.fn().mockResolvedValue(undefined),
   $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
@@ -298,13 +298,24 @@ describe('AppModule', () => {
     it('stops the cron jobs, the diff worker pool and every PrismaService on close', async () => {
       const [job] = [...get(SchedulerRegistry).getCronJobs().values()];
       const diffWorkerPool = get(DiffWorkerPool);
+      const closeHttp = jest.spyOn(app.getHttpAdapter(), 'close');
+      const stopWorkers = jest.spyOn(diffWorkerPool, 'onApplicationShutdown');
 
       await app.close();
+
+      // the database and the workers go only after the HTTP server has
+      // drained, so no request still running finds them closed
+      const httpClosedAt = closeHttp.mock.invocationCallOrder[0];
+      expect(httpClosedAt).toBeDefined();
+      expect(stopWorkers.mock.invocationCallOrder[0]).toBeGreaterThan(httpClosedAt);
+      prismaInstances.forEach((prisma) =>
+        expect(prisma.onApplicationShutdown.mock.invocationCallOrder[0]).toBeGreaterThan(httpClosedAt)
+      );
 
       expect(job.isActive).toBe(false);
       expect(get(SchedulerRegistry).getCronJobs().size).toBe(0);
       expect((diffWorkerPool as unknown as { destroyed: boolean }).destroyed).toBe(true);
-      prismaInstances.forEach((prisma) => expect(prisma.onModuleDestroy).toHaveBeenCalledTimes(1));
+      prismaInstances.forEach((prisma) => expect(prisma.onApplicationShutdown).toHaveBeenCalledTimes(1));
     });
   });
 });
