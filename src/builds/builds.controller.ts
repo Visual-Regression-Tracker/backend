@@ -97,6 +97,11 @@ export class BuildsController {
   @UseGuards(MixedGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   update(@Param('id', new ParseUUIDPipe()) id: string, @Body() modifyBuildDto?: ModifyBuildDto): Promise<BuildDto> {
+    // Released SDKs (sdk-js, agent-cypress, sdk-python, sdk-java) stop a build with an empty PATCH body.
+    // Express 5 leaves req.body undefined when there is no body, so handle both cases.
+    if (!modifyBuildDto || Object.keys(modifyBuildDto).length === 0) {
+      modifyBuildDto = { isRunning: false };
+    }
     return this.buildsService.update(id, modifyBuildDto);
   }
 

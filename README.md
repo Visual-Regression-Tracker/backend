@@ -56,6 +56,17 @@ break:
 Confirmed with a 4-replica deployment: nginx `ip_hash` + WebSocket upgrade fixes
 the handshake, but cross-replica event delivery still requires `REDIS_URL`.
 
+### Database connections
+
+Each API instance keeps one Prisma connection pool. By default it opens up to
+`num_physical_cpus * 2 + 1` connections, and idle connections stay open for
+reuse. Size the pool with the `connection_limit` parameter of `DATABASE_URL` so
+that `replicas * connection_limit` stays below Postgres `max_connections`
+(default 100), leaving room for migrations and admin tools:
+```
+DATABASE_URL=postgresql://user:password@postgres:5432/vrt?connection_limit=10
+```
+
 ## Local HTTPS config
 
 - Generate keys [here](https://www.selfsignedcertificate.com/)
