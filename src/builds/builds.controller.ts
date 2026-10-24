@@ -30,6 +30,7 @@ import { ProjectsService } from '../projects/projects.service';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
 import { CurrentUser } from '../shared/current-user.decorator';
+import type { WrapperType } from '../shared/wrapper-type';
 
 @Controller('builds')
 @ApiTags('builds')
@@ -37,7 +38,7 @@ export class BuildsController {
   constructor(
     private buildsService: BuildsService,
     @Inject(forwardRef(() => ProjectsService))
-    private projectService: ProjectsService
+    private projectService: WrapperType<ProjectsService>
   ) {}
 
   @Get()

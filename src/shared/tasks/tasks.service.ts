@@ -2,6 +2,7 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TestVariationsService } from '../../test-variations/test-variations.service';
+import type { WrapperType } from '../wrapper-type';
 
 // Advisory lock key of the cleanup, shared by every instance against the same
 // database: "VRT" and 1, a value nothing else in the database locks on
@@ -14,7 +15,7 @@ export class TasksService {
   constructor(
     private prismaService: PrismaService,
     @Inject(forwardRef(() => TestVariationsService))
-    private testVariationService: TestVariationsService
+    private testVariationService: WrapperType<TestVariationsService>
   ) {}
 
   /**

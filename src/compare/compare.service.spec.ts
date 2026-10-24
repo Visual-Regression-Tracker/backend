@@ -13,9 +13,16 @@ import { StaticModule } from '../static/static.module';
 import { StaticService } from '../static/static.service';
 import { Dinov2Service } from './libs/dinov2/dinov2.service';
 import { ImageComparison, TestStatus } from '@prisma/client';
-import * as utils from '../static/utils';
+import { isHddStaticServiceConfigured } from '../static/utils';
 import { ImageCompareInput } from './libs/ImageCompareInput';
 import { BlurredDifference, DEFAULT_BLUR_SIGMA, MAX_SOLID_SHARE } from './libs/pixelmatch/blur-amplitude.core';
+
+// a mock function in place of the export rather than a spy on it: SWC's
+// CommonJS exports are getters, which jest.spyOn cannot replace
+jest.mock('../static/utils', () => {
+  const actual = jest.requireActual('../static/utils');
+  return { ...actual, isHddStaticServiceConfigured: jest.fn(actual.isHddStaticServiceConfigured) };
+});
 
 jest.mock('zod/v3', () => {
   const actualZod = jest.requireActual('zod');
@@ -75,13 +82,13 @@ describe('CompareService', () => {
     });
 
     it('should return odiffService', () => {
-      jest.spyOn(utils, 'isHddStaticServiceConfigured').mockReturnValue(true);
+      jest.mocked(isHddStaticServiceConfigured).mockReturnValue(true);
 
       expect(service.getComparator(ImageComparison.odiff)).toBe(odiffService);
     });
 
     it('should throw if not HDD for Odiff', () => {
-      jest.spyOn(utils, 'isHddStaticServiceConfigured').mockReturnValue(false);
+      jest.mocked(isHddStaticServiceConfigured).mockReturnValue(false);
 
       expect(() => service.getComparator(ImageComparison.odiff)).toThrow(
         'Odiff can only be used with HDD static service. Please use another image comparison lib in project settings or switch STATIC_SERVICE envitonmental variable to HDD.'
@@ -269,7 +276,7 @@ describe('CompareService with mocked collaborators', () => {
     });
 
     it('passes an odiff failure that is only rendering noise', async () => {
-      jest.spyOn(utils, 'isHddStaticServiceConfigured').mockReturnValue(true);
+      jest.mocked(isHddStaticServiceConfigured).mockReturnValue(true);
       const { service } = await setup({ imageComparison: ImageComparison.odiff });
 
       const result = await service.getDiff({ projectId: 'projectId', data });

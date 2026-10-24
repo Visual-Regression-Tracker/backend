@@ -16,6 +16,7 @@ import { parseConfig } from '../compare/utils';
 import { DEFAULT_CONFIG } from '../compare/libs/pixelmatch/pixelmatch.service';
 import { PixelmatchConfig } from '../compare/libs/pixelmatch/pixelmatch.types';
 import { signaturesMatch, SIGNATURE_LENGTH } from '../compare/libs/pixelmatch/signature.core';
+import type { WrapperType } from '../shared/wrapper-type';
 
 @Injectable()
 export class TestRunsService {
@@ -24,7 +25,7 @@ export class TestRunsService {
 
   constructor(
     @Inject(forwardRef(() => TestVariationsService))
-    private testVariationService: TestVariationsService,
+    private testVariationService: WrapperType<TestVariationsService>,
     private prismaService: PrismaService,
     private staticService: StaticService,
     private compareService: CompareService,

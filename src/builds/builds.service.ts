@@ -7,6 +7,7 @@ import { BuildDto } from './dto/build.dto';
 import { getBuildsStats } from './build-stats';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
+import type { WrapperType } from '../shared/wrapper-type';
 
 // Newest first, with the id to break a tie: without a total order two builds
 // made in the same instant have no fixed place, so an offset page could show
@@ -23,7 +24,7 @@ export class BuildsService {
     private prismaService: PrismaService,
     private eventsGateway: EventsGateway,
     @Inject(forwardRef(() => TestRunsService))
-    private testRunsService: TestRunsService
+    private testRunsService: WrapperType<TestRunsService>
   ) {}
 
   async findOne(id: string): Promise<BuildDto> {

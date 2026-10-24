@@ -9,6 +9,7 @@ import { BuildDto } from '../builds/dto/build.dto';
 import { getTestVariationUniqueData } from '../utils';
 import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
+import type { WrapperType } from '../shared/wrapper-type';
 
 @Injectable()
 export class TestVariationsService {
@@ -18,9 +19,9 @@ export class TestVariationsService {
     private prismaService: PrismaService,
     private staticService: StaticService,
     @Inject(forwardRef(() => TestRunsService))
-    private testRunsService: TestRunsService,
+    private testRunsService: WrapperType<TestRunsService>,
     @Inject(forwardRef(() => BuildsService))
-    private buildsService: BuildsService
+    private buildsService: WrapperType<BuildsService>
   ) {}
 
   async getDetails(id: string): Promise<
