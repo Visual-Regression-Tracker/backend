@@ -112,4 +112,21 @@ describe('getUrlAndRedirect', () => {
     expect(errorSpy).toHaveBeenCalledWith('Error fetching file from S3:image.png', error);
     errorSpy.mockRestore();
   });
+
+  // a leading slash would come back as a protocol-relative Location such as
+  // '//example.com', sending the browser to another host
+  it.each(['/example.com', '//example.com', 'nested/image.png', '..', '.', ''])(
+    'refuses %p before asking storage for a URL',
+    async (fileName) => {
+      const getImageUrlMock = jest.fn();
+      const controller = await initController(jest.fn(), getImageUrlMock);
+      const res = responseMock();
+
+      await expect(controller.getUrlAndRedirect(fileName, res)).rejects.toThrow(
+        new BadRequestException('Invalid image name')
+      );
+      expect(getImageUrlMock).not.toHaveBeenCalled();
+      expect(res.redirect).not.toHaveBeenCalled();
+    }
+  );
 });

@@ -83,13 +83,17 @@ describe('Images (e2e)', () => {
       expect(res.headers.location).toBe('/missing.screenshot.png');
     });
 
-    it('a name starting with a slash', async () => {
-      // NOTE: current behavior — the name is prefixed with '/' unchecked, so an encoded leading slash yields a
-      // protocol-relative Location: an open redirect to another host
-      const res = await get('/images/%2Fexample.com').expect(302);
+    // a leading slash used to come back as a protocol-relative Location
+    // ('//example.com'): an open redirect to another host
+    it.each(['%2Fexample.com', '%2F%2Fexample.com', 'nested%2Fimage.png', '..'])(
+      'refuses %s as an image name instead of redirecting',
+      async (name) => {
+        const res = await get(`/images/${name}`).expect(400);
 
-      expect(res.headers.location).toBe('//example.com');
-    });
+        expect(res.headers.location).toBeUndefined();
+        expect(res.body.message).toBe('Invalid image name');
+      }
+    );
 
     it('500 when storage cannot produce a URL', async () => {
       jest.spyOn(staticService, 'getImageUrl').mockRejectedValueOnce(new Error('storage down'));

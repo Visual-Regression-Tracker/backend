@@ -99,7 +99,7 @@ describe('TestVariationsService', () => {
           baselines: {
             include: {
               testRun: true,
-              user: true,
+              user: { omit: { password: true, apiKey: true } },
             },
             orderBy: {
               createdAt: 'desc',
