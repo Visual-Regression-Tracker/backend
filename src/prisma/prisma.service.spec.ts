@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PrismaService } from './prisma.service';
+import { availableParallelism } from 'os';
+import { getPgOptions, PrismaService } from './prisma.service';
 
 describe('PrismaService', () => {
   let service: PrismaService;
@@ -43,5 +44,35 @@ describe('PrismaService', () => {
     await service.onModuleDestroy();
 
     expect(disconnectSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getPgOptions', () => {
+  const url = 'postgresql://user:secret@db:5432/vrt';
+
+  it('keeps the Prisma 6 pool defaults when the URL sets none', () => {
+    expect(getPgOptions(url)).toEqual({
+      pool: { connectionString: url, max: availableParallelism() * 2 + 1, connectionTimeoutMillis: 10000 },
+      schema: undefined,
+    });
+  });
+
+  it('takes the pool size and timeouts from the Prisma URL parameters', () => {
+    const tuned = `${url}?connection_limit=4&connect_timeout=20&pool_timeout=3`;
+
+    expect(getPgOptions(tuned).pool).toEqual({ connectionString: tuned, max: 4, connectionTimeoutMillis: 20000 });
+  });
+
+  it('turns a zero timeout into no timeout, as Prisma 6 did', () => {
+    expect(getPgOptions(`${url}?connect_timeout=0&pool_timeout=0`).pool.connectionTimeoutMillis).toBeUndefined();
+  });
+
+  it('passes the schema parameter on to the adapter', () => {
+    expect(getPgOptions(`${url}?schema=vrt`).schema).toBe('vrt');
+  });
+
+  it('falls back to the defaults for an unparsable or missing URL', () => {
+    expect(getPgOptions(undefined).pool.max).toBe(availableParallelism() * 2 + 1);
+    expect(getPgOptions('not a url').schema).toBeUndefined();
   });
 });

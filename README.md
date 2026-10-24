@@ -2,7 +2,7 @@
 
 ## Local setup
 
-- Install Node `20` (LTS) or newer
+- Install Node `24` (LTS), 24.15 or newer
 - clone repo
 - Update `.env` and `prisma/.env` (`DATABASE_URL` in `prisma/.env` must match the `POSTGRES_*` values in `.env`)
 - Start Postgres `docker compose up -d postgres`

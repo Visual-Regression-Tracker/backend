@@ -30,6 +30,9 @@ async function bootstrap() {
     httpsOptions: getHttpsOptions(),
   });
   app.useGlobalPipes(new ValidationPipe());
+  // On SIGTERM, close the server and run the providers' teardown (diff
+  // workers, database pool) so a rolling deploy does not cut requests short
+  app.enableShutdownHooks();
 
   // Large builds return multi-megabyte test-run lists; gzip shrinks them ~10x.
   // Images are already-compressed PNGs — recompressing them wastes CPU.

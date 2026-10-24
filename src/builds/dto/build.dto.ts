@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Build, TestStatus } from '@prisma/client';
-import { TestRunDto } from 'src/test-runs/dto/testRun.dto';
+import { TestRunDto } from '../../test-runs/dto/testRun.dto';
 import { BuildStats } from '../build-stats';
 
 export class BuildDto {

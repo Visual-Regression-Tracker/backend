@@ -1,5 +1,3 @@
-import { createDefaultPreset } from 'ts-jest';
-
 /** @returns {Promise<import('jest').Config>} */
 module.exports = async () => {
   return {
@@ -8,7 +6,7 @@ module.exports = async () => {
     testTimeout: 30000,
     testRegex: '.e2e-spec.ts$',
     transform: {
-      ...createDefaultPreset().transform,
+      '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/../tsconfig.jest.json' }],
     },
     coverageDirectory: '../coverage',
     testEnvironment: 'node',

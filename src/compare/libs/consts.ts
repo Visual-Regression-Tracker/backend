@@ -1,5 +1,5 @@
 import { TestStatus } from '@prisma/client';
-import { DiffResult } from 'src/test-runs/diffResult';
+import { DiffResult } from '../../test-runs/diffResult';
 
 export const NO_BASELINE_RESULT: DiffResult = {
   status: undefined,

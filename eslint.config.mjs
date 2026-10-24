@@ -7,7 +7,7 @@ export default [
     languageOptions: {
       parser: typescriptParser,
       parserOptions: {
-        project: 'tsconfig.json',
+        project: ['tsconfig.json', 'prisma/tsconfig.json'],
         sourceType: 'module',
       },
       globals: {

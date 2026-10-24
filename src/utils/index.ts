@@ -1,5 +1,5 @@
 import { TestRun, TestVariation } from '@prisma/client';
-import { BaselineDataDto } from 'src/shared/dto/baseline-data.dto';
+import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 
 export const getTestVariationUniqueData = (
   object: TestRun | TestVariation | BaselineDataDto

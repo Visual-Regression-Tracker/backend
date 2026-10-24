@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { HealthCheckService, HealthCheck } from '@nestjs/terminus';
+import { HealthCheckService, HealthCheck, HealthIndicatorResult } from '@nestjs/terminus';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 
@@ -15,6 +15,7 @@ export class HealthController {
   @ApiOkResponse({ type: Object })
   @HealthCheck()
   check() {
-    return this.health.check([() => this.prismaService.$queryRaw`SELECT 1`]);
+    // the raw query result has always been passed through as the indicator result
+    return this.health.check([() => this.prismaService.$queryRaw<HealthIndicatorResult>`SELECT 1`]);
   }
 }

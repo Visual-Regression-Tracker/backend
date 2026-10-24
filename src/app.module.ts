@@ -17,7 +17,12 @@ import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      // Prisma 6 read DATABASE_URL from prisma/.env on its own; Prisma 7 reads
+      // no env files, so load it here for local runs (.env wins on conflicts)
+      envFilePath: ['.env', 'prisma/.env'],
+    }),
     PrismaModule,
     ScheduleModule.forRoot(),
     AuthModule,

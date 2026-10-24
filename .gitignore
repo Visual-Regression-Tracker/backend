@@ -37,3 +37,6 @@ lerna-debug.log*
 
 /imageUploads
 /secrets
+
+# TypeScript incremental build info
+*.tsbuildinfo
