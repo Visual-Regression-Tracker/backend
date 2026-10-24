@@ -1,4 +1,17 @@
-import { Controller, Post, Body, Get, UseGuards, Put, Delete, Patch, Req, Res, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  UseGuards,
+  Put,
+  Delete,
+  Patch,
+  Req,
+  Res,
+  HttpStatus,
+  Header,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 import { UsersService } from './users.service';
 import { ApiOkResponse, ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -58,6 +71,8 @@ export class UsersController {
 
   @Get('oidc/enabled')
   @ApiOkResponse({ type: Boolean })
+  // Nest sends a bare boolean as text/html; the body is already JSON, so say so
+  @Header('Content-Type', 'application/json')
   oidcEnabled(): boolean {
     return this.usersService.isOidcEnabled();
   }

@@ -268,15 +268,13 @@ describe('Users admin and RBAC (e2e)', () => {
     });
   });
 
-  // NOTE: current behavior — a boolean handler result is sent as the text "true"/"false"
-  // with a text/html content type, not as JSON
   describe('OIDC disabled (default DB users)', () => {
     it('GET /users/oidc/enabled is false', () =>
       request(app.getHttpServer())
         .get('/users/oidc/enabled')
         .expect(200)
-        .expect('Content-Type', 'text/html; charset=utf-8')
-        .expect('false'));
+        .expect('Content-Type', 'application/json; charset=utf-8')
+        .expect((res) => expect(res.body).toBe(false)));
 
     it.each(['/users/oidc/login', '/users/oidc/callback?code=abc&state=xyz'])('GET %s is 404', (url) =>
       request(app.getHttpServer()).get(url).expect(404).expect('OIDC is not enabled.')
@@ -469,8 +467,8 @@ describe('Users OIDC (e2e)', () => {
     request(app.getHttpServer())
       .get('/users/oidc/enabled')
       .expect(200)
-      .expect('Content-Type', 'text/html; charset=utf-8')
-      .expect('true'));
+      .expect('Content-Type', 'application/json; charset=utf-8')
+      .expect((res) => expect(res.body).toBe(true)));
 
   it('GET /users/oidc/login redirects to the provider with PKCE and keeps state in a cookie', async () => {
     const { state, location, setCookie } = await startLogin({});
