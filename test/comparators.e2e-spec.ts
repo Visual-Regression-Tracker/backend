@@ -222,17 +222,29 @@ describe('Comparators (e2e)', () => {
     );
 
     it(
-      'ignores diffTollerancePercent',
+      'ok, without a diff, when the change is within diffTollerancePercent',
       async () => {
         const project = await haveProject(ImageComparison.lookSame);
         await haveBaseline(project);
 
         const res = await postTestRun(project, imageEdited, { diffTollerancePercent: 100 });
 
-        // NOTE: current behavior — looks-same never reads diffTollerancePercent, so a
-        // tolerance that would make pixelmatch/odiff report ok still leaves the run unresolved
-        expect(res.body.diffTollerancePercent).toBe(100);
+        expect(res.body).toMatchObject({ diffTollerancePercent: 100, status: TestStatus.ok, diffName: null });
+        expect(res.body.pixelMisMatchCount).toBeGreaterThan(0);
+      },
+      SLOW_TEST
+    );
+
+    it(
+      'unresolved when the change is over diffTollerancePercent',
+      async () => {
+        const project = await haveProject(ImageComparison.lookSame);
+        await haveBaseline(project);
+
+        const res = await postTestRun(project, imageEdited, { diffTollerancePercent: 0.01 });
+
         expect(res.body.status).toBe(TestStatus.unresolved);
+        expect(diffExists(res.body.diffName)).toBe(true);
       },
       SLOW_TEST
     );
