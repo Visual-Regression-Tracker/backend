@@ -1,5 +1,8 @@
 # Stage 1: turn the model into one ONNX file. PyTorch is needed only here.
-FROM python:3.12-slim AS export
+# The file is the same on every architecture, so it is exported once on the
+# builder's own platform: an arm64 image built on amd64 CI does not run
+# PyTorch under QEMU.
+FROM --platform=$BUILDPLATFORM python:3.12-slim AS export
 WORKDIR /export
 RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.14.1 \
  && pip install --no-cache-dir transformers==5.20.2 onnx==1.23.2 onnxruntime==1.31.0 numpy==2.5.4
