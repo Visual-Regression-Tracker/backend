@@ -1525,7 +1525,7 @@ describe('TestRunsService', () => {
   });
 
   describe('saveDiffResult details', () => {
-    it('stores an absent analysis as undefined rather than null', async () => {
+    it('clears the analysis of a previous comparison when this one has none', async () => {
       const testRunUpdateMock = jest.fn().mockResolvedValueOnce(generateTestRun());
       service = await initService({ testRunUpdateMock });
 
@@ -1542,7 +1542,7 @@ describe('TestRunsService', () => {
         pixelMisMatchCount: 0,
         diffPercent: 0,
         status: TestStatus.ok,
-        vlmDescription: undefined,
+        vlmDescription: null,
         changeSignature: null,
         imageThumbnailName: null,
         diffThumbnailName: null,
