@@ -118,7 +118,7 @@ describe('Dinov2Service', () => {
 
     const [url, request] = fetchMock.mock.calls[0];
     expect(url).toBe('http://dinov2:8000/v1/patch-distances');
-    expect(JSON.parse(request.body as string)).toEqual({
+    expect(JSON.parse(request?.body as string)).toEqual({
       baseline: Buffer.from('baseline').toString('base64'),
       image: Buffer.from('image').toString('base64'),
       tiles: [[0, 0]],
