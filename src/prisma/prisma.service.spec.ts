@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { availableParallelism } from 'os';
-import { getPgOptions, PrismaService } from './prisma.service';
+import { getPgOptions, physicalCpuCount, PrismaService } from './prisma.service';
 
 describe('PrismaService', () => {
   let service: PrismaService;
@@ -48,9 +48,37 @@ describe('PrismaService', () => {
   });
 });
 
+describe('physicalCpuCount', () => {
+  const processor = (id: number, physicalId: number, coreId: number) =>
+    `processor\t: ${id}\nmodel name\t: x86\nphysical id\t: ${physicalId}\ncore id\t\t: ${coreId}\n`;
+
+  it('counts each physical core once, however many hyper-threads it runs', () => {
+    // two sockets, two cores each, two threads per core
+    const cpuinfo = [0, 1, 2, 3, 4, 5, 6, 7]
+      .map((id) => processor(id, Math.floor(id / 4), Math.floor(id / 2) % 2))
+      .join('\n');
+
+    expect(physicalCpuCount(cpuinfo)).toBe(4);
+  });
+
+  it('tells apart cores with the same id on different sockets', () => {
+    expect(physicalCpuCount([processor(0, 0, 0), processor(1, 1, 0)].join('\n'))).toBe(2);
+  });
+
+  it.each([
+    [
+      'cpuinfo without physical/core ids (ARM)',
+      'processor\t: 0\nBogoMIPS\t: 48.00\n\nprocessor\t: 1\nBogoMIPS\t: 48.00\n',
+    ],
+    ['no cpuinfo at all (macOS)', ''],
+  ])('falls back to the logical count for %s', (_, cpuinfo) => {
+    expect(physicalCpuCount(cpuinfo)).toBe(availableParallelism());
+  });
+});
+
 describe('getPgOptions', () => {
   const url = 'postgresql://user:secret@db:5432/vrt';
-  const defaultMax = availableParallelism() * 2 + 1;
+  const defaultMax = physicalCpuCount() * 2 + 1;
 
   it('keeps the Prisma 6 pool defaults when the URL sets none', () => {
     expect(getPgOptions(url)).toEqual({
