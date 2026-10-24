@@ -55,6 +55,20 @@ describe('computeChangeSignature', () => {
     expect(signatureOf(blank, PNG.sync.write(taller))).toBeNull();
   });
 
+  it('has no signature for a checkpoint with the same pixel count but another shape', () => {
+    const wide = new PNG({ width: WIDTH * 2, height: HEIGHT / 2 });
+    wide.data.fill(0);
+
+    expect(signatureOf(blank, PNG.sync.write(wide))).toBeNull();
+  });
+
+  it('has no signature for a checkpoint of another width only', () => {
+    const wider = new PNG({ width: WIDTH * 2, height: HEIGHT });
+    wider.data.fill(0);
+
+    expect(signatureOf(blank, PNG.sync.write(wider))).toBeNull();
+  });
+
   it('has no signature when nothing changed', () => {
     expect(signatureOf(blank, blank)).toBeNull();
   });

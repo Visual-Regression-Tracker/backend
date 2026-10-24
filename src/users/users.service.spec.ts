@@ -162,7 +162,7 @@ describe('UsersService with DbUserService implementation', () => {
     await service.delete(user.id);
 
     // Assert
-    expect(prismaUserDeleteMock).toHaveBeenCalled();
+    expect(prismaUserDeleteMock).toHaveBeenCalledWith({ where: { id: user.id } });
   });
 
   describe('deleteMany', () => {
@@ -196,6 +196,14 @@ describe('UsersService with DbUserService implementation', () => {
 
     // Assert
     expect(result).toBeInstanceOf(UserDto);
+    expect(prismaService.user.findUnique).toHaveBeenCalledWith({ where: { id: user.id } });
+  });
+
+  it('looks a user up by id', async () => {
+    const found = await service.findOne(user.id);
+
+    expect(found).toBe(user);
+    expect(prismaService.user.findUnique).toHaveBeenCalledWith({ where: { id: user.id } });
   });
 
   it('should assign role to user', async () => {

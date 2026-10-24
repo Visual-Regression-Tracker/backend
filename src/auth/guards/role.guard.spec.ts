@@ -2,6 +2,7 @@ import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role, User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Roles } from '../../shared/roles.decorator';
 import { RoleGuard } from './role.guard';
 
 const userWithRole = (role: Role): User => ({ id: '1', role }) as User;
@@ -79,5 +80,39 @@ describe('RoleGuard', () => {
     prismaService.user.findUnique.mockResolvedValue(null);
 
     await expect(guard.canActivate(context(undefined, 'unknown'))).resolves.toBe(false);
+  });
+  describe('with the @Roles metadata', () => {
+    @Roles(Role.admin)
+    class AdminController {
+      inherited(): void {}
+
+      @Roles(Role.editor)
+      overridden(): void {}
+    }
+
+    const decoratedContext = (handler: () => void, user: User): ExecutionContext =>
+      ({
+        switchToHttp: () => ({ getRequest: () => ({ user, header: jest.fn() }) }),
+        getHandler: () => handler,
+        getClass: () => AdminController,
+      }) as unknown as ExecutionContext;
+
+    beforeEach(() => {
+      guard = new RoleGuard(prismaService as unknown as PrismaService, new Reflector());
+    });
+
+    it('applies the roles declared on the controller class', async () => {
+      const handler = AdminController.prototype.inherited;
+
+      await expect(guard.canActivate(decoratedContext(handler, userWithRole(Role.editor)))).resolves.toBe(false);
+      await expect(guard.canActivate(decoratedContext(handler, userWithRole(Role.admin)))).resolves.toBe(true);
+    });
+
+    it('lets the roles on the handler override the class', async () => {
+      const handler = AdminController.prototype.overridden;
+
+      await expect(guard.canActivate(decoratedContext(handler, userWithRole(Role.editor)))).resolves.toBe(true);
+      await expect(guard.canActivate(decoratedContext(handler, userWithRole(Role.admin)))).resolves.toBe(false);
+    });
   });
 });

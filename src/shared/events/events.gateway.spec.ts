@@ -154,6 +154,19 @@ describe('EventsGateway', () => {
       expect(emitsOf(emitMock, 'testRun_deleted')).toEqual([[testRunB]]);
     });
 
+    it('keeps the other queued updates when one updated test run is deleted', async () => {
+      const { gateway, emitMock } = await initGateway({});
+
+      gateway.testRunUpdated(testRunA);
+      gateway.testRunUpdated(testRunB);
+      gateway.testRunUpdated(testRunC);
+      gateway.testRunDeleted(testRunB);
+
+      jest.advanceTimersByTime(1500);
+
+      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([[testRunA], [testRunC]]);
+    });
+
     it('still emits an empty batch once every queued entry was deleted', async () => {
       const { gateway, emitMock } = await initGateway({});
 
