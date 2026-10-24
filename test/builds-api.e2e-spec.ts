@@ -310,16 +310,25 @@ describe('Builds API (e2e)', () => {
       expect(res.body).toMatchObject({ id: build.id, isRunning: false, ciBuildId: 'ci-77' });
     });
 
-    it('other build columns', async () => {
+    it('400 for other build columns, leaving the build as it was', async () => {
       const build = await newBuild();
 
-      // NOTE: current behavior — ModifyBuildDto is an interface, so nothing validates the body and any build column
-      // is written as sent
       const res = await requestWithApiKey(app, 'patch', `/builds/${build.id}`, user.apiKey)
         .send({ branchName: 'rewritten', number: 4242 })
-        .expect(200);
+        .expect(400);
 
-      expect(res.body).toMatchObject({ branchName: 'rewritten', number: 4242 });
+      expect(res.body.message).toContain('property branchName should not exist');
+      expect(await prisma.build.findUnique({ where: { id: build.id } })).toMatchObject({
+        branchName: build.branchName,
+        number: build.number,
+        isRunning: true,
+      });
+    });
+
+    it('400 for a value of the wrong type', async () => {
+      const build = await newBuild();
+
+      await requestWithApiKey(app, 'patch', `/builds/${build.id}`, user.apiKey).send({ isRunning: 'no' }).expect(400);
     });
 
     it('a CI build id already used by another build of the project', async () => {

@@ -13,6 +13,7 @@ import {
   ParseBoolPipe,
   forwardRef,
   Inject,
+  ValidationPipe,
   NotFoundException,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
@@ -104,7 +105,12 @@ export class BuildsController {
   @ApiBearerAuth()
   @UseGuards(MixedGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() modifyBuildDto?: ModifyBuildDto): Promise<BuildDto> {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    // forbidNonWhitelisted: a body naming any other column is refused, rather
+    // than written to the build or silently dropped (an emptied body would stop it)
+    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) modifyBuildDto?: ModifyBuildDto
+  ): Promise<BuildDto> {
     // Released SDKs (sdk-js, agent-cypress, sdk-python, sdk-java) stop a build with an empty PATCH body.
     // Express 5 leaves req.body undefined when there is no body, so handle both cases.
     if (!modifyBuildDto || Object.keys(modifyBuildDto).length === 0) {

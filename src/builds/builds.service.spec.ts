@@ -6,6 +6,7 @@ import { EventsGateway } from '../shared/events/events.gateway';
 import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { mocked, MockedObject } from 'jest-mock';
 import { BuildDto } from './dto/build.dto';
+import { ModifyBuildDto } from './dto/build-modify.dto';
 import { NotFoundException } from '@nestjs/common';
 import { ProjectsService } from '../projects/projects.service';
 import { generateTestRun, TEST_PROJECT } from '../_data_';
@@ -151,6 +152,16 @@ describe('BuildsService', () => {
     service = await initService({ buildFindUniqueMock, testRunGroupByMock });
 
     await expect(service.findOne('missing')).rejects.toThrow(new NotFoundException('Build not found: missing'));
+  });
+
+  it('update writes only the columns a client may change', async () => {
+    const buildUpdateMock = jest.fn();
+    service = await initService({ buildUpdateMock, eventsBuildUpdatedMock: jest.fn() });
+    service.findOne = jest.fn();
+
+    await service.update('id', { isRunning: false, ciBuildId: 'ci', branchName: 'other' } as ModifyBuildDto);
+
+    expect(buildUpdateMock.mock.calls[0][0].data).toStrictEqual({ ciBuildId: 'ci', isRunning: false });
   });
 
   it('findMany', async () => {

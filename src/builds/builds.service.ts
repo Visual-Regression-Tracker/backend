@@ -110,7 +110,8 @@ export class BuildsService {
   async update(id: string, modifyBuildDto: ModifyBuildDto): Promise<BuildDto> {
     await this.prismaService.build.update({
       where: { id },
-      data: modifyBuildDto,
+      // named one by one so nothing else a caller passes can reach the row
+      data: { ciBuildId: modifyBuildDto.ciBuildId, isRunning: modifyBuildDto.isRunning },
     });
     this.eventsGateway.buildUpdated(id);
     return this.findOne(id);
