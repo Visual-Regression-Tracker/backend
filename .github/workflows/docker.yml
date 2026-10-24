@@ -26,6 +26,10 @@ on:
         description: Existing tag to publish, e.g. api-v5.7.0 or migration-v5.5.0
         required: true
 
+# GITHUB_TOKEN is only used to check out the code; image pushes use the Docker Hub secrets
+permissions:
+  contents: read
+
 jobs:
   docker:
     runs-on: ubuntu-22.04
@@ -60,7 +64,10 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.version.outputs.build == 'true'
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          # a manual run checks out the tag itself, never a branch with the same name
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          # keep the token out of .git/config, which is part of the build context
+          persist-credentials: false
 
       - name: Set up QEMU
         if: steps.version.outputs.build == 'true'
