@@ -13,7 +13,16 @@ describe('Users Controller', () => {
     oidcGetAuthorizationUrl: jest.Mock;
     oidcBuildFrontendRedirect: jest.Mock;
     oidcHandleCallback: jest.Mock;
+    create: jest.Mock;
+    login: jest.Mock;
+    generateNewApiKey: jest.Mock;
+    changePassword: jest.Mock;
+    update: jest.Mock;
+    delete: jest.Mock;
+    assignRole: jest.Mock;
   };
+  let prismaService: { user: { findMany: jest.Mock } };
+  let configService: { get: jest.Mock };
 
   const user: User = {
     id: '1',
@@ -34,14 +43,23 @@ describe('Users Controller', () => {
       oidcGetAuthorizationUrl: jest.fn(),
       oidcBuildFrontendRedirect: jest.fn(),
       oidcHandleCallback: jest.fn(),
+      create: jest.fn(),
+      login: jest.fn(),
+      generateNewApiKey: jest.fn(),
+      changePassword: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      assignRole: jest.fn(),
     };
+    prismaService = { user: { findMany: jest.fn() } };
+    configService = { get: jest.fn((_key: string, defaultValue?: string) => defaultValue) };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
       providers: [
         { provide: UsersService, useValue: usersService },
-        { provide: PrismaService, useValue: {} },
-        { provide: ConfigService, useValue: { get: jest.fn((_key: string, defaultValue?: string) => defaultValue) } },
+        { provide: PrismaService, useValue: prismaService },
+        { provide: ConfigService, useValue: configService },
       ],
     }).compile();
 
@@ -153,5 +171,182 @@ describe('Users Controller', () => {
 
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.send).toHaveBeenCalled();
+  });
+
+  describe('OIDC cookie handling', () => {
+    const okResponse = () => ({
+      clearCookie: jest.fn(),
+      redirect: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    });
+
+    beforeEach(() => {
+      usersService.isOidcEnabled.mockReturnValue(true);
+      usersService.oidcBuildFrontendRedirect.mockImplementation((token?: string, error?: string) =>
+        token ? `front#token=${token}` : `front#error=${error}`
+      );
+    });
+
+    it('finds the state cookie among other cookies and decodes it', async () => {
+      usersService.oidcHandleCallback.mockResolvedValue({ token: 'jwt' });
+      const res = okResponse();
+
+      await controller.oidcCallback(
+        { headers: { cookie: 'a=1; oidc_state=st%2Ea.ver=ifier; b=2' }, query: {} } as never,
+        res as never
+      );
+
+      // "=" inside the value is kept; after decoding it is split on every "." and
+      // only the first two parts are used.
+      // NOTE: current behavior — a verifier containing "." (allowed by RFC 7636) would be truncated
+      expect(usersService.oidcHandleCallback).toHaveBeenCalledWith({}, { state: 'st', codeVerifier: 'a' });
+      expect(res.clearCookie).toHaveBeenCalledWith('oidc_state', { path: '/' });
+      expect(res.redirect).toHaveBeenCalledWith('front#token=jwt');
+    });
+
+    it('fails the callback when other cookies are present but not the state cookie', async () => {
+      const res = okResponse();
+
+      await controller.oidcCallback({ headers: { cookie: 'a=1; b=2' }, query: {} } as never, res as never);
+
+      expect(usersService.oidcHandleCallback).not.toHaveBeenCalled();
+      expect(usersService.oidcBuildFrontendRedirect).toHaveBeenCalledWith(undefined, 'oidc_login_failed');
+      expect(res.clearCookie).toHaveBeenCalledWith('oidc_state', { path: '/' });
+      expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
+    });
+
+    it('fails the callback when the identity provider rejects the code', async () => {
+      usersService.oidcHandleCallback.mockRejectedValue(new Error('invalid_grant'));
+      const res = okResponse();
+
+      await controller.oidcCallback(
+        { headers: { cookie: 'oidc_state=state.verifier' }, query: { code: 'c' } } as never,
+        res as never
+      );
+
+      expect(res.clearCookie).toHaveBeenCalledWith('oidc_state', { path: '/' });
+      expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
+    });
+
+    it('fails the callback when the identity provider rejects with a non-Error', async () => {
+      usersService.oidcHandleCallback.mockRejectedValue('plain failure');
+      const res = okResponse();
+
+      await controller.oidcCallback(
+        { headers: { cookie: 'oidc_state=state.verifier' }, query: {} } as never,
+        res as never
+      );
+
+      expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
+    });
+
+    it.each([
+      ['https://vrt.example.com/callback', true],
+      ['http://localhost:4200/callback', false],
+    ])('marks the state cookie secure based on OIDC_REDIRECT_URI %s', async (redirectUri, secure) => {
+      configService.get.mockImplementation((key: string, defaultValue?: string) =>
+        key === 'OIDC_REDIRECT_URI' ? redirectUri : defaultValue
+      );
+      usersService.oidcGetAuthorizationUrl.mockResolvedValue({ url: 'idp', state: 's', codeVerifier: 'v' });
+      const res = { cookie: jest.fn(), redirect: jest.fn() };
+
+      await controller.oidcLogin(res as never);
+
+      expect(configService.get).toHaveBeenCalledWith('OIDC_REDIRECT_URI', '');
+      expect(res.cookie).toHaveBeenCalledWith('oidc_state', 's.v', {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure,
+        maxAge: 600000,
+        path: '/',
+      });
+    });
+
+    it('redirects to the login page when the authorization url rejects with a non-Error', async () => {
+      usersService.oidcGetAuthorizationUrl.mockRejectedValue('plain failure');
+      const res = { cookie: jest.fn(), redirect: jest.fn() };
+
+      await controller.oidcLogin(res as never);
+
+      expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
+    });
+  });
+
+  describe('account handlers', () => {
+    it('registers a user', async () => {
+      const dto = { email: 'new@example.com', firstName: 'N', lastName: 'U', password: 'secret' };
+      usersService.create.mockResolvedValue('registered');
+
+      await expect(controller.register(dto)).resolves.toBe('registered');
+      expect(usersService.create).toHaveBeenCalledWith(dto);
+    });
+
+    it('logs a user in', async () => {
+      const dto = { email: 'test@example.com', password: 'secret' };
+      usersService.login.mockResolvedValue('logged in');
+
+      await expect(controller.login(dto)).resolves.toBe('logged in');
+      expect(usersService.login).toHaveBeenCalledWith(dto);
+    });
+
+    it('generates a new api key for the current user', async () => {
+      usersService.generateNewApiKey.mockResolvedValue('new-key');
+
+      await expect(controller.generateNewApiKey(user)).resolves.toBe('new-key');
+      expect(usersService.generateNewApiKey).toHaveBeenCalledWith(user);
+    });
+
+    it('changes the password of the current user', async () => {
+      usersService.changePassword.mockResolvedValue(true);
+
+      await expect(controller.changePassword(user, 'new password')).resolves.toBe(true);
+      expect(usersService.changePassword).toHaveBeenCalledWith(user, 'new password');
+    });
+
+    it('updates the current user by id', async () => {
+      const dto = { email: 'changed@example.com', firstName: 'C', lastName: 'U' };
+      usersService.update.mockResolvedValue('updated');
+
+      await expect(controller.update(user, dto)).resolves.toBe('updated');
+      expect(usersService.update).toHaveBeenCalledWith(user.id, dto);
+    });
+  });
+
+  describe('admin handlers', () => {
+    it('lists every user as a UserDto without the password', async () => {
+      prismaService.user.findMany.mockResolvedValue([user, { ...user, id: '2', email: 'other@example.com' }]);
+
+      const result = await controller.userList();
+
+      expect(prismaService.user.findMany).toHaveBeenCalledWith();
+      expect(result).toEqual([new UserDto(user), new UserDto({ ...user, id: '2', email: 'other@example.com' })]);
+      expect(result[0]).not.toHaveProperty('password');
+    });
+
+    it('deletes the users one after another', async () => {
+      const order: string[] = [];
+      usersService.delete.mockImplementation(async (id: string) => order.push(id));
+
+      await expect(controller.delete(['1', '2', '3'])).resolves.toBeUndefined();
+
+      expect(order).toEqual(['1', '2', '3']);
+    });
+
+    it('stops deleting at the first failure', async () => {
+      usersService.delete.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('not found'));
+
+      await expect(controller.delete(['1', '2', '3'])).rejects.toThrow('not found');
+
+      expect(usersService.delete).toHaveBeenCalledTimes(2);
+    });
+
+    it('assigns a role', async () => {
+      const dto = { id: '1', role: Role.admin };
+      usersService.assignRole.mockResolvedValue('assigned');
+
+      await expect(controller.assignRole(dto)).resolves.toBe('assigned');
+      expect(usersService.assignRole).toHaveBeenCalledWith(dto);
+    });
   });
 });

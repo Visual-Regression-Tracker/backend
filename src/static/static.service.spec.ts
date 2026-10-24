@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { PNG } from 'pngjs';
 import { StaticService } from './static.service';
 import { ConfigService } from '@nestjs/config';
 import { StaticModule } from './static.module';
+import { StaticFactoryService } from './static.factory';
+import { Static } from './static.interface';
 
 describe('StaticService', () => {
   let service: StaticService;
@@ -22,5 +25,84 @@ describe('StaticService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('delegation to the configured backend', () => {
+    const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    let backend: { [K in keyof Static]: jest.Mock };
+    let factory: { getStaticService: jest.Mock };
+
+    beforeEach(() => {
+      backend = {
+        saveImage: jest.fn().mockResolvedValue('saved.png'),
+        getImage: jest.fn().mockResolvedValue({ width: 1 }),
+        getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('bytes')),
+        copyImage: jest.fn().mockResolvedValue('copied.png'),
+        deleteImage: jest.fn().mockResolvedValue(true),
+        getImageUrl: jest.fn().mockResolvedValue('https://storage/image.png'),
+      };
+      factory = { getStaticService: jest.fn().mockReturnValue(backend) };
+      service = new StaticService(factory as unknown as StaticFactoryService);
+    });
+
+    it('asks the factory for the backend once, at construction', async () => {
+      await service.getImageUrl('a.png');
+      await service.getImageUrl('b.png');
+
+      expect(factory.getStaticService).toHaveBeenCalledTimes(1);
+    });
+
+    it('saves a real PNG through the backend', async () => {
+      const png = PNG.sync.write(new PNG({ width: 1, height: 1 }));
+
+      await expect(service.saveImage('screenshot', png)).resolves.toBe('saved.png');
+      expect(backend.saveImage).toHaveBeenCalledWith('screenshot', png);
+    });
+
+    it('accepts any buffer that starts with the PNG signature', async () => {
+      const signatureOnly = Buffer.concat([PNG_SIGNATURE, Buffer.from('not really a png')]);
+
+      await expect(service.saveImage('diff', signatureOnly)).resolves.toBe('saved.png');
+    });
+
+    it.each([
+      ['an empty buffer', Buffer.alloc(0)],
+      ['a truncated signature', PNG_SIGNATURE.subarray(0, 7)],
+      ['a JPEG', Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0])],
+    ])('rejects %s without reaching the backend', async (_label, buffer) => {
+      await expect(service.saveImage('baseline', buffer)).rejects.toThrow('Cannot parse image as PNG file');
+      expect(backend.saveImage).not.toHaveBeenCalled();
+    });
+
+    it('delegates getImage', async () => {
+      await expect(service.getImage('a.png')).resolves.toEqual({ width: 1 });
+      expect(backend.getImage).toHaveBeenCalledWith('a.png');
+    });
+
+    it('delegates getImageBuffer', async () => {
+      await expect(service.getImageBuffer('a.png')).resolves.toEqual(Buffer.from('bytes'));
+      expect(backend.getImageBuffer).toHaveBeenCalledWith('a.png');
+    });
+
+    it('delegates copyImage', async () => {
+      await expect(service.copyImage('baseline', 'a.png')).resolves.toBe('copied.png');
+      expect(backend.copyImage).toHaveBeenCalledWith('baseline', 'a.png');
+    });
+
+    it('delegates deleteImage', async () => {
+      await expect(service.deleteImage('a.png')).resolves.toBe(true);
+      expect(backend.deleteImage).toHaveBeenCalledWith('a.png');
+    });
+
+    it('delegates getImageUrl', async () => {
+      await expect(service.getImageUrl('a.png')).resolves.toBe('https://storage/image.png');
+      expect(backend.getImageUrl).toHaveBeenCalledWith('a.png');
+    });
+
+    it('passes backend failures through', async () => {
+      backend.getImageBuffer.mockRejectedValue(new Error('EACCES'));
+
+      await expect(service.getImageBuffer('a.png')).rejects.toThrow('EACCES');
+    });
   });
 });

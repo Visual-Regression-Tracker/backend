@@ -7,6 +7,11 @@ module.exports = async () => {
     transform: {
       '^.+\\.(t|j)s$': 'ts-jest',
     },
+    // count every source file, not just the ones some test happens to import
+    collectCoverageFrom: ['**/*.ts', '!**/*.spec.ts', '!jest.config.ts', '!main.ts'],
+    coverageThreshold: {
+      global: { statements: 98, branches: 85, functions: 98, lines: 98 },
+    },
     coverageDirectory: '../coverage',
     testEnvironment: 'node',
   };

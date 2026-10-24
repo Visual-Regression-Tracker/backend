@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Response } from 'express';
 import { StaticController } from './static.controller';
 import { StaticService } from './static.service';
@@ -19,8 +19,9 @@ const initController = async (getImageBufferMock = jest.fn(), getImageUrlMock = 
 };
 
 const responseMock = () => {
-  const res = { set: jest.fn(), send: jest.fn(), redirect: jest.fn() };
-  return res as unknown as Response & { set: jest.Mock; send: jest.Mock; redirect: jest.Mock };
+  const res = { set: jest.fn(), send: jest.fn(), redirect: jest.fn(), status: jest.fn() };
+  res.status.mockReturnValue(res);
+  return res as unknown as Response & { set: jest.Mock; send: jest.Mock; redirect: jest.Mock; status: jest.Mock };
 };
 
 describe('download', () => {
@@ -84,5 +85,31 @@ describe('getUrlAndRedirect', () => {
 
     const [, value] = res.set.mock.calls.find(([header]) => header === 'Cache-Control');
     expect(Number(/max-age=(\d+)/.exec(value)[1])).toBeLessThan(3600);
+  });
+
+  it('sets a private cache header of exactly 3000 seconds before redirecting', async () => {
+    const controller = await initController(jest.fn(), jest.fn().mockResolvedValueOnce('https://storage/image.png'));
+    const res = responseMock();
+
+    await controller.getUrlAndRedirect('image.png', res);
+
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'private, max-age=3000');
+    expect(res.set.mock.invocationCallOrder[0]).toBeLessThan(res.redirect.mock.invocationCallOrder[0]);
+  });
+
+  it('answers 500 with a plain message when the storage cannot produce a URL', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const error = new Error('signing failed');
+    const controller = await initController(jest.fn(), jest.fn().mockRejectedValueOnce(error));
+    const res = responseMock();
+
+    await controller.getUrlAndRedirect('image.png', res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.send).toHaveBeenCalledWith('Error occurred while getting the file.');
+    expect(res.redirect).not.toHaveBeenCalled();
+    expect(res.set).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith('Error fetching file from S3:image.png', error);
+    errorSpy.mockRestore();
   });
 });

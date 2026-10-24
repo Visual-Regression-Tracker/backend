@@ -1,4 +1,4 @@
-import { HttpException } from '@nestjs/common';
+import { HttpException, HttpStatus } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -57,8 +57,20 @@ describe('OllamaController', () => {
     await expect(controller.listModels()).resolves.toEqual({ models: [{ name: 'gemma3:12b' }] });
   });
 
-  it('rejects compare without exactly two images', async () => {
-    await expect(controller.compareImages([image('a')], 'gemma3:12b', 'prompt', '0.1')).rejects.toThrow(HttpException);
+  it('passes a failure to list models through', async () => {
+    ollamaService.listModels.mockRejectedValue(new Error('Connection refused'));
+
+    await expect(controller.listModels()).rejects.toThrow('Connection refused');
+  });
+
+  it.each([
+    ['no images', undefined],
+    ['one image', [image('a')]],
+    ['three images', [image('a'), image('b'), image('c')]],
+  ])('rejects compare with %s as a 400', async (_, files) => {
+    await expect(controller.compareImages(files, 'gemma3:12b', 'prompt', '0.1')).rejects.toThrow(
+      new HttpException('Two images required', HttpStatus.BAD_REQUEST)
+    );
     expect(ollamaService.generate).not.toHaveBeenCalled();
   });
 
@@ -72,5 +84,15 @@ describe('OllamaController', () => {
       { provider: 'ollama', model: 'gemma3:12b', prompt: 'prompt', temperature: 0.1 },
       [new Uint8Array(Buffer.from('a')), new Uint8Array(Buffer.from('b'))]
     );
+  });
+
+  it('passes a missing temperature on as NaN', async () => {
+    // NOTE: current behavior — the query value is not validated, so leaving it
+    // out reaches the provider as NaN rather than its default temperature.
+    ollamaService.generate.mockResolvedValue({});
+
+    await controller.compareImages([image('a'), image('b')], 'gemma3:12b', 'prompt', undefined);
+
+    expect(ollamaService.generate.mock.calls[0][0].temperature).toBeNaN();
   });
 });

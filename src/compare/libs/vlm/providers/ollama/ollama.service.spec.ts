@@ -108,6 +108,30 @@ describe('OllamaService', () => {
       expect(result.thinking).toBe('{"identical": true, "description": "Thinking result"}');
     });
 
+    it('rejects a Gemini config before calling the SDK', async () => {
+      const config = { ...createConfig(), provider: 'gemini' } as any;
+
+      await expect(service.generate(config, [])).rejects.toThrow('OllamaService requires OllamaVlmConfig, got gemini');
+      expect(mockChat).not.toHaveBeenCalled();
+    });
+
+    it('accepts a config without provider', async () => {
+      mockChat.mockResolvedValue(createMockResponse('{}'));
+      const config = { ...createConfig(), provider: undefined };
+
+      await expect(service.generate(config, [])).resolves.toEqual({ content: '{}', thinking: undefined });
+    });
+
+    it('creates the client once and reuses it', async () => {
+      mockChat.mockResolvedValue(createMockResponse('{}'));
+
+      await service.generate(createConfig(), []);
+      await service.generate(createConfig(), []);
+
+      expect(mockConfigService.getOrThrow).toHaveBeenCalledTimes(1);
+      expect(mockConfigService.getOrThrow).toHaveBeenCalledWith('OLLAMA_BASE_URL');
+    });
+
     it('should throw error when SDK call fails', async () => {
       const config = createConfig();
       mockChat.mockRejectedValue(new Error('Connection refused'));

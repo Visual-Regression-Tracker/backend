@@ -7,7 +7,7 @@ import { TestVariation, Baseline, Project, Build } from '@prisma/client';
 import { PNG } from 'pngjs';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
-import { TEST_PROJECT } from '../_data_';
+import { generateTestVariation, TEST_PROJECT } from '../_data_';
 import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 
 const initModule = async ({
@@ -619,6 +619,257 @@ describe('TestVariationsService', () => {
     expect(imageDeleteMock).toHaveBeenCalledWith(baseline.baselineName);
     expect(baselineDeleteMock).toHaveBeenCalledWith({
       where: { id: baseline.id },
+    });
+  });
+
+  describe('characterization', () => {
+    const baselineData = {
+      name: 'Test name',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: 'tag',
+    };
+
+    it('findUnique looks the variation up by its full composite key', async () => {
+      const variation = generateTestVariation();
+      const variationfindUniqueMock = jest.fn().mockResolvedValueOnce(variation);
+      service = await initModule({ variationfindUniqueMock });
+
+      const result = await service.findUnique({ ...baselineData, projectId: 'projectId', branchName: 'develop' });
+
+      expect(result).toBe(variation);
+      expect(variationfindUniqueMock).toHaveBeenCalledWith({
+        where: {
+          projectId_name_browser_device_os_viewport_customTags_branchName: {
+            projectId: 'projectId',
+            ...baselineData,
+            branchName: 'develop',
+          },
+        },
+      });
+    });
+
+    describe('find', () => {
+      it('returns undefined when neither branch has the variation', async () => {
+        const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
+        service = await initModule({ projectFindUniqueMock });
+        service.findUnique = jest.fn().mockResolvedValue(null);
+
+        // NOTE: current behavior — declared as `TestVariation | null` but resolves undefined
+        await expect(
+          service.find({ ...baselineData, projectId: TEST_PROJECT.id, branchName: 'develop' })
+        ).resolves.toBeUndefined();
+      });
+
+      it('only looks on the main branch when the build runs on it', async () => {
+        const variation = generateTestVariation({ branchName: TEST_PROJECT.mainBranchName });
+        const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
+        service = await initModule({ projectFindUniqueMock });
+        service.findUnique = jest.fn().mockResolvedValueOnce(variation);
+
+        const result = await service.find({
+          ...baselineData,
+          projectId: TEST_PROJECT.id,
+          branchName: TEST_PROJECT.mainBranchName,
+        });
+
+        expect(result).toBe(variation);
+        expect(service.findUnique).toHaveBeenCalledTimes(1);
+        expect(service.findUnique).toHaveBeenCalledWith({
+          ...baselineData,
+          projectId: TEST_PROJECT.id,
+          branchName: TEST_PROJECT.mainBranchName,
+        });
+      });
+
+      it('uses sourceBranch instead of the project main branch when given', async () => {
+        const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
+        service = await initModule({ projectFindUniqueMock });
+        service.findUnique = jest.fn().mockResolvedValue(null);
+
+        await service.find({
+          ...baselineData,
+          projectId: TEST_PROJECT.id,
+          branchName: 'feature',
+          sourceBranch: 'release',
+        });
+
+        expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: TEST_PROJECT.id } });
+        expect(service.findUnique).toHaveBeenNthCalledWith(1, expect.objectContaining({ branchName: 'release' }));
+        expect(service.findUnique).toHaveBeenNthCalledWith(2, expect.objectContaining({ branchName: 'feature' }));
+      });
+
+      it('keeps the current branch variation when it is as new as the main branch one', async () => {
+        const updatedAt = new Date('2024-01-01');
+        const main = generateTestVariation({ id: 'main', updatedAt });
+        const current = generateTestVariation({ id: 'current', updatedAt });
+        const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
+        service = await initModule({ projectFindUniqueMock });
+        service.findUnique = jest.fn().mockResolvedValueOnce(main).mockResolvedValueOnce(current);
+
+        await expect(
+          service.find({ ...baselineData, projectId: TEST_PROJECT.id, branchName: 'develop' })
+        ).resolves.toBe(current);
+      });
+    });
+
+    it('update connects the test run when one is given', async () => {
+      const variationUpdateMock = jest.fn().mockResolvedValueOnce('updated');
+      service = await initModule({ variationUpdateMock });
+
+      const result = await service.update(
+        'variationId',
+        { baselineName: 'baseline.png', ignoreAreas: '[]', comment: 'c' },
+        'testRunId'
+      );
+
+      expect(result).toBe('updated');
+      expect(variationUpdateMock).toHaveBeenCalledWith({
+        where: { id: 'variationId' },
+        data: {
+          baselineName: 'baseline.png',
+          ignoreAreas: '[]',
+          comment: 'c',
+          testRuns: { connect: { id: 'testRunId' } },
+        },
+      });
+    });
+
+    it('create leaves testRuns undefined without a test run id', async () => {
+      const variationCreateMock = jest.fn();
+      service = await initModule({ variationCreateMock });
+
+      await service.create({
+        createTestRequestDto: {
+          ...baselineData,
+          projectId: 'projectId',
+          branchName: 'develop',
+        } as CreateTestRequestDto,
+      });
+
+      expect(variationCreateMock.mock.calls[0][0].data).toStrictEqual({
+        project: { connect: { id: 'projectId' } },
+        testRuns: undefined,
+        branchName: 'develop',
+        ...baselineData,
+      });
+    });
+
+    it('create stores missing optional fields as empty strings', async () => {
+      const variationCreateMock = jest.fn();
+      service = await initModule({ variationCreateMock });
+
+      await service.create({
+        createTestRequestDto: {
+          name: 'only name',
+          projectId: 'projectId',
+          branchName: 'develop',
+        } as CreateTestRequestDto,
+      });
+
+      expect(variationCreateMock.mock.calls[0][0].data).toMatchObject({
+        name: 'only name',
+        os: '',
+        device: '',
+        browser: '',
+        viewport: '',
+        customTags: '',
+      });
+    });
+
+    it.each([
+      ['a user', 'userId', { connect: { id: 'userId' } }],
+      ['no user', undefined, undefined],
+    ])('addBaseline records a baseline for the test run with %s', async (_, userId, user) => {
+      const variationUpdateMock = jest.fn().mockResolvedValueOnce('updated');
+      service = await initModule({ variationUpdateMock });
+
+      const result = await service.addBaseline({
+        id: 'variationId',
+        userId,
+        testRunId: 'testRunId',
+        baselineName: 'baseline.png',
+      });
+
+      expect(result).toBe('updated');
+      expect(variationUpdateMock.mock.calls[0][0]).toStrictEqual({
+        where: { id: 'variationId' },
+        data: {
+          baselineName: 'baseline.png',
+          baselines: {
+            create: {
+              baselineName: 'baseline.png',
+              testRun: { connect: { id: 'testRunId' } },
+              user,
+            },
+          },
+        },
+      });
+    });
+
+    it('merge reuses a variation that already lives on the target branch', async () => {
+      const source = generateTestVariation({
+        branchName: 'develop',
+        ignoreAreas: '[{"x":1,"y":2,"width":3,"height":4}]',
+      });
+      const target = generateTestVariation({ id: 'target', branchName: 'master' });
+      const build = { id: 'buildId' };
+      const imageBuffer = Buffer.from('png');
+      const testRun = { id: 'testRunId' };
+      const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(build);
+      const variationFindManyMock = jest.fn().mockResolvedValueOnce([source]);
+      const getImageBufferMock = jest.fn().mockResolvedValueOnce(imageBuffer);
+      const testRunCreateMock = jest.fn().mockResolvedValueOnce(testRun);
+      const testRuncalCulateDiffMock = jest.fn();
+      const buildUpdateMock = jest.fn().mockResolvedValueOnce('stopped build');
+      service = await initModule({
+        buildFindOrCreateMock,
+        variationFindManyMock,
+        getImageBufferMock,
+        testRunCreateMock,
+        testRuncalCulateDiffMock,
+        buildUpdateMock,
+      });
+      service.find = jest.fn().mockResolvedValueOnce(target);
+      service.create = jest.fn();
+
+      const result = await service.merge('projectId', 'develop', 'master');
+
+      expect(variationFindManyMock).toHaveBeenCalledWith({ where: { projectId: 'projectId', branchName: 'develop' } });
+      expect(getImageBufferMock).toHaveBeenCalledWith(source.baselineName);
+      expect(service.create).not.toHaveBeenCalled();
+      expect(testRunCreateMock).toHaveBeenCalledWith({
+        testVariation: target,
+        createTestRequestDto: expect.objectContaining({
+          branchName: 'master',
+          buildId: 'buildId',
+          merge: true,
+          diffTollerancePercent: 0,
+          ignoreAreas: [{ x: 1, y: 2, width: 3, height: 4 }],
+        }),
+        imageBuffer,
+      });
+      expect(testRuncalCulateDiffMock).toHaveBeenCalledWith('projectId', testRun);
+      expect(buildUpdateMock).toHaveBeenCalledWith('buildId', { isRunning: false });
+      expect(result).toBe('stopped build');
+    });
+
+    it('delete detaches the test runs with a raw update before deleting the variation', async () => {
+      const $executeRawMock = jest.fn();
+      const variationDeleteMock = jest.fn().mockResolvedValueOnce('deleted');
+      service = await initModule({ $executeRawMock, variationDeleteMock });
+      service.getDetails = jest.fn().mockResolvedValueOnce(generateTestVariation({ id: 'variationId' }, []));
+
+      const result = await service.delete('variationId');
+
+      const [strings, ...values] = $executeRawMock.mock.calls[0];
+      expect(strings.join('?')).toBe(
+        'UPDATE "public"."TestRun" SET "testVariationId" = NULL::text WHERE "testVariationId" = ?'
+      );
+      expect(values).toEqual(['variationId']);
+      expect(result).toBe('deleted');
     });
   });
 });

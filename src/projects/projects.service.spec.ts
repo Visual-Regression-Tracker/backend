@@ -4,8 +4,20 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { BuildsService } from '../builds/builds.service';
 import { HttpException, HttpStatus } from '@nestjs/common';
+import { ImageComparison } from '@prisma/client';
+import { TEST_PROJECT } from '../_data_';
+import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
 
-const initService = async ({ projectFindUniqueMock = jest.fn() }) => {
+const initService = async ({
+  projectFindUniqueMock = jest.fn(),
+  projectFindManyMock = jest.fn(),
+  projectCreateMock = jest.fn(),
+  projectUpdateMock = jest.fn(),
+  projectDeleteMock = jest.fn(),
+  buildRemoveMock = jest.fn(),
+  testVariationDeleteMock = jest.fn(),
+}) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       ProjectsService,
@@ -14,11 +26,15 @@ const initService = async ({ projectFindUniqueMock = jest.fn() }) => {
         useValue: {
           project: {
             findUnique: projectFindUniqueMock,
+            findMany: projectFindManyMock,
+            create: projectCreateMock,
+            update: projectUpdateMock,
+            delete: projectDeleteMock,
           },
         },
       },
-      { provide: TestVariationsService, useValue: {} },
-      { provide: BuildsService, useValue: {} },
+      { provide: TestVariationsService, useValue: { delete: testVariationDeleteMock } },
+      { provide: BuildsService, useValue: { remove: buildRemoveMock } },
     ],
   }).compile();
 
@@ -46,9 +62,134 @@ describe('ProjectsService', () => {
       const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(undefined);
       service = await initService({ projectFindUniqueMock });
 
-      await expect(service.findOne('foo')).rejects.toThrowError(
+      await expect(service.findOne('foo')).rejects.toThrow(
         new HttpException('Project not found', HttpStatus.NOT_FOUND)
       );
+    });
+  });
+  describe('findAll', () => {
+    it('returns every project from the database', async () => {
+      const projectFindManyMock = jest.fn().mockResolvedValue([TEST_PROJECT]);
+      service = await initService({ projectFindManyMock });
+
+      const result = await service.findAll();
+
+      expect(projectFindManyMock).toHaveBeenCalledWith();
+      expect(result).toEqual([TEST_PROJECT]);
+    });
+  });
+
+  describe('create', () => {
+    it('creates the project from the dto fields', async () => {
+      const projectCreateMock = jest.fn().mockResolvedValue(TEST_PROJECT);
+      service = await initService({ projectCreateMock });
+      const dto: CreateProjectDto = {
+        name: 'New project',
+        mainBranchName: 'main',
+        autoApproveFeature: true,
+        imageComparison: ImageComparison.lookSame,
+        imageComparisonConfig: '{"strict":true}',
+        maxBuildAllowed: 50,
+        maxBranchLifetime: 10,
+        bulkApproveVariations: true,
+        bulkApproveGroupBy: 'name',
+      };
+
+      const result = await service.create({ ...dto, extra: 'ignored' } as CreateProjectDto);
+
+      expect(projectCreateMock).toHaveBeenCalledWith({ data: dto });
+      expect(result).toBe(TEST_PROJECT);
+    });
+  });
+
+  describe('update', () => {
+    it('updates the project by id with the dto fields', async () => {
+      const projectUpdateMock = jest.fn().mockResolvedValue(TEST_PROJECT);
+      service = await initService({ projectUpdateMock });
+      const dto: UpdateProjectDto = {
+        id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
+        name: 'Renamed',
+        mainBranchName: 'develop',
+        autoApproveFeature: false,
+        imageComparison: ImageComparison.pixelmatch,
+        imageComparisonConfig: '{}',
+        maxBuildAllowed: 5,
+        maxBranchLifetime: 7,
+        bulkApproveVariations: false,
+        bulkApproveGroupBy: 'customTags',
+      };
+
+      const result = await service.update(dto);
+
+      const { id, ...data } = dto;
+      expect(projectUpdateMock).toHaveBeenCalledWith({ where: { id }, data });
+      expect(result).toBe(TEST_PROJECT);
+    });
+  });
+
+  describe('remove', () => {
+    it('removes every build and test variation one by one before deleting the project', async () => {
+      const calls: string[] = [];
+      const projectFindUniqueMock = jest.fn().mockResolvedValue({
+        ...TEST_PROJECT,
+        builds: [{ id: 'build1' }, { id: 'build2' }],
+        testVariations: [{ id: 'variation1' }],
+      });
+      const buildRemoveMock = jest.fn().mockImplementation(async (id) => calls.push(`build ${id}`));
+      const testVariationDeleteMock = jest.fn().mockImplementation(async (id) => calls.push(`variation ${id}`));
+      const projectDeleteMock = jest.fn().mockImplementation(async () => {
+        calls.push('project');
+        return TEST_PROJECT;
+      });
+      service = await initService({
+        projectFindUniqueMock,
+        buildRemoveMock,
+        testVariationDeleteMock,
+        projectDeleteMock,
+      });
+
+      const result = await service.remove('projectId');
+
+      expect(projectFindUniqueMock).toHaveBeenCalledWith({
+        where: { id: 'projectId' },
+        include: { builds: true, testVariations: true },
+      });
+      expect(calls).toEqual(['build build1', 'build build2', 'variation variation1', 'project']);
+      expect(projectDeleteMock).toHaveBeenCalledWith({ where: { id: 'projectId' } });
+      expect(result).toBe(TEST_PROJECT);
+    });
+
+    it('stops at the first failing build and leaves the project in place', async () => {
+      const projectFindUniqueMock = jest.fn().mockResolvedValue({
+        ...TEST_PROJECT,
+        builds: [{ id: 'build1' }, { id: 'build2' }],
+        testVariations: [{ id: 'variation1' }],
+      });
+      const buildRemoveMock = jest.fn().mockRejectedValueOnce(new Error('cannot delete'));
+      const testVariationDeleteMock = jest.fn();
+      const projectDeleteMock = jest.fn();
+      service = await initService({
+        projectFindUniqueMock,
+        buildRemoveMock,
+        testVariationDeleteMock,
+        projectDeleteMock,
+      });
+
+      await expect(service.remove('projectId')).rejects.toThrow('cannot delete');
+
+      expect(buildRemoveMock).toHaveBeenCalledTimes(1);
+      expect(testVariationDeleteMock).not.toHaveBeenCalled();
+      expect(projectDeleteMock).not.toHaveBeenCalled();
+    });
+
+    it('throws a TypeError when the project does not exist', async () => {
+      const projectFindUniqueMock = jest.fn().mockResolvedValue(null);
+      const projectDeleteMock = jest.fn();
+      service = await initService({ projectFindUniqueMock, projectDeleteMock });
+
+      // NOTE: current behavior — no not-found handling (unlike findOne), the null project is dereferenced
+      await expect(service.remove('missing')).rejects.toThrow(TypeError);
+      expect(projectDeleteMock).not.toHaveBeenCalled();
     });
   });
 });

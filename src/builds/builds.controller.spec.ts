@@ -127,3 +127,115 @@ describe('Builds Controller', () => {
     );
   });
 });
+
+describe('Builds Controller handlers', () => {
+  let controller: BuildsController;
+  const buildsService = {
+    findMany: jest.fn(),
+    findOne: jest.fn(),
+    remove: jest.fn(),
+    update: jest.fn(),
+    approve: jest.fn(),
+    deleteOldBuilds: jest.fn(),
+    findOrCreate: jest.fn(),
+  };
+  const projectsService = { findOne: jest.fn() };
+  const buildDto = new BuildDto(TEST_BUILD);
+
+  beforeEach(async () => {
+    jest.resetAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [BuildsController],
+      providers: [
+        { provide: BuildsService, useValue: buildsService },
+        { provide: ProjectsService, useValue: projectsService },
+        { provide: PrismaService, useValue: {} },
+        { provide: ApiGuard, useValue: {} },
+        { provide: JwtAuthGuard, useValue: {} },
+      ],
+    }).compile();
+
+    controller = module.get<BuildsController>(BuildsController);
+  });
+
+  it('lists a page of builds with the filters it was given', async () => {
+    const page = { data: [buildDto], total: 1, take: 10, skip: 0 };
+    buildsService.findMany.mockResolvedValue(page);
+
+    const result = await controller.get('projectId', 10, 20, 'ci-1', 'aroundId');
+
+    expect(result).toBe(page);
+    expect(buildsService.findMany).toHaveBeenCalledWith('projectId', 10, 20, 'ci-1', 'aroundId');
+  });
+
+  it('passes missing optional filters on as undefined', async () => {
+    buildsService.findMany.mockResolvedValue({ data: [], total: 0, take: 10, skip: 0 });
+
+    await controller.get('projectId', 10, 0);
+
+    expect(buildsService.findMany).toHaveBeenCalledWith('projectId', 10, 0, undefined, undefined);
+  });
+
+  it('returns the details of one build', async () => {
+    buildsService.findOne.mockResolvedValue(buildDto);
+
+    await expect(controller.getDetails(TEST_BUILD.id)).resolves.toBe(buildDto);
+    expect(buildsService.findOne).toHaveBeenCalledWith(TEST_BUILD.id);
+  });
+
+  it('removes a build', async () => {
+    buildsService.remove.mockResolvedValue(TEST_BUILD);
+
+    await expect(controller.remove(TEST_BUILD.id)).resolves.toBe(TEST_BUILD);
+    expect(buildsService.remove).toHaveBeenCalledWith(TEST_BUILD.id);
+  });
+
+  it('updates a build with the body', async () => {
+    buildsService.update.mockResolvedValue(buildDto);
+
+    await expect(controller.update(TEST_BUILD.id, { isRunning: false })).resolves.toBe(buildDto);
+    expect(buildsService.update).toHaveBeenCalledWith(TEST_BUILD.id, { isRunning: false });
+  });
+
+  it.each([true, false])('approves a build with merge=%s', async (merge) => {
+    buildsService.approve.mockResolvedValue(undefined);
+
+    await expect(controller.approve(TEST_BUILD.id, merge)).resolves.toBeUndefined();
+    expect(buildsService.approve).toHaveBeenCalledWith(TEST_BUILD.id, merge);
+  });
+
+  it("creates the build on the project's main branch when no branch is given", async () => {
+    projectsService.findOne.mockResolvedValue(TEST_PROJECT);
+    buildsService.findOrCreate.mockResolvedValue(TEST_BUILD);
+
+    const result = await controller.create({ project: TEST_PROJECT.name, ciBuildId: 'ci-1' } as CreateBuildDto);
+
+    expect(projectsService.findOne).toHaveBeenCalledWith(TEST_PROJECT.name);
+    expect(buildsService.deleteOldBuilds).toHaveBeenCalledWith(TEST_PROJECT.id, TEST_PROJECT.maxBuildAllowed);
+    expect(buildsService.findOrCreate).toHaveBeenCalledWith({
+      projectId: TEST_PROJECT.id,
+      branchName: TEST_PROJECT.mainBranchName,
+      ciBuildId: 'ci-1',
+    });
+    expect(result).toStrictEqual(new BuildDto(TEST_BUILD));
+  });
+
+  it('deletes old builds before creating the new one', async () => {
+    const calls: string[] = [];
+    projectsService.findOne.mockResolvedValue(TEST_PROJECT);
+    buildsService.deleteOldBuilds.mockImplementation(async () => calls.push('deleteOldBuilds'));
+    buildsService.findOrCreate.mockImplementation(async () => {
+      calls.push('findOrCreate');
+      return TEST_BUILD;
+    });
+
+    await controller.create({ project: TEST_PROJECT.id, branchName: 'feature' } as CreateBuildDto);
+
+    expect(calls).toEqual(['deleteOldBuilds', 'findOrCreate']);
+    expect(buildsService.findOrCreate).toHaveBeenCalledWith({
+      projectId: TEST_PROJECT.id,
+      branchName: 'feature',
+      ciBuildId: undefined,
+    });
+  });
+});

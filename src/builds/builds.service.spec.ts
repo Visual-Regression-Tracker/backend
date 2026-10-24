@@ -7,8 +7,9 @@ import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { mocked, MockedObject } from 'jest-mock';
 import { BuildDto } from './dto/build.dto';
 import { ProjectsService } from '../projects/projects.service';
-import { generateTestRun } from '../_data_';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { generateTestRun, TEST_PROJECT } from '../_data_';
+import { Prisma as PrismaRuntime } from '@prisma/client';
+const { PrismaClientKnownRequestError } = PrismaRuntime;
 
 jest.mock('./dto/build.dto');
 
@@ -337,6 +338,117 @@ describe('BuildsService', () => {
 
       expect(loggerWarnMock).toHaveBeenCalledWith('Attempted to remove build with undefined ID.');
       expect(buildFindUniqueMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('remove (characterization)', () => {
+    it('does nothing when the build does not exist', async () => {
+      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(null);
+      const buildDeleteMock = jest.fn();
+      const eventBuildDeletedMock = jest.fn();
+      service = await initService({ buildFindUniqueMock, buildDeleteMock, eventBuildDeletedMock });
+
+      await expect(service.remove('missing')).resolves.toBeUndefined();
+
+      expect(buildDeleteMock).not.toHaveBeenCalled();
+      expect(eventBuildDeletedMock).not.toHaveBeenCalled();
+    });
+
+    it('treats a build deleted in the meantime (P2025) as done, without an event', async () => {
+      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
+      const buildDeleteMock = jest
+        .fn()
+        .mockRejectedValueOnce(new PrismaClientKnownRequestError('gone', { code: 'P2025', clientVersion: '5' }));
+      const testRunDeleteMock = jest.fn();
+      const eventBuildDeletedMock = jest.fn();
+      service = await initService({ buildFindUniqueMock, buildDeleteMock, testRunDeleteMock, eventBuildDeletedMock });
+
+      await expect(service.remove(build.id)).resolves.toBeUndefined();
+
+      expect(testRunDeleteMock).toHaveBeenCalledWith(build.testRuns[0].id);
+      expect(eventBuildDeletedMock).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['another Prisma error', new PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: '5' })],
+      ['any other error', new Error('connection lost')],
+    ])('swallows %s on delete and still reports the build as deleted', async (_, error) => {
+      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
+      const buildDeleteMock = jest.fn().mockRejectedValueOnce(error);
+      const eventBuildDeletedMock = jest.fn();
+      service = await initService({ buildFindUniqueMock, buildDeleteMock, eventBuildDeletedMock });
+
+      const result = await service.remove(build.id);
+
+      // NOTE: current behavior — only P2025 is handled; every other delete error
+      // is swallowed and the build is announced as deleted although it is not.
+      expect(result).toBe(build);
+      expect(eventBuildDeletedMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('incrementBuildNumber', () => {
+    it("bumps the project's build counter and gives the build the new number", async () => {
+      const projectUpdateMock = jest.fn().mockResolvedValueOnce({ ...TEST_PROJECT, buildsCounter: 43 });
+      const buildUpdateMock = jest.fn().mockResolvedValueOnce({ ...build, number: 43 });
+      service = await initService({ projectUpdateMock, buildUpdateMock });
+
+      const result = await service.incrementBuildNumber(build.id, 'projectId');
+
+      expect(projectUpdateMock).toHaveBeenCalledWith({
+        where: { id: 'projectId' },
+        data: { buildsCounter: { increment: 1 } },
+      });
+      expect(buildUpdateMock).toHaveBeenCalledWith({ where: { id: build.id }, data: { number: 43 } });
+      expect(result).toEqual({ ...build, number: 43 });
+    });
+  });
+
+  describe('findOrCreate (characterization)', () => {
+    it('numbers a new build and announces it', async () => {
+      const numbered = { ...build, number: 3 };
+      const buildUpsertMock = jest.fn().mockResolvedValueOnce(build);
+      const eventsBuildCreatedMock = jest.fn();
+      service = await initService({ buildUpsertMock, eventsBuildCreatedMock });
+      service.incrementBuildNumber = jest.fn().mockResolvedValueOnce(numbered);
+
+      const result = await service.findOrCreate({ projectId: 'projectId', branchName: 'develop', ciBuildId: 'ci' });
+
+      expect(service.incrementBuildNumber).toHaveBeenCalledWith(build.id, 'projectId');
+      expect(eventsBuildCreatedMock).toHaveBeenCalledWith(new BuildDto(numbered));
+      expect(result).toBe(numbered);
+    });
+
+    it('retries a concurrent upsert (P2002) as an update with the same unique key', async () => {
+      const buildUpsertMock = jest
+        .fn()
+        .mockRejectedValueOnce(new PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '5' }));
+      const buildUpdateMock = jest.fn().mockResolvedValueOnce({ ...build, number: 9 });
+      service = await initService({ buildUpsertMock, buildUpdateMock });
+
+      const result = await service.findOrCreate({ projectId: 'projectId', branchName: 'develop', ciBuildId: 'ci' });
+
+      expect(buildUpdateMock).toHaveBeenCalledWith({
+        where: { projectId_ciBuildId: { projectId: 'projectId', ciBuildId: 'ci' } },
+        data: { isRunning: true },
+      });
+      expect(result).toEqual({ ...build, number: 9 });
+    });
+
+    it.each([
+      ['another Prisma error', new PrismaClientKnownRequestError('x', { code: 'P2003', clientVersion: '5' })],
+      ['any other error', new Error('connection lost')],
+    ])('turns %s on upsert into a TypeError', async (_, error) => {
+      const buildUpsertMock = jest.fn().mockRejectedValueOnce(error);
+      const buildUpdateMock = jest.fn();
+      service = await initService({ buildUpsertMock, buildUpdateMock });
+
+      // NOTE: current behavior — the original error is swallowed and the
+      // undefined build is dereferenced afterwards
+      await expect(
+        service.findOrCreate({ projectId: 'projectId', branchName: 'develop', ciBuildId: 'ci' })
+      ).rejects.toThrow(TypeError);
+      expect(buildUpdateMock).not.toHaveBeenCalled();
     });
   });
 

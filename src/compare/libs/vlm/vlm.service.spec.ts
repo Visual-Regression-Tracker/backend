@@ -306,6 +306,166 @@ describe('VlmService', () => {
     expect(service.parseConfig(configJson)).toEqual(expected);
   });
 
+  describe('characterization', () => {
+    const input = {
+      baseline: 'baseline',
+      image: 'image',
+      diffTollerancePercent: 0.1,
+      ignoreAreas: [],
+      saveDiffAsFile: false,
+    };
+
+    it('always asks pixelmatch for a saved diff with the pixelmatch defaults', async () => {
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(EQUAL_RESULT);
+      const service = await initService({ pixelmatchGetDiffMock });
+
+      await service.getDiff(input, { ...DEFAULT_CONFIG, temperature: 0.9 });
+
+      expect(pixelmatchGetDiffMock).toHaveBeenCalledWith(
+        { ...input, saveDiffAsFile: true },
+        { threshold: 0.1, ignoreAntialiasing: true }
+      );
+    });
+
+    it('returns a pixelmatch result with status new without asking the model', async () => {
+      const pixelmatchResult = createPixelmatchResult({ status: TestStatus.new });
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(pixelmatchResult);
+      const getImageMock = jest.fn();
+      const ollamaGenerateMock = jest.fn();
+      const service = await initService({ pixelmatchGetDiffMock, getImageMock, ollamaGenerateMock });
+
+      const result = await service.getDiff(input, DEFAULT_CONFIG);
+
+      expect(result).toBe(pixelmatchResult);
+      expect(getImageMock).not.toHaveBeenCalled();
+      expect(ollamaGenerateMock).not.toHaveBeenCalled();
+    });
+
+    it('still loads images when pixelmatch reports no baseline', async () => {
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(NO_BASELINE_RESULT);
+      const getImageMock = jest.fn().mockResolvedValue(undefined);
+      const service = await initService({ pixelmatchGetDiffMock, getImageMock });
+
+      const result = await service.getDiff({ ...input, baseline: null }, DEFAULT_CONFIG);
+
+      // NOTE: current behavior — NO_BASELINE_RESULT has status undefined, not `new`,
+      // so the early return above never applies and the VLM path runs until it
+      // finds the images missing.
+      expect(getImageMock).toHaveBeenCalledWith(null);
+      expect(result).toBe(NO_BASELINE_RESULT);
+    });
+
+    it('reports an empty model response as a failed analysis', async () => {
+      const pixelmatchResult = createPixelmatchResult({});
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(pixelmatchResult);
+      const { getImageMock } = createImageMocks();
+      const ollamaGenerateMock = jest.fn().mockResolvedValue({ content: '', thinking: undefined });
+      const service = await initService({ getImageMock, ollamaGenerateMock, pixelmatchGetDiffMock });
+
+      const result = await service.getDiff(input, DEFAULT_CONFIG);
+
+      expect(result).toStrictEqual({
+        ...pixelmatchResult,
+        vlmDescription: 'VLM analysis failed: Empty response from model',
+      });
+    });
+
+    it('falls back to the thinking field when the content is empty', async () => {
+      const { getImageMock } = createImageMocks();
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(createPixelmatchResult({}));
+      const ollamaGenerateMock = jest.fn().mockResolvedValue({
+        content: '',
+        thinking: '{"identical": true, "description": "From thinking"}',
+      });
+      const service = await initService({ getImageMock, ollamaGenerateMock, pixelmatchGetDiffMock });
+
+      const result = await service.getDiff(input, DEFAULT_CONFIG);
+
+      expect(result.status).toBe(TestStatus.ok);
+      expect(result.vlmDescription).toBe('From thinking');
+    });
+
+    it('falls back to the content field when thinking is preferred but empty', async () => {
+      const { getImageMock } = createImageMocks();
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(createPixelmatchResult({}));
+      const ollamaGenerateMock = jest.fn().mockResolvedValue({
+        content: '{"identical": false, "description": "From content"}',
+      });
+      const service = await initService({ getImageMock, ollamaGenerateMock, pixelmatchGetDiffMock });
+
+      const result = await service.getDiff(input, { ...DEFAULT_CONFIG, useThinking: true });
+
+      expect(result.status).toBe(TestStatus.unresolved);
+      expect(result.vlmDescription).toBe('From content');
+    });
+
+    it('fills in a description when the model returns an empty one', async () => {
+      const { getImageMock } = createImageMocks();
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(createPixelmatchResult({}));
+      const ollamaGenerateMock = jest.fn().mockResolvedValue({ content: '{"identical": true, "description": ""}' });
+      const service = await initService({ getImageMock, ollamaGenerateMock, pixelmatchGetDiffMock });
+
+      const result = await service.getDiff(input, DEFAULT_CONFIG);
+
+      expect(result.vlmDescription).toBe('No description provided');
+    });
+
+    it('reports a response that does not match the schema as a failed analysis', async () => {
+      const { getImageMock } = createImageMocks();
+      const pixelmatchResult = createPixelmatchResult({});
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(pixelmatchResult);
+      const ollamaGenerateMock = jest.fn().mockResolvedValue({ content: '{"identical": "yes"}' });
+      const service = await initService({ getImageMock, ollamaGenerateMock, pixelmatchGetDiffMock });
+
+      const result = await service.getDiff(input, DEFAULT_CONFIG);
+
+      expect(result.status).toBe(TestStatus.unresolved);
+      expect(result.vlmDescription).toMatch(/^VLM analysis failed: /);
+    });
+
+    it.each([
+      ['no provider', undefined],
+      ['an unknown provider', 'openai'],
+    ])('uses Ollama when the config names %s', async (_, provider) => {
+      const { getImageMock } = createImageMocks();
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(createPixelmatchResult({}));
+      const ollamaGenerateMock = jest.fn().mockResolvedValue({ content: '{"identical": true, "description": "ok"}' });
+      const geminiGenerateMock = jest.fn();
+      const service = await initService({
+        getImageMock,
+        ollamaGenerateMock,
+        geminiGenerateMock,
+        pixelmatchGetDiffMock,
+      });
+      const config = { ...DEFAULT_CONFIG, provider } as any;
+
+      await service.getDiff(input, config);
+
+      expect(ollamaGenerateMock).toHaveBeenCalledWith(config, expect.any(Array));
+      expect(geminiGenerateMock).not.toHaveBeenCalled();
+    });
+
+    it('sends baseline, image and diff to the model as PNG bytes in that order', async () => {
+      const baseline = new PNG({ width: 1, height: 1 });
+      const image = new PNG({ width: 2, height: 1 });
+      const diff = new PNG({ width: 3, height: 1 });
+      const getImageMock = jest
+        .fn()
+        .mockResolvedValueOnce(baseline)
+        .mockResolvedValueOnce(image)
+        .mockResolvedValueOnce(diff);
+      const pixelmatchGetDiffMock = jest.fn().mockResolvedValue(createPixelmatchResult({ diffName: 'diff.png' }));
+      const ollamaGenerateMock = jest.fn().mockResolvedValue({ content: '{"identical": true, "description": "ok"}' });
+      const service = await initService({ getImageMock, ollamaGenerateMock, pixelmatchGetDiffMock });
+
+      await service.getDiff(input, DEFAULT_CONFIG);
+
+      expect(getImageMock.mock.calls).toEqual([['baseline'], ['image'], ['diff.png']]);
+      const [[, images]] = ollamaGenerateMock.mock.calls;
+      expect(images.map((bytes: Uint8Array) => PNG.sync.read(Buffer.from(bytes)).width)).toEqual([1, 2, 3]);
+    });
+  });
+
   describe('Gemini provider', () => {
     it('should use GeminiService when provider is gemini', async () => {
       const pixelmatchResult = createPixelmatchResult({});
