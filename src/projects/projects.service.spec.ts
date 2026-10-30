@@ -132,14 +132,23 @@ describe('ProjectsService', () => {
   });
 
   describe('remove', () => {
-    it('removes every build and test variation one by one before deleting the project', async () => {
+    it('returns before builds and variations are removed, then deletes the project in the background', async () => {
       const calls: string[] = [];
+      let releaseBuild1!: () => void;
+      const build1Gate = new Promise<void>((resolve) => {
+        releaseBuild1 = resolve;
+      });
       const projectFindUniqueMock = jest.fn().mockResolvedValue({
         ...TEST_PROJECT,
         builds: [{ id: 'build1' }, { id: 'build2' }],
         testVariations: [{ id: 'variation1' }],
       });
-      const buildRemoveMock = jest.fn().mockImplementation(async (id) => calls.push(`build ${id}`));
+      const buildRemoveMock = jest.fn().mockImplementation(async (id) => {
+        calls.push(`build ${id}`);
+        if (id === 'build1') {
+          await build1Gate;
+        }
+      });
       const testVariationDeleteMock = jest.fn().mockImplementation(async (id) => calls.push(`variation ${id}`));
       const projectDeleteMock = jest.fn().mockImplementation(async () => {
         calls.push('project');
@@ -154,36 +163,88 @@ describe('ProjectsService', () => {
 
       const result = await service.remove('projectId');
 
+      expect(result).toEqual(expect.objectContaining({ id: TEST_PROJECT.id }));
+      expect(projectDeleteMock).not.toHaveBeenCalled();
+
+      releaseBuild1();
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
       expect(projectFindUniqueMock).toHaveBeenCalledWith({
         where: { id: 'projectId' },
         include: { builds: true, testVariations: true },
       });
       expect(calls).toEqual(['build build1', 'build build2', 'variation variation1', 'project']);
       expect(projectDeleteMock).toHaveBeenCalledWith({ where: { id: 'projectId' } });
-      expect(result).toBe(TEST_PROJECT);
     });
 
-    it('stops at the first failing build and leaves the project in place', async () => {
-      const projectFindUniqueMock = jest.fn().mockResolvedValue({
-        ...TEST_PROJECT,
-        builds: [{ id: 'build1' }, { id: 'build2' }],
-        testVariations: [{ id: 'variation1' }],
+    it('logs a failing background cleanup without rejecting the caller', async () => {
+      const unhandled = jest.fn();
+      process.on('unhandledRejection', unhandled);
+      try {
+        const projectFindUniqueMock = jest.fn().mockResolvedValue({
+          ...TEST_PROJECT,
+          builds: [{ id: 'build1' }, { id: 'build2' }],
+          testVariations: [{ id: 'variation1' }],
+        });
+        const buildRemoveMock = jest.fn().mockRejectedValueOnce(new Error('cannot delete'));
+        const testVariationDeleteMock = jest.fn();
+        const projectDeleteMock = jest.fn();
+        service = await initService({
+          projectFindUniqueMock,
+          buildRemoveMock,
+          testVariationDeleteMock,
+          projectDeleteMock,
+        });
+
+        await expect(service.remove('projectId')).resolves.toEqual(expect.objectContaining({ id: TEST_PROJECT.id }));
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(buildRemoveMock).toHaveBeenCalledTimes(1);
+        expect(testVariationDeleteMock).not.toHaveBeenCalled();
+        expect(projectDeleteMock).not.toHaveBeenCalled();
+        expect(unhandled).not.toHaveBeenCalled();
+        expect(service['ongoingDeletions'].has('projectId')).toBe(false);
+      } finally {
+        process.off('unhandledRejection', unhandled);
+      }
+    });
+
+    it('should handle concurrent calls for the same project by returning without starting a second cleanup', async () => {
+      let releaseBuild1!: () => void;
+      const build1Gate = new Promise<void>((resolve) => {
+        releaseBuild1 = resolve;
       });
-      const buildRemoveMock = jest.fn().mockRejectedValueOnce(new Error('cannot delete'));
-      const testVariationDeleteMock = jest.fn();
-      const projectDeleteMock = jest.fn();
+      const projectFindUniqueMock = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ...TEST_PROJECT,
+          builds: [{ id: 'build1' }],
+          testVariations: [],
+        })
+        .mockResolvedValueOnce(TEST_PROJECT);
+      const buildRemoveMock = jest.fn().mockImplementation(async () => {
+        await build1Gate;
+      });
+      const projectDeleteMock = jest.fn().mockResolvedValue(TEST_PROJECT);
       service = await initService({
         projectFindUniqueMock,
         buildRemoveMock,
-        testVariationDeleteMock,
         projectDeleteMock,
       });
 
-      await expect(service.remove('projectId')).rejects.toThrow('cannot delete');
+      const promise1 = service.remove('projectId');
+      await new Promise((resolve) => setImmediate(resolve));
+      const promise2 = service.remove('projectId');
 
+      await expect(promise2).resolves.toEqual(expect.objectContaining({ id: TEST_PROJECT.id }));
       expect(buildRemoveMock).toHaveBeenCalledTimes(1);
-      expect(testVariationDeleteMock).not.toHaveBeenCalled();
-      expect(projectDeleteMock).not.toHaveBeenCalled();
+
+      releaseBuild1();
+      await promise1;
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(service['ongoingDeletions'].has('projectId')).toBe(false);
     });
 
     it('throws a TypeError when the project does not exist', async () => {

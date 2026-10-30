@@ -11,6 +11,7 @@ import type { WrapperType } from '../shared/wrapper-type';
 @Injectable()
 export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
+  private readonly ongoingDeletions = new Map<string, Promise<void>>();
 
   constructor(
     private prismaService: PrismaService,
@@ -103,24 +104,49 @@ export class ProjectsService {
   }
 
   async remove(id: string): Promise<Project> {
+    if (this.ongoingDeletions.has(id)) {
+      this.logger.debug(`Deletion for project ${id} is already in progress.`);
+      return (await this.prismaService.project.findUnique({
+        where: { id },
+      }))!;
+    }
+
     this.logger.debug(`Going to remove Project ${id}`);
-    const project = (await this.prismaService.project.findUnique({
+    const project = await this.prismaService.project.findUnique({
       where: { id },
       include: {
         builds: true,
         testVariations: true,
       },
-    }))!;
-
-    for (const build of project.builds) {
-      await this.buildsService.remove(build.id);
-    }
-    for (const testVariation of project.testVariations) {
-      await this.testVariationsService.delete(testVariation.id);
-    }
-
-    return this.prismaService.project.delete({
-      where: { id },
     });
+    const builds = project!.builds;
+    const testVariations = project!.testVariations;
+
+    const deletionPromise = (async () => {
+      for (const build of builds) {
+        await this.buildsService.remove(build.id);
+      }
+      for (const testVariation of testVariations) {
+        await this.testVariationsService.delete(testVariation.id);
+      }
+      await this.prismaService.project.delete({
+        where: { id },
+      });
+    })();
+
+    this.ongoingDeletions.set(id, deletionPromise);
+
+    deletionPromise
+      .finally(() => {
+        this.ongoingDeletions.delete(id);
+        this.logger.debug(`Deletion promise for project ${id} resolved/rejected and removed from map.`);
+      })
+      // finally() hands on the rejection in a promise nobody awaits: unhandled,
+      // it would take the whole process down. Log it instead.
+      .catch((err: unknown): void => {
+        this.logger.error(`Failed to remove project ${id}`, err instanceof Error ? err.stack : err);
+      });
+
+    return project!;
   }
 }
