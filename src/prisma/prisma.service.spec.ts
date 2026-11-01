@@ -235,13 +235,14 @@ describe('negotiatePreferredSsl', () => {
     expect(end).toHaveBeenCalled();
   });
 
-  it('keeps TLS when the connection fails for another reason, left for the real connection to report', async () => {
-    stubClient(() => Promise.reject(new Error('password authentication failed')));
+  it('fails when the server cannot be reached, so TLS is not settled on a guess', async () => {
+    const end = stubClient(() => Promise.reject(new Error('connect ECONNREFUSED 172.18.0.2:5432')));
     const config = preferringConfig();
 
-    await expect(negotiatePreferredSsl(config)).resolves.toBeUndefined();
+    await expect(negotiatePreferredSsl(config)).rejects.toThrow('ECONNREFUSED');
 
     expect(config.ssl).toEqual({ rejectUnauthorized: false });
+    expect(end).toHaveBeenCalled();
   });
 });
 
