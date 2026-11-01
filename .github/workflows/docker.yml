@@ -6,14 +6,6 @@ on:
       - 'api-v*'
       - 'migration-v*'
       - 'dinov2-v*'
-  pull_request:
-    branches: [master]
-    paths:
-      - Dockerfile
-      - prisma/Dockerfile
-      - prisma/schema.prisma
-      - dinov2/**
-      - .github/workflows/docker.yml
   workflow_dispatch:
     inputs:
       tag:
@@ -44,13 +36,12 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
           PREFIX: ${{ matrix.image }}-v
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "push=false" >> "$GITHUB_OUTPUT"
-          elif [ "${TAG#"$PREFIX"}" != "$TAG" ]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "push=true" >> "$GITHUB_OUTPUT"
-            echo "version=${TAG#"$PREFIX"}" >> "$GITHUB_OUTPUT"
+          if [ "${TAG#"$PREFIX"}" != "$TAG" ]; then
+            {
+              echo "build=true"
+              echo "push=true"
+              echo "version=${TAG#"$PREFIX"}"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "Tag $TAG is not a ${{ matrix.image }} release, skipping"
             echo "build=false" >> "$GITHUB_OUTPUT"
@@ -85,6 +76,6 @@ jobs:
           context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
           push: ${{ steps.version.outputs.push == 'true' }}
-          tags: visualregressiontracker/${{ matrix.image }}:${{ steps.version.outputs.version || 'ci' }}
+          tags: visualregressiontracker/${{ matrix.image }}:${{ steps.version.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
