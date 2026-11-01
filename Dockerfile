@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS builder
+FROM node:26-bookworm-slim AS builder
 WORKDIR /app
 
 COPY prisma.config.ts ./
@@ -13,7 +13,7 @@ COPY src ./src
 
 RUN npm run typecheck && npm run build && npm prune --omit=dev
 
-FROM node:24-bookworm-slim
+FROM node:26-bookworm-slim
 ENV NODE_ENV=production
 # tini as PID 1: the SIGTERM Nest re-raises would never end a node PID 1
 RUN apt-get update && apt-get install -y --no-install-recommends tini && rm -rf /var/lib/apt/lists/*
