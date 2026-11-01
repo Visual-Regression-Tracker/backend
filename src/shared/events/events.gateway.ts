@@ -46,10 +46,11 @@ export class EventsGateway implements OnApplicationShutdown {
   }
 
   testRunUpdated(testRun: TestRun): void {
-    this.enqueueTestRun(
-      this.testRunQueues.testRun_created.has(testRun.id) ? 'testRun_created' : 'testRun_updated',
-      testRun
-    );
+    // Clients skip testRun_created for runs they already fetched, so the update must go out as well
+    if (this.testRunQueues.testRun_created.has(testRun.id)) {
+      this.testRunQueues.testRun_created.set(testRun.id, new TestRunDto(testRun));
+    }
+    this.enqueueTestRun('testRun_updated', testRun);
     this.buildUpdated(testRun.buildId);
   }
 

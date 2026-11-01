@@ -195,17 +195,19 @@ describe('EventsGateway', () => {
   });
 
   describe('ordering and de-duplication', () => {
-    it('sends an update of a run still queued as created with the created event, not before it', async () => {
+    it('sends an update of a run still queued as created with both the created and the updated event', async () => {
       const { gateway, emitMock } = await initGateway();
       const diffed = { ...testRunB, status: TestStatus.unresolved, diffName: 'diff.png' };
+      const approved = { ...diffed, status: TestStatus.approved };
 
       gateway.testRunCreated(testRunA);
       gateway.testRunCreated(testRunB);
       gateway.testRunUpdated(diffed);
+      gateway.testRunUpdated(approved);
       jest.advanceTimersByTime(1500);
 
-      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([]);
-      expect(emitsOf(emitMock, 'testRun_created')).toEqual([[new TestRunDto(testRunA)], [new TestRunDto(diffed)]]);
+      expect(emitsOf(emitMock, 'testRun_created')).toEqual([[new TestRunDto(testRunA)], [new TestRunDto(approved)]]);
+      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([[new TestRunDto(diffed)], [new TestRunDto(approved)]]);
     });
 
     it('sends an update of a run already announced as created as an update', async () => {
