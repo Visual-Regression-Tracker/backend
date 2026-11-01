@@ -96,27 +96,6 @@ describe('computePixelmatchDiff with a signature', () => {
   });
 });
 
-describe('computePixelmatchDiff with byte-equal input', () => {
-  afterEach(() => jest.restoreAllMocks());
-
-  it('answers equal for byte-equal input without decoding it', () => {
-    const read = jest.spyOn(PNG.sync, 'read');
-    const other = new Uint8Array(blank.length + 3);
-    other.set(blank, 3);
-
-    const result = diffJob(blank, other.subarray(3) as unknown as Buffer);
-
-    expect(result).toStrictEqual({ equal: true });
-    expect(read).not.toHaveBeenCalled();
-  });
-
-  it('decodes and rejects a byte-equal but truncated pair as before', () => {
-    const truncated = blank.subarray(0, blank.length - 20);
-
-    expect(() => diffJob(truncated, Buffer.from(truncated))).toThrow();
-  });
-});
-
 describe('computePixelmatchDiff with thumbnails', () => {
   it('returns a small picture of both the checkpoint and the diff', () => {
     const result = diffJob(blank, block(10, 10, RED));

@@ -1,6 +1,5 @@
 import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
-import { isByteEqualWellFormedPng } from '../../../static/utils';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { applyIgnoreAreas, readPng, scaleImageToSize } from '../../utils';
 import {
@@ -42,10 +41,6 @@ export interface PixelmatchJobOutput {
 }
 
 export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobOutput {
-  if (isByteEqualWellFormedPng(input.baseline, input.image)) {
-    return { equal: true };
-  }
-
   const baseline = readPng(input.baseline);
   const image = readPng(input.image);
 
