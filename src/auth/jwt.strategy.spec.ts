@@ -23,6 +23,10 @@ describe('JwtStrategy', () => {
     strategy = createStrategy();
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   describe('constructor', () => {
     it('reads the signing secret from JWT_SECRET', () => {
       expect(configService.getOrThrow).toHaveBeenCalledWith('JWT_SECRET');
@@ -38,6 +42,15 @@ describe('JwtStrategy', () => {
 
       expect(jwtFromRequest({ headers: { authorization: 'Bearer abc.def.ghi' } })).toBe('abc.def.ghi');
       expect(jwtFromRequest({ headers: {} })).toBeNull();
+    });
+
+    it('fails to construct when JWT_SECRET is missing', () => {
+      const { JWT_SECRET: _, ...env } = process.env;
+      jest.replaceProperty(process, 'env', env);
+
+      expect(() => new JwtStrategy(new ConfigService({}), prismaService as unknown as PrismaService)).toThrow(
+        'JWT_SECRET'
+      );
     });
 
     it('fails to construct with an empty secret', () => {

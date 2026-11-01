@@ -22,7 +22,7 @@ describe('AuthService', () => {
     it('produces a salted bcrypt hash with 10 rounds that matches the password', async () => {
       const hashed = await service.encryptPassword('secret');
 
-      expect(hashed).toMatch(/^\$2[ab]\$10\$.{53}$/);
+      expect(hashed).toMatch(/^\$2b\$10\$.{53}$/);
       await expect(compare('secret', hashed)).resolves.toBe(true);
     });
 
@@ -46,7 +46,7 @@ describe('AuthService', () => {
       await expect(service.compare('wrong', hashed)).resolves.toBe(false);
     });
 
-    it.each(['$2a$', '$2b$'])('accepts a stored %s hash made by bcryptjs 2', async (prefix) => {
+    it.each(['$2a$', '$2b$', '$2y$'])('accepts a stored %s hash', async (prefix) => {
       const stored = `${prefix}04$R027vBbuLWRJ2xYKfqj3TekDrP67RjQ3V5fddfP4jdJBphIPfQ8HW`;
       await expect(service.compare('123456', stored)).resolves.toBe(true);
       await expect(service.compare('1234567', stored)).resolves.toBe(false);

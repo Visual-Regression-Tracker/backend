@@ -16,11 +16,14 @@ describe('GeminiService with the real @google/genai SDK', () => {
   let fetchSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    // the SDK picks its endpoint from GOOGLE_* variables a developer shell may set
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GOOGLE_')));
+    jest.replaceProperty(process, 'env', env);
     fetchSpy = jest.spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
-    fetchSpy.mockRestore();
+    jest.restoreAllMocks();
   });
 
   it('posts the prompt, images and JSON schema to generateContent and returns the response text', async () => {
