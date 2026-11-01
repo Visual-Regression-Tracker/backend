@@ -278,6 +278,17 @@ describe('PrismaService construction', () => {
     expect((service as unknown as { pgConfig: { ssl: unknown } }).pgConfig.ssl).toBe(false);
   });
 
+  it('does not connect when the TLS probe cannot reach the database', async () => {
+    jest.spyOn(Client.prototype, 'end').mockResolvedValue(undefined as never);
+    jest.spyOn(Client.prototype, 'connect').mockRejectedValue(new Error('getaddrinfo ENOTFOUND db') as never);
+    process.env.DATABASE_URL = 'postgresql://user:secret@db:5432/vrt';
+    const service = new PrismaService();
+    const connect = jest.spyOn(service, '$connect').mockResolvedValue(undefined);
+
+    await expect(service.onModuleInit()).rejects.toThrow('ENOTFOUND');
+    expect(connect).not.toHaveBeenCalled();
+  });
+
   it('does not try TLS first when the URL settles it', async () => {
     const trial = jest.spyOn(Client.prototype, 'connect');
     process.env.DATABASE_URL = 'postgresql://user:secret@db:5432/vrt?sslmode=disable';
