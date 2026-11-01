@@ -11,7 +11,7 @@ const user = { id: 'user-id', email: 'user@example.com' } as User;
 
 describe('JwtStrategy', () => {
   let prismaService: { user: { findUnique: jest.Mock } };
-  let configService: { get: jest.Mock };
+  let configService: { getOrThrow: jest.Mock };
   let strategy: JwtStrategy;
 
   const createStrategy = () =>
@@ -19,13 +19,17 @@ describe('JwtStrategy', () => {
 
   beforeEach(() => {
     prismaService = { user: { findUnique: jest.fn() } };
-    configService = { get: jest.fn().mockReturnValue(SECRET) };
+    configService = { getOrThrow: jest.fn().mockReturnValue(SECRET) };
     strategy = createStrategy();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('constructor', () => {
     it('reads the signing secret from JWT_SECRET', () => {
-      expect(configService.get).toHaveBeenCalledWith('JWT_SECRET');
+      expect(configService.getOrThrow).toHaveBeenCalledWith('JWT_SECRET');
     });
 
     it('registers itself as the "jwt" passport strategy', () => {
@@ -40,8 +44,17 @@ describe('JwtStrategy', () => {
       expect(jwtFromRequest({ headers: {} })).toBeNull();
     });
 
-    it('fails to construct without a secret', () => {
-      configService.get.mockReturnValue(undefined);
+    it('fails to construct when JWT_SECRET is missing', () => {
+      const { JWT_SECRET: _, ...env } = process.env;
+      jest.replaceProperty(process, 'env', env);
+
+      expect(() => new JwtStrategy(new ConfigService({}), prismaService as unknown as PrismaService)).toThrow(
+        'JWT_SECRET'
+      );
+    });
+
+    it('fails to construct with an empty secret', () => {
+      configService.getOrThrow.mockReturnValue('');
 
       expect(createStrategy).toThrow('JwtStrategy requires a secret or key');
     });
