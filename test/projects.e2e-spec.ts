@@ -1,7 +1,6 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { AppModule } from '../src/app.module';
+import { INestApplication } from '@nestjs/common';
 import { UsersService } from '../src/users/users.service';
+import { createE2eApp } from './api-helpers';
 import { requestWithAuth, haveUserLogged, LoggedUser } from './preconditions';
 import { ProjectsService } from '../src/projects/projects.service';
 import { randomUUID } from 'crypto';
@@ -36,18 +35,9 @@ describe('Projects (e2e)', () => {
   let loggedUser: LoggedUser;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(ProjectsService)
-      .useValue(projectServiceMock)
-      .compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe());
-    usersService = moduleFixture.get<UsersService>(UsersService);
-
-    await app.init();
+    const created = await createE2eApp({ overrides: [[ProjectsService, projectServiceMock]] });
+    app = created.app;
+    usersService = created.get(UsersService);
   });
 
   beforeEach(async () => {
@@ -62,72 +52,59 @@ describe('Projects (e2e)', () => {
     await app.close();
   });
 
-  describe('POST /', () => {
-    it('200', () => {
-      return requestWithAuth(app, 'post', '/projects', loggedUser.token)
-        .send(project)
-        .expect(201)
-        .expect((res) => {
-          expect(res.body.name).toBe(project.name);
-          expect(res.body.mainBranchName).toBe(project.mainBranchName);
-          expect(res.body.autoApproveFeature).toBe(project.autoApproveFeature);
-          expect(res.body.imageComparison).toBe(project.imageComparison);
-          expect(res.body.imageComparisonConfig).toBe(project.imageComparisonConfig);
-          expect(res.body.maxBuildAllowed).toBe(project.maxBuildAllowed);
-          expect(res.body.maxBranchLifetime).toBe(project.maxBranchLifetime);
+  it.each([
+    ['post', '/projects', ''],
+    ['get', '/projects', ''],
+    ['delete', `/projects/${project.id}`, 'asd'],
+    ['put', '/projects', 'asd'],
+  ] as const)('%s %s answers 401 for token "%s"', (method, url, token) =>
+    requestWithAuth(app, method, url, token).send(project).expect(401)
+  );
+
+  it('POST / creates a project', () => {
+    return requestWithAuth(app, 'post', '/projects', loggedUser.token)
+      .send(project)
+      .expect(201)
+      .expect((res) => {
+        expect(res.body).toMatchObject({
+          name: project.name,
+          mainBranchName: project.mainBranchName,
+          autoApproveFeature: project.autoApproveFeature,
+          imageComparison: project.imageComparison,
+          imageComparisonConfig: project.imageComparisonConfig,
+          maxBuildAllowed: project.maxBuildAllowed,
+          maxBranchLifetime: project.maxBranchLifetime,
         });
-    });
-
-    it('401', () => {
-      return requestWithAuth(app, 'post', '/projects', '').send(project).expect(401);
-    });
-  });
-
-  describe('GET /', () => {
-    it('200', async () => {
-      const res = await requestWithAuth(app, 'get', '/projects', loggedUser.token).send().expect(200);
-
-      expect(res.body).toEqual(expect.arrayContaining(projectServiceMock.findAll()));
-    });
-
-    it('401', async () => {
-      await requestWithAuth(app, 'get', '/projects', '').send().expect(401);
-    });
-  });
-
-  describe('DELETE /', () => {
-    it('can delete', async () => {
-      const res = await requestWithAuth(app, 'delete', `/projects/${project.id}`, loggedUser.token).send().expect(200);
-
-      expect(res.body).toStrictEqual({
-        ...projectServiceMock.remove(),
-        createdAt: expect.any(String),
-        updatedAt: expect.any(String),
       });
-    });
+  });
 
-    it('not valid UUID', async () => {
-      await requestWithAuth(app, 'delete', `/projects/123`, loggedUser.token).send().expect(400);
-    });
+  it('GET / lists the projects', async () => {
+    const res = await requestWithAuth(app, 'get', '/projects', loggedUser.token).send().expect(200);
 
-    it('not valid token', async () => {
-      await requestWithAuth(app, 'delete', `/projects/${project.id}`, 'asd').send().expect(401);
+    expect(res.body).toEqual(expect.arrayContaining(projectServiceMock.findAll()));
+  });
+
+  it('DELETE /:id removes the project', async () => {
+    const res = await requestWithAuth(app, 'delete', `/projects/${project.id}`, loggedUser.token).send().expect(200);
+
+    expect(res.body).toStrictEqual({
+      ...projectServiceMock.remove(),
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
     });
   });
 
-  describe('PUT /', () => {
-    it('can edit', async () => {
-      const res = await requestWithAuth(app, 'put', `/projects`, loggedUser.token).send(project).expect(200);
+  it('DELETE /:id answers 400 for an id that is not a UUID', async () => {
+    await requestWithAuth(app, 'delete', `/projects/123`, loggedUser.token).send().expect(400);
+  });
 
-      expect(res.body).toStrictEqual({
-        ...projectServiceMock.update(),
-        createdAt: expect.any(String),
-        updatedAt: expect.any(String),
-      });
-    });
+  it('PUT / edits the project', async () => {
+    const res = await requestWithAuth(app, 'put', `/projects`, loggedUser.token).send(project).expect(200);
 
-    it('not valid token', async () => {
-      await requestWithAuth(app, 'put', `/projects`, 'asd').send(project).expect(401);
+    expect(res.body).toStrictEqual({
+      ...projectServiceMock.update(),
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
     });
   });
 });

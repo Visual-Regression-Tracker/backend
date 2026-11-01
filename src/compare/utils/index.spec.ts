@@ -37,7 +37,6 @@ describe('parseConfig', () => {
   });
 });
 
-// pixel i of a w x h image gets channels [i, 100 + i, 200 - i, 50 + i] so every channel is distinguishable
 const distinctPixels = (width: number, height: number): Buffer => {
   const data = Buffer.alloc(width * height * 4);
   for (let i = 0; i < width * height; i++) {
@@ -59,9 +58,7 @@ describe('applyIgnoreAreas edges', () => {
 
     expect(pixelOf(image.data, 0)).toEqual([0, 0, 0, 0]);
     expect(pixelOf(image.data, 1)).toEqual([0, 0, 0, 0]);
-    // column right after the area
     expect(pixelOf(image.data, 2)).toEqual([255, 255, 255, 255]);
-    // row right after the area
     expect(pixelOf(image.data, 3)).toEqual([255, 255, 255, 255]);
     expect(pixelOf(image.data, 4)).toEqual([255, 255, 255, 255]);
   });
@@ -78,40 +75,122 @@ describe('applyIgnoreAreas edges', () => {
   });
 });
 
-describe('scaleImageToSize', () => {
-  it('returns the same image when the requested size equals the image size', () => {
-    const image = generatePng(3, 2);
+const masked = (image: PNG): number[] => {
+  const indexes: number[] = [];
+  for (let i = 0; i < image.width * image.height; i++) {
+    if (image.data[i * 4 + 3] === 0) {
+      indexes.push(i);
+    }
+  }
+  return indexes;
+};
 
-    expect(scaleImageToSize(image, 3, 2)).toBe(image);
+const legacyApply = (image: PNG, ignoreAreas: IgnoreAreaDto[]): PNG => {
+  ignoreAreas.forEach((area) => {
+    for (let y = area.y; y < Math.min(area.y + area.height, image.height); y++) {
+      for (let x = area.x; x < Math.min(area.x + area.width, image.width); x++) {
+        const k = 4 * (image.width * y + x);
+        image.data[k + 0] = 0;
+        image.data[k + 1] = 0;
+        image.data[k + 2] = 0;
+        image.data[k + 3] = 0;
+      }
+    }
+  });
+  return image;
+};
+
+describe('applyIgnoreAreas rounding and clamping', () => {
+  it('masks every pixel a fractional area touches', () => {
+    const image = generatePng(4, 4);
+
+    applyIgnoreAreas(image, [{ x: 0.5, y: 0.5, width: 1, height: 1 }]);
+
+    expect(masked(image)).toEqual([0, 1, 4, 5]);
+    for (const index of masked(image)) {
+      expect(pixelOf(image.data, index)).toEqual([0, 0, 0, 0]);
+    }
   });
 
-  it('returns the same image when only the height is requested smaller', () => {
+  it.each([
+    ['does not wrap a negative x into the previous row', 4, { x: -2, y: 1, width: 3, height: 1 }, [4]],
+    ['clips a negative y to the first row', 4, { x: 1, y: -2, width: 1, height: 3 }, [1]],
+    [
+      'keeps the old ceil end for a fractional size at an integer start',
+      4,
+      { x: 0, y: 0, width: 1.5, height: 1.2 },
+      [0, 1, 4, 5],
+    ],
+    [
+      'returns at once for absurd coordinates',
+      3,
+      { x: -1e12, y: -1e12, width: 2e12, height: 2e12 },
+      [0, 1, 2, 3, 4, 5, 6, 7, 8],
+    ],
+  ])('%s', (_, size, area, expected) => {
+    const image = generatePng(size, size);
+
+    applyIgnoreAreas(image, [area]);
+
+    expect(masked(image)).toEqual(expected);
+  });
+
+  it('skips null, empty and non-numeric areas', () => {
     const image = generatePng(3, 3);
 
-    expect(scaleImageToSize(image, 3, 2)).toBe(image);
+    applyIgnoreAreas(image, [
+      null,
+      { x: 1, y: 1, width: 0, height: 2 },
+      { x: NaN, y: 0, width: 2, height: 2 },
+    ] as unknown as IgnoreAreaDto[]);
+
+    expect(masked(image)).toEqual([]);
   });
 
-  it('pads a wider canvas with transparent black, keeping the original pixels top-left', () => {
-    const image = new PNG({ width: 2, height: 1 });
-    distinctPixels(2, 1).copy(image.data);
+  it('masks byte for byte what the old loop masked for integer areas', () => {
+    let seed = 12345;
+    const next = (min: number, max: number): number => {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return min + Math.floor((seed / 4294967296) * (max - min));
+    };
 
-    const result = scaleImageToSize(image, 3, 1);
+    for (let i = 0; i < 300; i++) {
+      const area = { x: next(0, 12), y: next(-5, 12), width: next(-3, 12), height: next(-3, 12) };
+      const legacy = new PNG({ width: 9, height: 7 });
+      const current = new PNG({ width: 9, height: 7 });
+      distinctPixels(9, 7).copy(legacy.data);
+      distinctPixels(9, 7).copy(current.data);
+
+      legacyApply(legacy, [area]);
+      applyIgnoreAreas(current, [area]);
+
+      expect(current.data.equals(legacy.data)).toBe(true);
+    }
+  });
+});
+
+describe('scaleImageToSize', () => {
+  it.each([
+    ['the requested size equals the image size', 3, 2, 3, 2],
+    ['only the height is requested smaller', 3, 3, 3, 2],
+  ])('returns the same image when %s', (_, imageWidth, imageHeight, width, height) => {
+    const image = generatePng(imageWidth, imageHeight);
+
+    expect(scaleImageToSize(image, width, height)).toBe(image);
+  });
+
+  it.each([
+    ['wider', [2, 1], [3, 1], [0, 100, 200, 50, 1, 101, 199, 51, 0, 0, 0, 0]],
+    ['taller', [1, 1], [1, 2], [0, 100, 200, 50, 0, 0, 0, 0]],
+  ])('pads a %s canvas with transparent black, keeping the original pixels top-left', (_, from, to, expected) => {
+    const image = new PNG({ width: from[0], height: from[1] });
+    distinctPixels(from[0], from[1]).copy(image.data);
+
+    const result = scaleImageToSize(image, to[0], to[1]);
 
     expect(result).not.toBe(image);
-    expect(result.width).toBe(3);
-    expect(result.height).toBe(1);
-    expect([...result.data]).toEqual([0, 100, 200, 50, 1, 101, 199, 51, 0, 0, 0, 0]);
-  });
-
-  it('pads a taller canvas with transparent black, keeping the original pixels top-left', () => {
-    const image = new PNG({ width: 1, height: 1 });
-    distinctPixels(1, 1).copy(image.data);
-
-    const result = scaleImageToSize(image, 1, 2);
-
-    expect(result.width).toBe(1);
-    expect(result.height).toBe(2);
-    expect([...result.data]).toEqual([0, 100, 200, 50, 0, 0, 0, 0]);
+    expect([result.width, result.height]).toEqual(to);
+    expect([...result.data]).toEqual(expected);
   });
 });
 
@@ -130,7 +209,6 @@ describe('downscale', () => {
     expect(result.width).toBe(2);
     expect(result.height).toBe(2);
     expect(result.data.length).toBe(2 * 2 * 4);
-    // target (x, y) <- source (2x, 2y): source indexes 0, 2, 8, 10
     expect([...result.data]).toEqual([
       ...pixelOf(source.data, 0),
       ...pixelOf(source.data, 2),
@@ -146,7 +224,6 @@ describe('downscale', () => {
 
     expect(result.width).toBe(2);
     expect(result.height).toBe(1);
-    // target x 0 <- source x 0, target x 1 <- source x 3 (scale 1/3)
     expect([...result.data]).toEqual([...pixelOf(source.data, 0), ...pixelOf(source.data, 3)]);
   });
 });

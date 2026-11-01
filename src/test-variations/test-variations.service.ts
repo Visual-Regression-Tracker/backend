@@ -1,15 +1,18 @@
 import { Injectable, Inject, forwardRef, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestVariation, Baseline, Build, TestRun, User } from '@prisma/client';
+import { isPrismaError } from '../prisma/prisma-errors';
+import { TestVariation, Baseline, Build, Project, TestRun, User, Prisma } from '@prisma/client';
 import { StaticService } from '../static/static.service';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { BuildDto } from '../builds/dto/build.dto';
-import { getTestVariationUniqueData } from '../utils';
+import { getTestVariationUniqueData, parseIgnoreAreas, variationKey } from '../utils';
 import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import type { WrapperType } from '../shared/wrapper-type';
+
+export type BaselineRef = Pick<Baseline, 'id' | 'baselineName'>;
 
 @Injectable()
 export class TestVariationsService {
@@ -25,10 +28,9 @@ export class TestVariationsService {
   ) {}
 
   async getDetails(id: string): Promise<
-    | (TestVariation & {
-        baselines: (Baseline & { testRun: TestRun | null; user: Omit<User, 'password' | 'apiKey'> | null })[];
-      })
-    | null
+    TestVariation & {
+      baselines: (Baseline & { testRun: TestRun | null; user: Omit<User, 'password' | 'apiKey'> | null })[];
+    }
   > {
     const testVariation = await this.prismaService.testVariation.findUnique({
       where: { id },
@@ -36,8 +38,6 @@ export class TestVariationsService {
         baselines: {
           include: {
             testRun: true,
-            // who approved the baseline, for the history list — never their
-            // credentials: any signed-in user, guests included, can read this
             user: { omit: { password: true, apiKey: true } },
           },
           orderBy: {
@@ -52,10 +52,37 @@ export class TestVariationsService {
     return testVariation;
   }
 
+  async findBaselineHistory(testVariationId: string): Promise<BaselineRef[]> {
+    return this.prismaService.baseline.findMany({
+      where: { testVariationId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, baselineName: true },
+    });
+  }
+
+  async findLatestBaselines(testVariationIds: string[]): Promise<BaselineRef[]> {
+    if (testVariationIds.length === 0) {
+      return [];
+    }
+    const baselines = await this.prismaService.baseline.findMany({
+      where: { testVariationId: { in: testVariationIds } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, baselineName: true, testVariationId: true },
+    });
+    const latest = new Map<string, BaselineRef>();
+    for (const { testVariationId, ...baseline } of baselines) {
+      if (!latest.has(testVariationId)) {
+        latest.set(testVariationId, baseline);
+      }
+    }
+    return testVariationIds.flatMap((id) => latest.get(id) ?? []);
+  }
+
   async findUnique(
-    data: ReturnType<typeof getTestVariationUniqueData> & { projectId: string; branchName: string }
+    data: ReturnType<typeof getTestVariationUniqueData> & { projectId: string; branchName: string },
+    tx: Prisma.TransactionClient = this.prismaService
   ): Promise<TestVariation | null> {
-    return this.prismaService.testVariation.findUnique({
+    return tx.testVariation.findUnique({
       where: {
         projectId_name_browser_device_os_viewport_customTags_branchName: {
           projectId: data.projectId,
@@ -71,8 +98,13 @@ export class TestVariationsService {
     });
   }
 
-  async update(id: string, data: TestVariationUpdateDto, testRunId?: string): Promise<TestVariation> {
-    return this.prismaService.testVariation.update({
+  async update(
+    id: string,
+    data: TestVariationUpdateDto,
+    testRunId?: string,
+    tx: Prisma.TransactionClient = this.prismaService
+  ): Promise<TestVariation> {
+    return tx.testVariation.update({
       where: { id },
       data: {
         baselineName: data.baselineName,
@@ -83,79 +115,79 @@ export class TestVariationsService {
     });
   }
 
-  /**
-   * Tries to get test variation for the same branch
-   * Falls back to main branch if not found
-   * @param projectId
-   * @param baselineData
-   * @returns
-   */
   async find(
-    createTestRequestDto: BaselineDataDto & { projectId: string; sourceBranch?: string }
-  ): Promise<TestVariation | null | undefined> {
-    const project = (await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } }))!;
-    const mainBranch = createTestRequestDto.sourceBranch ?? project.mainBranchName;
+    createTestRequestDto: BaselineDataDto & { projectId: string; sourceBranch?: string },
+    mainBranchName?: string
+  ): Promise<TestVariation | undefined> {
+    const mainBranch =
+      createTestRequestDto.sourceBranch ??
+      mainBranchName ??
+      (await this.prismaService.project.findUnique({ where: { id: createTestRequestDto.projectId } }))!.mainBranchName;
 
     const [mainBranchTestVariation, currentBranchTestVariation] = await Promise.all([
-      // search main branch variation
-      this.findUnique({
-        projectId: createTestRequestDto.projectId,
-        branchName: mainBranch,
-        ...getTestVariationUniqueData(createTestRequestDto),
-      }),
-      // search current branch variation
+      this.findUnique(variationKey(createTestRequestDto.projectId, mainBranch, createTestRequestDto)),
       createTestRequestDto.branchName !== mainBranch &&
-        this.findUnique({
-          projectId: createTestRequestDto.projectId,
-          branchName: createTestRequestDto.branchName,
-          ...getTestVariationUniqueData(createTestRequestDto),
-        }),
+        this.findUnique(
+          variationKey(createTestRequestDto.projectId, createTestRequestDto.branchName, createTestRequestDto)
+        ),
     ]);
 
-    if (!!currentBranchTestVariation) {
+    if (currentBranchTestVariation) {
       if (mainBranchTestVariation && mainBranchTestVariation.updatedAt > currentBranchTestVariation.updatedAt) {
         return mainBranchTestVariation;
       }
       return currentBranchTestVariation;
     }
 
-    if (!!mainBranchTestVariation) {
-      return mainBranchTestVariation;
-    }
+    return mainBranchTestVariation ?? undefined;
   }
 
-  /**
-   * Creates empty test variation (no baseline)
-   */
-  create({
-    testRunId,
-    createTestRequestDto,
-  }: {
-    testRunId?: string;
-    createTestRequestDto: Omit<CreateTestRequestDto, 'buildId' | 'ignoreAreas'>;
-  }): Promise<TestVariation> {
-    return this.prismaService.testVariation.create({
+  create(
+    { createTestRequestDto }: { createTestRequestDto: Omit<CreateTestRequestDto, 'buildId' | 'ignoreAreas'> },
+    tx: Prisma.TransactionClient = this.prismaService
+  ): Promise<TestVariation> {
+    return tx.testVariation.create({
       data: {
         project: { connect: { id: createTestRequestDto.projectId } },
-        testRuns: testRunId ? { connect: { id: testRunId } } : undefined,
         branchName: createTestRequestDto.branchName,
         ...getTestVariationUniqueData(createTestRequestDto),
       },
     });
   }
 
-  async addBaseline({
-    id,
-    userId,
-    testRunId,
-    baselineName,
-  }: {
-    id: string;
-    userId?: string;
-    testRunId: string;
-    baselineName: string;
-  }): Promise<TestVariation> {
-    return this.prismaService.testVariation.update({
+  async createOrTakeWinner(
+    createTestRequestDto: Omit<CreateTestRequestDto, 'buildId' | 'ignoreAreas'>
+  ): Promise<TestVariation> {
+    try {
+      return await this.create({ createTestRequestDto });
+    } catch (e) {
+      if (isPrismaError(e, 'P2002')) {
+        const winner = await this.findUnique(
+          variationKey(createTestRequestDto.projectId, createTestRequestDto.branchName, createTestRequestDto)
+        );
+        if (winner) {
+          return winner;
+        }
+      }
+      throw e;
+    }
+  }
+
+  async addBaseline(
+    {
+      id,
+      userId,
+      testRunId,
+      baselineName,
+    }: {
+      id: string;
+      userId?: string;
+      testRunId: string;
+      baselineName: string;
+    },
+    tx: Prisma.TransactionClient = this.prismaService
+  ): Promise<TestVariation> {
+    return tx.testVariation.update({
       where: { id },
       data: {
         baselineName,
@@ -181,95 +213,72 @@ export class TestVariationsService {
   }
 
   async merge(projectId: string, fromBranch: string, toBranch: string): Promise<BuildDto> {
-    // create build
     const build: Build = await this.buildsService.findOrCreate({
       branchName: toBranch,
       projectId,
     });
 
     try {
-      await this.mergeInto(build, projectId, fromBranch, toBranch);
+      const project = await this.prismaService.project.findUnique({ where: { id: projectId } });
+      if (!project) {
+        throw new NotFoundException(`Project not found: ${projectId}`);
+      }
+      await this.mergeInto(build, project, fromBranch, toBranch);
     } catch (e) {
-      // the build is stopped either way, so a failed merge does not stay
-      // "running" in the list forever; the cause still reaches the client
       await this.buildsService.update(build.id, { isRunning: false }).catch((): void => undefined);
       throw e;
     }
 
-    // stop build
     return this.buildsService.update(build.id, { isRunning: false });
   }
 
-  private async mergeInto(build: Build, projectId: string, fromBranch: string, toBranch: string): Promise<void> {
-    // find source branch variations
+  private async mergeInto(build: Build, project: Project, fromBranch: string, toBranch: string): Promise<void> {
     const testVariations: TestVariation[] = await this.prismaService.testVariation.findMany({
-      where: { projectId, branchName: fromBranch },
+      where: { projectId: project.id, branchName: fromBranch },
     });
 
-    // compare source to destination branch variations
     for (const sourceBranchTestVariation of testVariations) {
       const baselineBuffer = await this.staticService.getImageBuffer(sourceBranchTestVariation.baselineName);
       if (baselineBuffer) {
-        // get destination branch request
         const createTestRequestDto: CreateTestRequestDto = {
           ...sourceBranchTestVariation,
           branchName: toBranch,
           buildId: build.id,
           diffTollerancePercent: 0,
           merge: true,
-          ignoreAreas: JSON.parse(sourceBranchTestVariation.ignoreAreas),
+          ignoreAreas: parseIgnoreAreas(sourceBranchTestVariation.ignoreAreas),
         };
 
-        // get destination branch variation — on that branch only: find() would
-        // hand back the main branch's when it is the newer one, and the merge
-        // would then try to create a second variation on toBranch
-        let destintionBranchTestVariation = await this.findUnique({
-          projectId,
-          branchName: toBranch,
-          ...getTestVariationUniqueData(sourceBranchTestVariation),
-        });
-
-        if (!destintionBranchTestVariation) {
-          destintionBranchTestVariation = await this.create({ createTestRequestDto });
-        }
+        // not find(): it may return main's variation and the merge would create a second one on toBranch
+        const destinationBranchTestVariation =
+          (await this.findUnique(variationKey(project.id, toBranch, createTestRequestDto))) ??
+          (await this.createOrTakeWinner(createTestRequestDto));
 
         const testRun = await this.testRunsService.create({
-          testVariation: destintionBranchTestVariation,
+          testVariation: destinationBranchTestVariation,
           createTestRequestDto,
           imageBuffer: baselineBuffer,
         });
 
-        await this.testRunsService.calculateDiff(projectId, testRun);
+        await this.testRunsService.calculateDiff(project.id, testRun, baselineBuffer, project);
       }
     }
   }
 
   async delete(id: string): Promise<TestVariation> {
     this.logger.debug(`Going to remove TestVariation ${id}`);
-    const testVariation = (await this.getDetails(id))!;
-
-    // delete Baselines
-    for (const baseline of testVariation.baselines) {
-      await this.deleteBaseline(baseline);
-    }
-
-    // disconnect TestRuns
-    // workaround due to  https://github.com/prisma/prisma/issues/2810
-    await this.prismaService
-      .$executeRaw`UPDATE "public"."TestRun" SET "testVariationId" = NULL::text WHERE "testVariationId" = ${id}`;
-
-    // delete TestVariation
-    return this.prismaService.testVariation.delete({
-      where: { id },
+    const baselines = await this.prismaService.baseline.findMany({
+      where: { testVariationId: id },
+      select: { baselineName: true },
     });
-  }
-
-  async deleteBaseline(baseline: Baseline): Promise<Baseline> {
-    this.logger.debug(`Going to remove Baseline ${baseline.id}`);
-
-    this.staticService.deleteImage(baseline.baselineName);
-    return this.prismaService.baseline.delete({
-      where: { id: baseline.id },
-    });
+    const [, testVariation] = await this.prismaService.$transaction([
+      this.prismaService.baseline.deleteMany({ where: { testVariationId: id } }),
+      this.prismaService.testVariation.delete({ where: { id } }),
+    ]);
+    await this.staticService.deleteImages(
+      baselines.map(({ baselineName }) => baselineName),
+      8
+    );
+    return testVariation;
   }
 }

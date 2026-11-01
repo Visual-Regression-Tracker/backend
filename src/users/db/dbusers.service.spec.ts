@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { Role, User } from '@prisma/client';
 import { DbUsersService } from './dbusers.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -61,18 +61,41 @@ describe('DbUsersService', () => {
   });
 
   describe('update', () => {
-    it('updates the profile fields as given and returns a fresh token', async () => {
+    const current = { ...user, email: 'Test@Example.com' };
+
+    it('updates the profile fields and returns a fresh token', async () => {
+      prisma.user.findUnique.mockResolvedValue(current);
       prisma.user.update.mockResolvedValue(user);
 
-      const result = await service.update('1', { email: ' Mixed@Case.com', firstName: 'J', lastName: 'D' });
+      const result = await service.update('1', { email: 'test@example.com', firstName: 'J', lastName: 'D' });
 
-      // NOTE: current behavior — unlike create, the email is stored as given (not trimmed or lower-cased)
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: '1' },
-        data: { email: ' Mixed@Case.com', firstName: 'J', lastName: 'D' },
-      });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: '1' } });
       expect(auth.signToken).toHaveBeenCalledWith(user);
       expect(result).toEqual(new UserLoginResponseDto(user, 'token'));
+    });
+
+    it.each([
+      ['stores a changed email in lower case', ' New@Example.com ', 'new@example.com'],
+      ['keeps the stored spelling when only the case differs', 'test@EXAMPLE.com', 'Test@Example.com'],
+    ])('%s', async (_name, sent, stored) => {
+      prisma.user.findUnique.mockResolvedValue(current);
+      prisma.user.update.mockResolvedValue(user);
+
+      await service.update('1', { email: sent, firstName: 'J', lastName: 'D' });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: '1' },
+        data: { email: stored, firstName: 'J', lastName: 'D' },
+      });
+    });
+
+    it('answers 404 when the user no longer exists', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.update('1', { email: 'a@b.com', firstName: 'J', lastName: 'D' })).rejects.toBeInstanceOf(
+        NotFoundException
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 
@@ -88,6 +111,8 @@ describe('DbUsersService', () => {
   });
 
   describe('login', () => {
+    const invalid = new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST);
+
     it('returns the user with a token when the password matches', async () => {
       prisma.user.findUnique.mockResolvedValue(user);
       auth.compare.mockResolvedValue(true);
@@ -102,9 +127,7 @@ describe('DbUsersService', () => {
     it('rejects an unknown email with the same message as a wrong password', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.login({ email: 'nobody@example.com', password: 'secret' })).rejects.toThrow(
-        new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST)
-      );
+      await expect(service.login({ email: 'nobody@example.com', password: 'secret' })).rejects.toThrow(invalid);
       expect(auth.compare).not.toHaveBeenCalled();
     });
 
@@ -112,20 +135,37 @@ describe('DbUsersService', () => {
       prisma.user.findUnique.mockResolvedValue(user);
       auth.compare.mockResolvedValue(false);
 
-      await expect(service.login({ email: 'test@example.com', password: 'wrong' })).rejects.toThrow(
-        new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST)
-      );
+      await expect(service.login({ email: 'test@example.com', password: 'wrong' })).rejects.toThrow(invalid);
       expect(auth.signToken).not.toHaveBeenCalled();
     });
 
-    it('looks the email up exactly as typed', async () => {
+    it('signs in with a differently cased email', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(user);
+      auth.compare.mockResolvedValue(true);
+
+      const result = await service.login({ email: ' John@Example.com ', password: 'secret' });
+
+      expect(prisma.user.findUnique).toHaveBeenNthCalledWith(1, { where: { email: 'John@Example.com' } });
+      expect(prisma.user.findUnique).toHaveBeenNthCalledWith(2, { where: { email: 'john@example.com' } });
+      expect(result).toEqual(new UserLoginResponseDto(user, 'token'));
+    });
+
+    it('keeps signing in a mixed-case row with its exact spelling', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce({ ...user, email: 'John@Example.com' });
+      auth.compare.mockResolvedValue(true);
+
+      await service.login({ email: 'John@Example.com', password: 'secret' });
+
+      expect(prisma.user.findUnique).toHaveBeenCalledTimes(1);
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'John@Example.com' } });
+    });
+
+    it('looks a lower-case email up once', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.login({ email: ' Test@Example.com', password: 'secret' })).rejects.toThrow(HttpException);
+      await expect(service.login({ email: 'nobody@example.com', password: 'secret' })).rejects.toThrow(HttpException);
 
-      // NOTE: current behavior — create() lower-cases and trims, login() does not,
-      // so a user registered as "Test@Example.com" must log in as "test@example.com"
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: ' Test@Example.com' } });
+      expect(prisma.user.findUnique).toHaveBeenCalledTimes(1);
     });
   });
 });

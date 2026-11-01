@@ -42,15 +42,20 @@ describe('MixedGuard', () => {
     await expect(guard.canActivate(context)).resolves.toBe(expected);
   });
 
-  // NOTE: current behavior — both guards always run, even when the JWT guard
-  // has already let the request through, so an extra api-key lookup hits the
-  // database on every JWT-authenticated request.
-  it('always consults both guards with the same context', async () => {
-    const { guard, authGuard, apiGuard } = createGuard('pass', 'fail');
+  it('does not consult the api-key guard when the JWT is valid', async () => {
+    const { guard, authGuard, apiGuard } = createGuard('pass', 'pass');
 
     await guard.canActivate(context);
 
     expect(authGuard.canActivate).toHaveBeenCalledWith(context);
+    expect(apiGuard.canActivate).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the api-key guard with the same context when the JWT fails', async () => {
+    const { guard, apiGuard } = createGuard('fail', 'pass');
+
+    await guard.canActivate(context);
+
     expect(apiGuard.canActivate).toHaveBeenCalledWith(context);
   });
 
@@ -64,12 +69,10 @@ describe('MixedGuard', () => {
     );
   });
 
-  // NOTE: current behavior — the JWT guard's result is cast, not checked, so
-  // a truthy non-boolean value is passed through as-is.
-  it('passes a truthy non-boolean JWT result straight through', async () => {
+  it('returns true for a truthy non-boolean JWT result', async () => {
     const { guard, authGuard } = createGuard('fail', 'fail');
     authGuard.canActivate.mockResolvedValue('yes');
 
-    await expect(guard.canActivate(context)).resolves.toBe('yes');
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 });

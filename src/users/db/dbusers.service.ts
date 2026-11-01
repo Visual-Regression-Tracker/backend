@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from '../dto/user-create.dto';
 import { UserLoginResponseDto } from '../dto/user-login-response.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -9,7 +9,7 @@ import { UserLoginRequestDto } from '../dto/user-login-request.dto';
 import { Users } from '../users.interface';
 
 export class DbUsersService implements Users {
-  private readonly logger: Logger = new Logger(DbUsersService.name);
+  readonly allowsRegistration = true;
 
   constructor(
     private readonly prismaService: PrismaService,
@@ -33,10 +33,17 @@ export class DbUsersService implements Users {
   }
 
   async update(id: string, userDto: UpdateUserDto): Promise<UserLoginResponseDto> {
+    const current = await this.prismaService.user.findUnique({ where: { id } });
+    if (!current) {
+      throw new NotFoundException(`User not found: ${id}`);
+    }
+    const requested = userDto.email.trim();
+    // a case-only difference keeps the stored spelling: lower-casing it could collide with another row
+    const email = requested.toLowerCase() === current.email.toLowerCase() ? current.email : requested.toLowerCase();
     const user = await this.prismaService.user.update({
       where: { id },
       data: {
-        email: userDto.email,
+        email,
         firstName: userDto.firstName,
         lastName: userDto.lastName,
       },
@@ -56,9 +63,13 @@ export class DbUsersService implements Users {
   }
 
   async login(userLoginRequestDto: UserLoginRequestDto) {
-    const user = await this.prismaService.user.findUnique({
-      where: { email: userLoginRequestDto.email },
-    });
+    const email = userLoginRequestDto.email.trim();
+    // rows saved before emails were lower-cased keep their spelling, so the exact match goes first
+    const user =
+      (await this.prismaService.user.findUnique({ where: { email } })) ??
+      (email === email.toLowerCase()
+        ? null
+        : await this.prismaService.user.findUnique({ where: { email: email.toLowerCase() } }));
     if (!user) {
       throw new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST);
     }

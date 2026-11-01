@@ -1,16 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import { StaticService } from '../../../static/static.service';
+import { isByteEqualWellFormedPng, readPngDimensions } from '../../../static/utils';
 import { DiffResult } from '../../../test-runs/diffResult';
 import { parseConfig } from '../../utils';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { PixelmatchConfig } from './pixelmatch.types';
+import { PixelmatchJobOutput } from './pixelmatch.core';
 import { DiffWorkerPool } from '../../diff-worker-pool';
 import { Dinov2Service } from '../dinov2/dinov2.service';
 
 export const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialiasing: true };
+
+function sameDimensions(a: Buffer, b: Buffer): boolean {
+  const x = readPngDimensions(a);
+  const y = readPngDimensions(b);
+  return !x || !y || (x.width === y.width && x.height === y.height);
+}
 
 @Injectable()
 export class PixelmatchService implements ImageComparator {
@@ -32,12 +40,19 @@ export class PixelmatchService implements ImageComparator {
     if (!baselineBuffer) {
       return NO_BASELINE_RESULT;
     }
-    const imageBuffer = await this.staticService.getImageBuffer(data.image);
+    const imageBuffer = data.imageBuffer ?? (await this.staticService.getImageBuffer(data.image));
     if (!imageBuffer) {
       throw new Error(`Cannot get image: ${data.image}`);
     }
 
-    // decode + pixelmatch + diff encode run off the event loop
+    if (isByteEqualWellFormedPng(baselineBuffer, imageBuffer)) {
+      return EQUAL_RESULT;
+    }
+
+    if (!config.allowDiffDimensions && !sameDimensions(baselineBuffer, imageBuffer)) {
+      return DIFF_DIMENSION_RESULT;
+    }
+
     const output = await this.diffWorkerPool.run({
       kind: 'diff',
       baseline: baselineBuffer,
@@ -48,18 +63,6 @@ export class PixelmatchService implements ImageComparator {
       allowDiffDimensions: config.allowDiffDimensions,
       diffTolerancePercent: data.diffTollerancePercent,
       saveDiff: data.saveDiffAsFile,
-      // Asked for on every comparison, not only when the project has bulk
-      // approve of variations switched on: the pass costs little beside the
-      // full-size diff that has already been paid for, and computing it lazily
-      // would leave every run ingested before the flag was turned on without
-      // one — which is exactly the build someone then tries to review.
-      withSignature: true,
-      // Only when the caller is keeping the diff. shouldAutoApprove compares
-      // against past baselines with this off and throws the result away —
-      // making thumbnails for those would burn the CPU and, worse, store two
-      // objects per attempt that nothing ever references or deletes.
-      withThumbnails: data.saveDiffAsFile,
-      // measured here, next to the diff, while the images are decoded anyway
       ...(data.blurAmplitude ? { blurAmplitude: data.blurAmplitude } : {}),
     });
 
@@ -86,9 +89,7 @@ export class PixelmatchService implements ImageComparator {
         : {}),
     };
 
-    // The mismatch stays on the run as measured, so a reviewer can still see
-    // the pixels moved; only the verdict is the filter's.
-    if (output.renderingNoiseOnly && (await this.confirmedByDinov2(data, baselineBuffer, imageBuffer))) {
+    if (output.renderingNoiseOnly && (await this.confirmedByDinov2(data, baselineBuffer, imageBuffer, output))) {
       this.logger.debug(
         `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${output.blurAmplitude?.toFixed(1)}, ${output.solidPixels} solid pixels)`
       );
@@ -100,23 +101,8 @@ export class PixelmatchService implements ImageComparator {
       if (output.diffBuffer) {
         result.diffName = await this.staticService.saveImage('diff', Buffer.from(output.diffBuffer));
       }
-      // Kept to the same condition as the diff itself: a thumbnail of a diff
-      // that was never saved would point at a file that does not exist. Stored
-      // as ordinary images so they follow the same storage, the same deletion
-      // and the same URLs as everything else, with no naming convention for
-      // the UI to guess at.
-      // tied to the diff actually landing, not merely to being over tolerance
-      if (result.diffName && output.imageThumbnail && output.diffThumbnail) {
-        const [imageThumbnailName, diffThumbnailName] = await Promise.all([
-          this.staticService.saveImage('screenshot', Buffer.from(output.imageThumbnail)),
-          this.staticService.saveImage('diff', Buffer.from(output.diffThumbnail)),
-        ]);
-        // only when both came back: a result carrying one half of a pair, or a
-        // key set to undefined, is worse than none at all
-        if (imageThumbnailName && diffThumbnailName) {
-          result.imageThumbnailName = imageThumbnailName;
-          result.diffThumbnailName = diffThumbnailName;
-        }
+      if (result.diffName) {
+        Object.assign(result, await this.saveThumbnails(output));
       }
       result.status = TestStatus.unresolved;
     } else {
@@ -125,17 +111,44 @@ export class PixelmatchService implements ImageComparator {
     return result;
   }
 
-  // The project's DINOv2 check, when it has one, gets the last word on what the
-  // blur would pass; without one the blur's verdict stands.
-  private async confirmedByDinov2(data: ImageCompareInput, baseline: Buffer, image: Buffer): Promise<boolean> {
+  private async confirmedByDinov2(
+    data: ImageCompareInput,
+    baseline: Buffer,
+    image: Buffer,
+    output: PixelmatchJobOutput
+  ): Promise<boolean> {
     const dinov2 = data.blurAmplitude?.dinov2;
     if (!dinov2) {
       return true;
     }
-    const verdict = await this.dinov2Service.confirmsNoise(baseline, image, data.ignoreAreas, dinov2.threshold);
+    if (!output.gate) {
+      return false;
+    }
+    const verdict = await this.dinov2Service.confirmsNoiseForGate(output.gate, baseline, image, dinov2.threshold);
     if (!verdict.noise) {
       this.logger.debug(`DINOv2 sees a change of content (score ${verdict.score?.toFixed(3) ?? 'n/a'}): to review`);
     }
     return verdict.noise;
+  }
+
+  private async saveThumbnails(
+    output: PixelmatchJobOutput
+  ): Promise<{ imageThumbnailName?: string; diffThumbnailName?: string }> {
+    if (!output.imageThumbnail || !output.diffThumbnail) {
+      return {};
+    }
+    const [image, diff] = await Promise.allSettled([
+      this.staticService.saveImage('screenshot', Buffer.from(output.imageThumbnail)),
+      this.staticService.saveImage('diff', Buffer.from(output.diffThumbnail)),
+    ]);
+    if (image.status === 'fulfilled' && diff.status === 'fulfilled' && image.value && diff.value) {
+      return { imageThumbnailName: image.value, diffThumbnailName: diff.value };
+    }
+    for (const saved of [image, diff]) {
+      if (saved.status === 'fulfilled' && saved.value) void this.staticService.deleteImage(saved.value);
+    }
+    const failure = [image, diff].find((saved) => saved.status === 'rejected');
+    this.logger.warn(`Thumbnails not saved: ${failure?.reason?.message ?? 'empty name'}`);
+    return {};
   }
 }

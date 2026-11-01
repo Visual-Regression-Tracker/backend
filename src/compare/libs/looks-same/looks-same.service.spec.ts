@@ -1,31 +1,86 @@
-import { TestingModule, Test } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import { PNG } from 'pngjs';
 import { StaticService } from '../../../static/static.service';
+import { DiffWorkerPool } from '../../diff-worker-pool';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
 import { DEFAULT_CONFIG, LookSameService } from './looks-same.service';
 import { LooksSameConfig } from './looks-same.types';
 import { ImageCompareInput } from '../ImageCompareInput';
 
-const initService = async ({ getImageMock = jest.fn(), saveImageMock = jest.fn(), deleteImageMock = jest.fn() }) => {
-  const module: TestingModule = await Test.createTestingModule({
+const baselineBuffer = PNG.sync.write(new PNG({ width: 20, height: 20 }));
+const another = new PNG({ width: 20, height: 20 });
+another.data[0] = 1;
+const imageBuffer = PNG.sync.write(another);
+
+interface Deps {
+  getImageBuffer?: jest.Mock;
+  saveImage?: jest.Mock;
+  run?: jest.Mock;
+}
+
+const setup = async ({
+  getImageBuffer = jest.fn().mockResolvedValueOnce(baselineBuffer).mockResolvedValueOnce(imageBuffer),
+  saveImage = jest.fn(),
+  run = jest.fn(),
+}: Deps = {}) => {
+  const module = await Test.createTestingModule({
     providers: [
       LookSameService,
-      {
-        provide: StaticService,
-        useValue: {
-          getImage: getImageMock,
-          saveImage: saveImageMock,
-          deleteImage: deleteImageMock,
-        },
-      },
+      { provide: DiffWorkerPool, useValue: { run } },
+      { provide: StaticService, useValue: { getImageBuffer, saveImage } },
     ],
   }).compile();
-
-  return module.get<LookSameService>(LookSameService);
+  return { service: module.get(LookSameService), getImageBuffer, saveImage, run };
 };
 
-let service: LookSameService;
+const input: ImageCompareInput = {
+  baseline: 'baseline',
+  image: 'image',
+  diffTollerancePercent: 0.1,
+  ignoreAreas: [],
+  saveDiffAsFile: true,
+};
+
+const diff = (
+  service: LookSameService,
+  extra: Partial<ImageCompareInput> = {},
+  config: LooksSameConfig = DEFAULT_CONFIG
+) => service.getDiff({ ...input, ...extra }, config);
+
+const outcome = (name: string) => jest.fn().mockResolvedValue({ outcome: name });
+
+const compared = (
+  result: { equal: boolean; differentPixels?: number; totalPixels?: number } | null,
+  extra: { diffPng?: Uint8Array; errors?: string[] } = {}
+) => jest.fn().mockResolvedValue({ outcome: 'compared', isSameDimension: true, result, errors: [], ...extra });
+
+const verdict = (
+  status: TestStatus,
+  diffName: string | null,
+  diffPercent: number | undefined,
+  pixelMisMatchCount?: number
+) => ({
+  status,
+  diffName,
+  diffPercent,
+  pixelMisMatchCount,
+  isSameDimension: true,
+});
+
+const twentyOfFourHundred = { equal: false, differentPixels: 20, totalPixels: 400 };
+const diffPng = new Uint8Array(Buffer.from('png'));
+
+let loggerError: jest.SpyInstance;
+
+beforeEach(() => {
+  loggerError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 describe('parseConfig', () => {
   it.each<[string, LooksSameConfig]>([
@@ -43,264 +98,202 @@ describe('parseConfig', () => {
     ['', DEFAULT_CONFIG],
     ['invalid', DEFAULT_CONFIG],
   ])('should parse config', async (json, expected) => {
-    service = await initService({});
+    const { service } = await setup();
 
-    const config = service.parseConfig(json);
-
-    expect(config).toStrictEqual(expected);
+    expect(service.parseConfig(json)).toStrictEqual(expected);
   });
 });
 
 describe('getDiff', () => {
-  const image = new PNG({
-    width: 20,
-    height: 20,
-  });
-  const anotherImage = new PNG({
-    width: 20,
-    height: 20,
-  });
-  anotherImage.data[0] = 1; // alterate pixel to have it different from 0
-
   it('no baseline', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(undefined).mockReturnValueOnce(image);
-    service = await initService({ getImageMock });
-
-    const result = await service.getDiff(
-      {
-        baseline: null,
-        image: 'image',
-        diffTollerancePercent: 0.1,
-        ignoreAreas: [],
-        saveDiffAsFile: true,
-      },
-      DEFAULT_CONFIG
-    );
-
-    expect(result).toStrictEqual(NO_BASELINE_RESULT);
-  });
-
-  it('equal images', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(image);
-    service = await initService({ getImageMock });
-
-    const result = await service.getDiff(
-      {
-        baseline: 'image',
-        image: 'image',
-        diffTollerancePercent: 0.1,
-        ignoreAreas: [],
-        saveDiffAsFile: true,
-      },
-      DEFAULT_CONFIG
-    );
-
-    expect(result).toStrictEqual(EQUAL_RESULT);
-  });
-
-  it('diff image dimensions mismatch', async () => {
-    const baseline = new PNG({
-      width: 10,
-      height: 10,
+    const { service, run } = await setup({
+      getImageBuffer: jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(imageBuffer),
     });
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(baseline);
-    service = await initService({ getImageMock });
 
-    const result = await service.getDiff(
-      {
-        baseline: 'image',
-        image: 'image',
-        diffTollerancePercent: 0.1,
-        ignoreAreas: [],
-        saveDiffAsFile: true,
-      },
-      DEFAULT_CONFIG
-    );
-
-    expect(result).toStrictEqual(DIFF_DIMENSION_RESULT);
+    expect(await diff(service, { baseline: null })).toStrictEqual(NO_BASELINE_RESULT);
+    expect(run).not.toHaveBeenCalled();
   });
 
-  const input: Omit<ImageCompareInput, 'saveDiffAsFile'> = {
-    baseline: 'image',
-    image: 'image',
-    diffTollerancePercent: 0.1,
-    ignoreAreas: [],
-  };
+  it('compares the image it is given without reading it again', async () => {
+    const { service, getImageBuffer, run } = await setup({
+      getImageBuffer: jest.fn().mockResolvedValue(baselineBuffer),
+      run: outcome('equal'),
+    });
+
+    await diff(service, { imageBuffer });
+
+    expect(getImageBuffer).toHaveBeenCalledTimes(1);
+    expect(getImageBuffer).toHaveBeenCalledWith('baseline');
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ baseline: baselineBuffer, image: imageBuffer }));
+  });
+
+  it('reports no baseline when the baseline cannot be read', async () => {
+    const { service, run } = await setup({
+      getImageBuffer: jest.fn().mockRejectedValueOnce(new Error('disk')).mockResolvedValueOnce(imageBuffer),
+    });
+
+    expect(await diff(service)).toStrictEqual(NO_BASELINE_RESULT);
+    expect(run).not.toHaveBeenCalled();
+    expect(loggerError).toHaveBeenCalledWith('disk');
+  });
+
+  it('reports no baseline when the job finds it unreadable', async () => {
+    const { service } = await setup({ run: outcome('baseline-unreadable') });
+
+    await expect(diff(service)).resolves.toStrictEqual(NO_BASELINE_RESULT);
+  });
+
+  it('answers EQUAL for byte-equal well-formed PNGs without a job', async () => {
+    const { service, run } = await setup({ getImageBuffer: jest.fn().mockResolvedValue(baselineBuffer) });
+
+    expect(await diff(service)).toStrictEqual(EQUAL_RESULT);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('hands byte-equal files that are not well-formed PNGs to the job', async () => {
+    const { service, run } = await setup({
+      getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('not a png')),
+      run: outcome('baseline-unreadable'),
+    });
+
+    await diff(service);
+
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['equal images', 'equal', EQUAL_RESULT],
+    ['diff image dimensions mismatch', 'diff-dimension', DIFF_DIMENSION_RESULT],
+  ])('%s', async (_, name, expected) => {
+    const { service } = await setup({ run: outcome(name) });
+
+    expect(await diff(service)).toStrictEqual(expected);
+  });
+
+  it('throws a clear error when the image cannot be read', async () => {
+    const { service, run } = await setup({
+      getImageBuffer: jest.fn().mockResolvedValueOnce(baselineBuffer).mockResolvedValueOnce(null),
+    });
+
+    await expect(diff(service, { saveDiffAsFile: false })).rejects.toThrow('Cannot get image: image');
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('throws a clear error when the job finds the image unreadable', async () => {
+    const { service } = await setup({ run: outcome('image-unreadable') });
+
+    await expect(diff(service, { saveDiffAsFile: false })).rejects.toThrow('Cannot get image: image');
+  });
 
   it('diff not found', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
-    service = await initService({ getImageMock });
-    service.compare = jest.fn().mockReturnValueOnce({ equal: true, differentPixels: 0, totalPixels: 400 });
+    const { service } = await setup({ run: compared({ equal: true, differentPixels: 0, totalPixels: 400 }) });
 
-    const result = await service.getDiff({ ...input, saveDiffAsFile: true }, DEFAULT_CONFIG);
-
-    expect(result).toStrictEqual({
-      status: TestStatus.ok,
-      diffName: null,
-      diffPercent: 0,
-      pixelMisMatchCount: 0,
-      isSameDimension: true,
-    });
+    expect(await diff(service)).toStrictEqual(verdict(TestStatus.ok, null, 0, 0));
   });
 
   it('diff found', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
-    service = await initService({ getImageMock });
-    service.compare = jest.fn().mockReturnValueOnce({ equal: false, differentPixels: 20, totalPixels: 400 });
-    service.saveDiff = jest.fn();
+    const { service, saveImage } = await setup({ run: compared(twentyOfFourHundred) });
 
-    const result = await service.getDiff({ ...input, saveDiffAsFile: false }, DEFAULT_CONFIG);
+    const result = await diff(service, { saveDiffAsFile: false });
 
-    expect(service.compare).toHaveBeenCalledWith(image, anotherImage, DEFAULT_CONFIG);
-    expect(service.saveDiff).not.toHaveBeenCalled();
-    expect(result).toStrictEqual({
-      status: TestStatus.unresolved,
-      diffName: null,
-      diffPercent: 5,
-      pixelMisMatchCount: 20,
-      isSameDimension: true,
-    });
+    expect(saveImage).not.toHaveBeenCalled();
+    expect(result).toStrictEqual(verdict(TestStatus.unresolved, null, 5, 20));
   });
 
   it('diff found and save diff', async () => {
-    const diffImage = { createBuffer: jest.fn() };
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
-    service = await initService({ getImageMock });
-    service.compare = jest.fn().mockReturnValueOnce({ equal: false, differentPixels: 20, totalPixels: 400, diffImage });
-    service.saveDiff = jest.fn().mockReturnValueOnce('diff name');
-
-    const result = await service.getDiff({ ...input, saveDiffAsFile: true }, DEFAULT_CONFIG);
-
-    expect(service.compare).toHaveBeenCalledWith(image, anotherImage, DEFAULT_CONFIG);
-    expect(service.saveDiff).toHaveBeenCalledWith(diffImage);
-    expect(result).toStrictEqual({
-      status: TestStatus.unresolved,
-      diffName: 'diff name',
-      diffPercent: 5,
-      pixelMisMatchCount: 20,
-      isSameDimension: true,
+    const { service, saveImage } = await setup({
+      run: compared(twentyOfFourHundred, { diffPng }),
+      saveImage: jest.fn().mockResolvedValueOnce('diff name'),
     });
+
+    const result = await diff(service);
+
+    expect(saveImage).toHaveBeenCalledWith('diff', Buffer.from('png'));
+    expect(saveImage.mock.calls[0][1]).toBeInstanceOf(Buffer);
+    expect(result).toStrictEqual(verdict(TestStatus.unresolved, 'diff name', 5, 20));
   });
 
   it('ok, without a diff, when the change is within the tolerance', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
-    service = await initService({ getImageMock });
-    service.compare = jest.fn().mockReturnValueOnce({ equal: false, differentPixels: 20, totalPixels: 400 });
-    service.saveDiff = jest.fn();
+    const { service, saveImage } = await setup({ run: compared(twentyOfFourHundred) });
 
-    const result = await service.getDiff({ ...input, diffTollerancePercent: 5, saveDiffAsFile: true }, DEFAULT_CONFIG);
+    const result = await diff(service, { diffTollerancePercent: 5 });
 
-    expect(service.saveDiff).not.toHaveBeenCalled();
-    expect(result).toStrictEqual({
-      status: TestStatus.ok,
-      diffName: null,
-      diffPercent: 5,
-      pixelMisMatchCount: 20,
-      isSameDimension: true,
-    });
+    expect(saveImage).not.toHaveBeenCalled();
+    expect(result).toStrictEqual(verdict(TestStatus.ok, null, 5, 20));
   });
 
   it('comparison failed', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
-    service = await initService({ getImageMock });
-    service.compare = jest.fn().mockReturnValueOnce(undefined);
+    const { service } = await setup({ run: compared(null) });
 
-    const result = await service.getDiff({ ...input, saveDiffAsFile: true }, DEFAULT_CONFIG);
-
-    expect(result).toStrictEqual({
-      status: TestStatus.unresolved,
-      diffName: null,
-      diffPercent: undefined,
-      pixelMisMatchCount: undefined,
-      isSameDimension: true,
-    });
+    expect(await diff(service)).toStrictEqual(verdict(TestStatus.unresolved, null, undefined));
   });
 
   it('reports a 0% diff when Looks-Same counts no pixels at all', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(anotherImage);
-    service = await initService({ getImageMock });
-    service.compare = jest.fn().mockReturnValueOnce({ equal: false, differentPixels: 0, totalPixels: 0 });
+    const { service } = await setup({ run: compared({ equal: false, differentPixels: 0, totalPixels: 0 }) });
 
-    const result = await service.getDiff({ ...input, saveDiffAsFile: false }, DEFAULT_CONFIG);
+    expect(await diff(service, { saveDiffAsFile: false })).toStrictEqual(verdict(TestStatus.unresolved, null, 0, 0));
+  });
 
-    expect(result).toStrictEqual({
+  it('logs what looks-same refused', async () => {
+    const { service } = await setup({ run: compared(null, { errors: ['a', 'b'] }) });
+
+    await diff(service, { saveDiffAsFile: false });
+
+    expect(loggerError.mock.calls).toEqual([['a'], ['b']]);
+  });
+
+  it('passes the project config, the ignore areas and saveDiffAsFile to the job', async () => {
+    const { service, run } = await setup({ run: outcome('equal') });
+    const config = { ...DEFAULT_CONFIG, tolerance: 3, strict: undefined };
+    const ignoreAreas = [{ x: 1, y: 2, width: 3, height: 4 }];
+
+    await diff(service, { ignoreAreas }, config);
+
+    expect(run).toHaveBeenCalledWith({
+      kind: 'looks-same',
+      baseline: baselineBuffer,
+      image: imageBuffer,
+      ignoreAreas,
+      config,
+      saveDiff: true,
+    });
+  });
+
+  it('keeps the compared outcome when the diff cannot be saved', async () => {
+    const { service } = await setup({
+      run: compared(twentyOfFourHundred, { diffPng }),
+      saveImage: jest.fn().mockRejectedValueOnce(new Error('disk full')),
+    });
+
+    expect(await diff(service)).toMatchObject({
       status: TestStatus.unresolved,
       diffName: null,
-      diffPercent: 0,
-      pixelMisMatchCount: 0,
-      isSameDimension: true,
+      pixelMisMatchCount: 20,
     });
-  });
-
-  it('throws when the baseline exists but the image cannot be read', async () => {
-    const getImageMock = jest.fn().mockReturnValueOnce(image).mockReturnValueOnce(undefined);
-    service = await initService({ getImageMock });
-
-    // NOTE: current behavior — unlike pixelmatch there is no explicit check, so a
-    // missing image surfaces as a TypeError rather than a descriptive error.
-    await expect(service.getDiff({ ...input, saveDiffAsFile: false }, DEFAULT_CONFIG)).rejects.toThrow(TypeError);
-  });
-
-  it('saves the Looks-Same diff with its metrics', async () => {
-    const baseline = new PNG({ width: 2, height: 1 });
-    const changed = new PNG({ width: 2, height: 1 });
-    baseline.data.fill(255);
-    changed.data.fill(255);
-    changed.data[0] = 0;
-    const getImageMock = jest.fn().mockReturnValueOnce(baseline).mockReturnValueOnce(changed);
-    const saveImageMock = jest.fn().mockReturnValueOnce('diff name');
-    service = await initService({ getImageMock, saveImageMock });
-
-    const result = await service.getDiff(
-      { ...input, saveDiffAsFile: true },
-      { ...DEFAULT_CONFIG, strict: true, ignoreAntialiasing: false }
-    );
-
-    expect(result).toStrictEqual({
-      status: TestStatus.unresolved,
-      diffName: 'diff name',
-      diffPercent: 50,
-      pixelMisMatchCount: 1,
-      isSameDimension: true,
-    });
-    expect(saveImageMock).toHaveBeenCalledWith('diff', expect.any(Buffer));
-  });
-});
-
-describe('compare', () => {
-  it('returns undefined when Looks-Same fails', async () => {
-    service = await initService({});
-    const broken = new PNG({ width: 1, height: 1 });
-    jest.spyOn(PNG.sync, 'write').mockImplementationOnce(() => Buffer.from('not a png'));
-
-    const result = await service.compare(broken, broken, DEFAULT_CONFIG);
-
-    expect(result).toBeUndefined();
-  });
-
-  it('compares with the defaults when Looks-Same refuses the project config', async () => {
-    service = await initService({});
-    const baseline = new PNG({ width: 2, height: 1 });
-    const changed = new PNG({ width: 2, height: 1 });
-    baseline.data.fill(255);
-    changed.data.fill(255);
-    changed.data[0] = 0;
-
-    // looks-same refuses strict together with tolerance
-    const result = await service.compare(baseline, changed, { ...DEFAULT_CONFIG, strict: true, tolerance: 5 });
-
-    expect(result).toMatchObject({ equal: false, differentPixels: 1, totalPixels: 2 });
   });
 });
 
 describe('saveDiff', () => {
+  it('returns null when there is no diff image', async () => {
+    const { service, saveImage } = await setup();
+
+    await expect(service.saveDiff(undefined)).resolves.toBeNull();
+    expect(saveImage).not.toHaveBeenCalled();
+  });
+
   it('returns null when the diff cannot be saved', async () => {
-    const saveImageMock = jest.fn().mockRejectedValueOnce(new Error('disk full'));
-    service = await initService({ saveImageMock });
-    const diffImage = { createBuffer: jest.fn().mockResolvedValueOnce(Buffer.from('png')) };
+    const { service } = await setup({ saveImage: jest.fn().mockRejectedValueOnce(new Error('disk full')) });
 
-    const result = await service.saveDiff(diffImage as never);
+    expect(await service.saveDiff(diffPng)).toBeNull();
+  });
 
-    expect(result).toBeNull();
+  it('saves only the bytes of a view into a larger buffer', async () => {
+    const { service, saveImage } = await setup({ saveImage: jest.fn().mockResolvedValueOnce('diff name') });
+    const whole = Buffer.from('xxpngxx');
+
+    const result = await service.saveDiff(new Uint8Array(whole.buffer, whole.byteOffset + 2, 3));
+
+    expect(result).toBe('diff name');
+    expect(saveImage.mock.calls[0][1].toString()).toBe('png');
   });
 });

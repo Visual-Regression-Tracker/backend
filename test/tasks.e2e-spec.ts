@@ -1,9 +1,6 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { Project, TestStatus } from '@prisma/client';
 import { existsSync } from 'fs';
-import { randomUUID } from 'crypto';
-import { AppModule } from '../src/app.module';
 import { CLEANUP_LOCK_KEY, TasksService } from '../src/shared/tasks/tasks.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
@@ -11,18 +8,12 @@ import { BuildsService } from '../src/builds/builds.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { HddService } from '../src/static/hdd/hdd.service';
 import { TestVariationsService } from '../src/test-variations/test-variations.service';
-import { TEST_PROJECT } from '../src/_data_';
+import { createE2eApp, haveProject as createProject, waitFor } from './api-helpers';
 import { haveTestRunCreated } from './preconditions';
 
 const DAY = 24 * 60 * 60 * 1000;
 const image = './test/image.png';
 
-/**
- * The nightly cleanup (@Cron at midnight) called directly on the TasksService
- * instance of the app. It walks every project in the database, so the other
- * e2e files running in parallel are affected only if they keep non-main
- * variations untouched for longer than their project's maxBranchLifetime.
- */
 describe('Tasks: cleanOldTestVariations (e2e)', () => {
   let app: INestApplication;
   let tasksService: TasksService;
@@ -35,19 +26,15 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
   const projectIds: string[] = [];
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    tasksService = moduleFixture.get(TasksService);
-    prismaService = moduleFixture.get(PrismaService);
-    projectsService = moduleFixture.get(ProjectsService);
-    buildsService = moduleFixture.get(BuildsService);
-    testRunsService = moduleFixture.get(TestRunsService);
-    hddService = moduleFixture.get(HddService);
-    testVariationsService = moduleFixture.get(TestVariationsService);
-    await app.init();
+    const created = await createE2eApp({ validation: false });
+    app = created.app;
+    tasksService = created.get(TasksService);
+    prismaService = created.get(PrismaService);
+    projectsService = created.get(ProjectsService);
+    buildsService = created.get(BuildsService);
+    testRunsService = created.get(TestRunsService);
+    hddService = created.get(HddService);
+    testVariationsService = created.get(TestVariationsService);
   });
 
   afterEach(async () => {
@@ -62,9 +49,7 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
   });
 
   const haveProject = async (maxBranchLifetime: number): Promise<Project> => {
-    const project = await projectsService.create({
-      ...TEST_PROJECT,
-      name: `Tasks E2E ${randomUUID()}`,
+    const project = await createProject(projectsService, 'Tasks E2E', {
       maxBuildAllowed: 100,
       maxBranchLifetime,
       autoApproveFeature: false,
@@ -73,10 +58,8 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     return project;
   };
 
-  // an approved run on the branch: a variation with a baseline, a test run and their images
   const haveApprovedVariation = async (project: Project, branchName: string) => {
     const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, branchName, image);
-    // merge keeps the variation on this branch instead of the main one
     const approved = await testRunsService.approve(testRun.id, true);
     const variation = (await prismaService.testVariation.findUnique({
       where: { id: approved.testVariationId! },
@@ -87,22 +70,10 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     return { variation, testRun: approved };
   };
 
-  // the variation and the runs compared against it, as if last used days ago
   const ageBy = async (variationId: string, days: number) => {
     const then = new Date(Date.now() - days * DAY);
-    // @updatedAt would be overwritten by an update through Prisma
     await prismaService.$executeRaw`UPDATE "TestVariation" SET "updatedAt" = ${then} WHERE "id" = ${variationId}`;
     await prismaService.testRun.updateMany({ where: { testVariationId: variationId }, data: { createdAt: then } });
-  };
-
-  const waitUntil = async (condition: () => boolean, timeout = 5000) => {
-    const start = Date.now();
-    while (!condition()) {
-      if (Date.now() - start > timeout) {
-        throw new Error('condition not met in time');
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
   };
 
   it('removes feature-branch variations not used within maxBranchLifetime, with their baselines', async () => {
@@ -121,14 +92,11 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     const variations = await prismaService.testVariation.findMany({ where: { projectId: project.id } });
     expect(variations.map((variation) => variation.id).sort()).toEqual([fresh.variation.id, main.variation.id].sort());
     expect(await prismaService.baseline.findMany({ where: { testVariationId: old.variation.id } })).toEqual([]);
-    // the baseline image is deleted without being awaited
-    await waitUntil(() => !existsSync(oldBaselineFile));
+    await waitFor(() => !existsSync(oldBaselineFile));
 
-    // the test runs stay in their builds, detached from the removed variation
     const oldRun = (await prismaService.testRun.findUnique({ where: { id: old.testRun.id } }))!;
     expect(oldRun).toMatchObject({ testVariationId: null, status: TestStatus.approved, branchName: 'feature/old' });
     expect(existsSync(hddService.getImagePath(oldRun.imageName))).toBe(true);
-    // the kept variations keep their baselines
     expect(await prismaService.baseline.count({ where: { testVariationId: fresh.variation.id } })).toBe(1);
     expect(await prismaService.baseline.count({ where: { testVariationId: main.variation.id } })).toBe(1);
   });
@@ -184,7 +152,6 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     await ageBy(feature.variation.id, 10);
     const { testRun } = await haveTestRunCreated(buildsService, testRunsService, project.id, 'feature/active', image);
     expect(testRun.status).toBe(TestStatus.ok);
-    // a run that matches the baseline leaves the variation as it was
     const { updatedAt } = (await prismaService.testVariation.findUnique({ where: { id: feature.variation.id } }))!;
     expect(updatedAt.getTime()).toBeLessThan(Date.now() - 5 * DAY);
 
@@ -206,7 +173,6 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
     }
     const deleteSpy = jest.spyOn(testVariationsService, 'delete');
 
-    // each run opens its own lock connection, as on two instances
     await Promise.all([tasksService.cleanOldTestVariations(), tasksService.cleanOldTestVariations()]);
 
     const deleted = deleteSpy.mock.calls.map(([id]) => id).filter((id) => stale.includes(id));
@@ -232,7 +198,6 @@ describe('Tasks: cleanOldTestVariations (e2e)', () => {
       await otherInstance.end();
     }
 
-    // released with the other instance's connection
     await tasksService.cleanOldTestVariations();
 
     expect(await prismaService.testVariation.findUnique({ where: { id: variation.id } })).toBeNull();

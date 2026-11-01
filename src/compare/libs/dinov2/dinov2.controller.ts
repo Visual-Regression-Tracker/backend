@@ -14,7 +14,6 @@ import { Dinov2Service, Dinov2Status } from './dinov2.service';
 export class Dinov2Controller {
   constructor(private readonly dinov2Service: Dinov2Service) {}
 
-  // what the project form offers: the check only where a service is set up
   @Get('status')
   status(): Promise<Dinov2Status> {
     return this.dinov2Service.status();

@@ -1,6 +1,5 @@
 import { ApiFile } from './api-file.decorator';
 
-// @nestjs/swagger does not export its metadata keys
 const API_MODEL_PROPERTIES = 'swagger/apiModelProperties';
 const API_MODEL_PROPERTIES_ARRAY = 'swagger/apiModelPropertiesArray';
 
@@ -39,8 +38,7 @@ describe('ApiFile', () => {
     });
   });
 
-  // NOTE: current behavior — every option other than isArray is dropped.
-  it('ignores options other than isArray', () => {
+  it('describes only isArray in the schema', () => {
     expect(propertyMetadata('explicitSingle')).toEqual({ type: 'string', format: 'binary', isArray: false });
   });
 });

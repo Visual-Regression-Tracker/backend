@@ -4,8 +4,15 @@ import { Server } from 'socket.io';
 import { TestRun } from '@prisma/client';
 import { BuildDto } from '../../builds/dto/build.dto';
 import { getBuildsStats } from '../../builds/build-stats';
-import { debounce } from 'lodash';
+import { TestRunDto } from '../../test-runs/dto/testRun.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Debounced, debounce } from './debounce';
+
+const DEBOUNCE_WAIT = 1500;
+const MAX_WAIT = 3000;
+
+const TEST_RUN_EVENTS = ['testRun_created', 'testRun_updated', 'testRun_deleted'] as const;
+type TestRunEvent = (typeof TEST_RUN_EVENTS)[number];
 
 @WebSocketGateway({ cors: true })
 export class EventsGateway implements OnApplicationShutdown {
@@ -16,39 +23,41 @@ export class EventsGateway implements OnApplicationShutdown {
 
   constructor(private prismaService: PrismaService) {}
 
-  private debounceTimeout = 1500;
-  private maxWait = 3000;
-  private testRunsCreatedQueued: Array<TestRun> = [];
-  private testRunsDeletedQueued: Array<TestRun> = [];
-  private testRunsUpdatedQueued: Array<TestRun> = [];
-  private buildsUpdatedQueued: Array<string> = [];
+  private readonly testRunQueues = Object.fromEntries(
+    TEST_RUN_EVENTS.map((event) => [event, new Map<string, TestRunDto>()])
+  ) as Record<TestRunEvent, Map<string, TestRunDto>>;
+  private readonly testRunEmitters = Object.fromEntries(
+    TEST_RUN_EVENTS.map((event) => [event, debounce(() => this.emitQueued(event), DEBOUNCE_WAIT, MAX_WAIT)])
+  ) as Record<TestRunEvent, Debounced>;
+  private readonly buildsUpdatedQueued = new Set<string>();
 
   buildCreated(build: BuildDto): void {
     this.server.emit('build_created', build);
   }
 
   buildUpdated(id: string): void {
-    this.buildsUpdatedQueued.push(id);
+    this.buildsUpdatedQueued.add(id);
     this.buildUpdatedDebounced();
   }
 
   testRunCreated(testRun: TestRun): void {
-    this.testRunsCreatedQueued.push(testRun);
-    this.testRunCreatedDebounced();
+    this.enqueueTestRun('testRun_created', testRun);
     this.buildUpdated(testRun.buildId);
   }
 
   testRunUpdated(testRun: TestRun): void {
-    this.testRunsUpdatedQueued.push(testRun);
-    this.testRunUpdatedDebounced();
+    // Clients skip testRun_created for runs they already fetched, so the update must go out as well
+    if (this.testRunQueues.testRun_created.has(testRun.id)) {
+      this.testRunQueues.testRun_created.set(testRun.id, new TestRunDto(testRun));
+    }
+    this.enqueueTestRun('testRun_updated', testRun);
     this.buildUpdated(testRun.buildId);
   }
 
   testRunDeleted(testRun: TestRun): void {
-    this.testRunsCreatedQueued = this.testRunsCreatedQueued.filter((tr) => tr.id !== testRun.id);
-    this.testRunsUpdatedQueued = this.testRunsUpdatedQueued.filter((tr) => tr.id !== testRun.id);
-    this.testRunsDeletedQueued.push(testRun);
-    this.testRunDeletedDebounced();
+    this.testRunQueues.testRun_created.delete(testRun.id);
+    this.testRunQueues.testRun_updated.delete(testRun.id);
+    this.enqueueTestRun('testRun_deleted', testRun);
     this.buildUpdated(testRun.buildId);
   }
 
@@ -56,77 +65,43 @@ export class EventsGateway implements OnApplicationShutdown {
     this.server.emit('build_deleted', buildDto);
   }
 
-  // A batch still waiting for its debounce would otherwise fire after shutdown
-  // and query a database pool that is already closed. Runs once the HTTP
-  // server has drained, so no request queues another batch after it.
+  // Runs after the HTTP server drained: a pending batch would otherwise hit a closed database pool
   onApplicationShutdown(): void {
-    this.testRunCreatedDebounced.cancel();
-    this.testRunUpdatedDebounced.cancel();
-    this.testRunDeletedDebounced.cancel();
+    TEST_RUN_EVENTS.forEach((event) => this.testRunEmitters[event].cancel());
     this.buildUpdatedDebounced.cancel();
   }
 
-  private testRunUpdatedDebounced = debounce(
-    () => {
-      this.server.emit('testRun_updated', this.testRunsUpdatedQueued);
-      this.testRunsUpdatedQueued = [];
-    },
-    this.debounceTimeout,
-    {
-      leading: true,
-      maxWait: this.maxWait,
-    }
-  );
+  private enqueueTestRun(event: TestRunEvent, testRun: TestRun): void {
+    this.testRunQueues[event].set(testRun.id, new TestRunDto(testRun));
+    this.testRunEmitters[event]();
+  }
 
-  private testRunCreatedDebounced = debounce(
-    () => {
-      this.server.emit('testRun_created', this.testRunsCreatedQueued);
-      this.testRunsCreatedQueued = [];
-    },
-    this.debounceTimeout,
-    {
-      leading: true,
-      maxWait: this.maxWait,
-    }
-  );
-
-  private testRunDeletedDebounced = debounce(
-    () => {
-      this.server.emit('testRun_deleted', this.testRunsDeletedQueued);
-      this.testRunsDeletedQueued = [];
-    },
-    this.debounceTimeout,
-    {
-      leading: true,
-      maxWait: this.maxWait,
-    }
-  );
+  private emitQueued(event: TestRunEvent): void {
+    const queue = this.testRunQueues[event];
+    if (queue.size === 0) return;
+    const testRuns = [...queue.values()];
+    queue.clear();
+    this.server.emit(event, testRuns);
+  }
 
   private buildUpdatedDebounced = debounce(
     () => {
-      // Deduplicate: during ingestion the queue holds one entry per test run.
-      // Stats are aggregated in the database — a build can hold thousands of
-      // test runs and this fires on every debounced event burst.
-      const buildIds = [...new Set(this.buildsUpdatedQueued)];
-      this.buildsUpdatedQueued = [];
+      const buildIds = [...this.buildsUpdatedQueued];
+      this.buildsUpdatedQueued.clear();
       Promise.all([
         this.prismaService.build.findMany({ where: { id: { in: buildIds } } }),
         getBuildsStats(this.prismaService, buildIds),
       ])
         .then(([builds, stats]) => {
+          if (builds.length === 0) return;
           this.server.emit(
             'build_updated',
             builds.map((build) => new BuildDto(build, stats.get(build.id)))
           );
         })
-        // nothing awaits this chain: unhandled, a failed query would take the
-        // whole process down
         .catch((error) => this.logger.error(`Cannot emit build_updated: ${error}`));
     },
-    this.debounceTimeout,
-    {
-      leading: true,
-      maxWait: this.maxWait,
-    }
+    DEBOUNCE_WAIT,
+    MAX_WAIT
   );
 }

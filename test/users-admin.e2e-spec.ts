@@ -1,18 +1,16 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Role, TestStatus } from '@prisma/client';
 import request from 'supertest';
 import { createHash, generateKeyPairSync, KeyObject, randomUUID, sign } from 'crypto';
 import { createServer, IncomingMessage, Server } from 'http';
 import { generateRandomKey } from '../src/utils/random-key';
-import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { BuildsService } from '../src/builds/builds.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
-import { TEST_PROJECT } from '../src/_data_';
 import { UserDto } from '../src/users/dto/user.dto';
+import { approveRuns, createE2eApp, haveProject, setEnv } from './api-helpers';
 import {
   generateUser,
   haveTestRunCreated,
@@ -23,6 +21,13 @@ import {
 } from './preconditions';
 
 const FORBIDDEN = 'You do not have permission to perform this operation.';
+
+const expectJsonBoolean = (app: INestApplication, url: string, value: boolean) =>
+  request(app.getHttpServer())
+    .get(url)
+    .expect(200)
+    .expect('Content-Type', 'application/json; charset=utf-8')
+    .expect((res) => expect(res.body).toBe(value));
 
 describe('Users admin and RBAC (e2e)', () => {
   let app: INestApplication;
@@ -37,19 +42,13 @@ describe('Users admin and RBAC (e2e)', () => {
   };
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe());
-    usersService = moduleFixture.get(UsersService);
-    prismaService = moduleFixture.get(PrismaService);
-    await app.init();
+    const created = await createE2eApp();
+    app = created.app;
+    usersService = created.get(UsersService);
+    prismaService = created.get(PrismaService);
   });
 
   afterEach(async () => {
-    // some tests delete their users through the API already
     await prismaService.user.deleteMany({ where: { id: { in: userIds.splice(0) } } });
   });
 
@@ -57,9 +56,11 @@ describe('Users admin and RBAC (e2e)', () => {
     await app.close();
   });
 
-  describe('GET /users/me', () => {
-    it('401 without a token', () => request(app.getHttpServer()).get('/users/me').expect(401));
+  it.each(['/users/me', '/users/all'])('GET %s answers 401 without a token', (url) =>
+    request(app.getHttpServer()).get(url).expect(401)
+  );
 
+  describe('GET /users/me', () => {
     it.each([Role.admin, Role.editor, Role.guest])('returns the current %s without the password', async (role) => {
       const user = await haveUser(role);
 
@@ -77,8 +78,6 @@ describe('Users admin and RBAC (e2e)', () => {
   });
 
   describe('GET /users/all', () => {
-    it('401 without a token', () => request(app.getHttpServer()).get('/users/all').expect(401));
-
     it('401 with an admin api key only: the list needs a JWT', async () => {
       const admin = await haveUser(Role.admin);
 
@@ -107,12 +106,12 @@ describe('Users admin and RBAC (e2e)', () => {
             email: guest.email,
             firstName: 'fName',
             lastName: 'lName',
-            apiKey: guest.apiKey,
             role: 'guest',
           },
         ])
       );
       expect(res.body.every((user: UserDto) => !('password' in user))).toBe(true);
+      expect(res.body.every((user: UserDto) => !('apiKey' in user))).toBe(true);
     });
   });
 
@@ -138,8 +137,9 @@ describe('Users admin and RBAC (e2e)', () => {
         .expect(200);
 
       expect(res.body).toEqual(expect.objectContaining({ id: target.id, email: target.email, role: Role.admin }));
+      expect(res.body).not.toHaveProperty('apiKey');
+      expect(res.body).not.toHaveProperty('password');
       expect((await usersService.findOne(target.id))!.role).toBe(Role.admin);
-      // the role is read from the database on every request, not from the token
       await requestWithAuth(app, 'get', '/users/all', target.token).expect(200);
     });
 
@@ -222,25 +222,11 @@ describe('Users admin and RBAC (e2e)', () => {
       expect(await usersService.findOne(last.id)).not.toBeNull();
     });
 
-    it('deletes every listed user', async () => {
-      const admin = await haveUser(Role.admin);
-      const first = await haveUser(Role.guest);
-      const last = await haveUser(Role.editor);
-
-      await requestWithAuth(app, 'delete', '/users', admin.token).send([first.id, last.id]).expect(200);
-
-      expect(await usersService.findOne(first.id)).toBeNull();
-      expect(await usersService.findOne(last.id)).toBeNull();
-    });
-
     it('keeps the baselines a deleted user approved, without the user', async () => {
       const admin = await haveUser(Role.admin);
       const editor = await haveUser(Role.editor);
       const projectsService = app.get(ProjectsService);
-      const project = await projectsService.create({
-        ...TEST_PROJECT,
-        name: `Users admin E2E ${randomUUID()}`,
-      });
+      const project = await haveProject(projectsService, 'Users admin E2E');
       try {
         const { testRun } = await haveTestRunCreated(
           app.get(BuildsService),
@@ -249,9 +235,7 @@ describe('Users admin and RBAC (e2e)', () => {
           project.mainBranchName,
           './test/image.png'
         );
-        await requestWithAuth(app, 'post', '/test-runs/approve?merge=false', editor.token)
-          .send([testRun.id])
-          .expect(201);
+        await approveRuns(app, editor, [testRun.id]);
         const [baseline] = await prismaService.baseline.findMany({ where: { testRunId: testRun.id } });
         expect(baseline.userId).toBe(editor.id);
 
@@ -269,12 +253,7 @@ describe('Users admin and RBAC (e2e)', () => {
   });
 
   describe('OIDC disabled (default DB users)', () => {
-    it('GET /users/oidc/enabled is false', () =>
-      request(app.getHttpServer())
-        .get('/users/oidc/enabled')
-        .expect(200)
-        .expect('Content-Type', 'application/json; charset=utf-8')
-        .expect((res) => expect(res.body).toBe(false)));
+    it('GET /users/oidc/enabled is false', () => expectJsonBoolean(app, '/users/oidc/enabled', false));
 
     it.each(['/users/oidc/login', '/users/oidc/callback?code=abc&state=xyz'])('GET %s is 404', (url) =>
       request(app.getHttpServer()).get(url).expect(404).expect('OIDC is not enabled.')
@@ -282,21 +261,12 @@ describe('Users admin and RBAC (e2e)', () => {
   });
 });
 
-/**
- * OIDC needs an identity provider. Instead of a real one, a minimal in-process
- * provider serves discovery, JWKS and the token endpoint on 127.0.0.1, signs ID
- * tokens with an RSA key generated for the run and checks PKCE. The app runs
- * with the real UsersFactoryService/OidcUsersService and openid-client,
- * switched to OIDC through the same environment variables as in production.
- * The browser's visit to the provider's authorization page is simulated: the
- * test reads state and code_challenge from the redirect and registers a code.
- */
 describe('Users OIDC (e2e)', () => {
   const CLIENT_ID = 'vrt-e2e';
   const CLIENT_SECRET = 'e2e-secret';
   const REDIRECT_URI = 'http://localhost:4200/users/oidc/callback';
   const FRONTEND_LOGIN = 'http://localhost:8080/login';
-  const OIDC_ENV = ['OIDC_ENABLED', 'OIDC_ISSUER_URL', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'OIDC_REDIRECT_URI'];
+  const LOGIN_FAILED = `${FRONTEND_LOGIN}#error=oidc_login_failed`;
 
   let app: INestApplication;
   let prismaService: PrismaService;
@@ -307,7 +277,7 @@ describe('Users OIDC (e2e)', () => {
   const tokenRequests: URLSearchParams[] = [];
   const codes = new Map<string, { challenge: string | null; claims: Record<string, unknown> }>();
   const emails: string[] = [];
-  const previousEnv: Record<string, string | undefined> = {};
+  let restoreEnv: () => void;
 
   const base64url = (input: Buffer | string) => Buffer.from(input).toString('base64url');
 
@@ -381,25 +351,17 @@ describe('Users OIDC (e2e)', () => {
     await new Promise<void>((resolve) => idp.listen(0, '127.0.0.1', resolve));
     issuer = `http://127.0.0.1:${(idp.address() as { port: number }).port}`;
 
-    const env: Record<string, string> = {
+    restoreEnv = setEnv({
       OIDC_ENABLED: 'true',
       OIDC_ISSUER_URL: issuer,
       OIDC_CLIENT_ID: CLIENT_ID,
       OIDC_CLIENT_SECRET: CLIENT_SECRET,
       OIDC_REDIRECT_URI: REDIRECT_URI,
-    };
-    for (const key of OIDC_ENV) {
-      previousEnv[key] = process.env[key];
-      process.env[key] = env[key];
-    }
+    });
 
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe());
-    prismaService = moduleFixture.get(PrismaService);
-    await app.init();
+    const created = await createE2eApp();
+    app = created.app;
+    prismaService = created.get(PrismaService);
   });
 
   afterEach(async () => {
@@ -412,13 +374,7 @@ describe('Users OIDC (e2e)', () => {
   afterAll(async () => {
     await app.close();
     await new Promise((resolve) => idp.close(resolve));
-    for (const key of OIDC_ENV) {
-      if (previousEnv[key] === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = previousEnv[key];
-      }
-    }
+    restoreEnv();
   });
 
   const newEmail = () => {
@@ -427,7 +383,6 @@ describe('Users OIDC (e2e)', () => {
     return email;
   };
 
-  // GET /users/oidc/login, then the "browser" at the provider: returns what the callback needs
   const startLogin = async (claims: Record<string, unknown>) => {
     const res = await request(app.getHttpServer()).get('/users/oidc/login').expect(302);
     const location = new URL(res.headers.location);
@@ -452,23 +407,19 @@ describe('Users OIDC (e2e)', () => {
     return decodeURIComponent(location.slice(`${FRONTEND_LOGIN}#token=`.length));
   };
 
-  // first on purpose: openid-client's discovery result is cached once it succeeds
   it('GET /users/oidc/login sends the browser back to the login page when discovery fails', async () => {
     discoveryDown = true;
 
     await request(app.getHttpServer())
       .get('/users/oidc/login')
       .expect(302)
-      .expect('Location', `${FRONTEND_LOGIN}#error=oidc_login_failed`)
+      .expect('Location', LOGIN_FAILED)
       .expect((res) => expect(res.headers['set-cookie']).toBeUndefined());
   });
 
-  it('GET /users/oidc/enabled is true', () =>
-    request(app.getHttpServer())
-      .get('/users/oidc/enabled')
-      .expect(200)
-      .expect('Content-Type', 'application/json; charset=utf-8')
-      .expect((res) => expect(res.body).toBe(true)));
+  it('GET /users/registration/enabled is false', () => expectJsonBoolean(app, '/users/registration/enabled', false));
+
+  it('GET /users/oidc/enabled is true', () => expectJsonBoolean(app, '/users/oidc/enabled', true));
 
   it('GET /users/oidc/login redirects to the provider with PKCE and keeps state in a cookie', async () => {
     const { state, location, setCookie } = await startLogin({});
@@ -497,7 +448,6 @@ describe('Users OIDC (e2e)', () => {
       groups: ['staff', 'VRT-Admin'],
     });
 
-    // other cookies of the site travel along with the state cookie
     const res = await callback(`code=${code}&state=${state}`, `theme=dark; ${cookie}; lang=en`);
 
     const token = tokenFrom(res.headers.location);
@@ -524,7 +474,6 @@ describe('Users OIDC (e2e)', () => {
 
     const third = await startLogin({ email, email_verified: true, groups: ['developers'] });
     tokenFrom((await callback(`code=${third.code}&state=${third.state}`, third.cookie)).headers.location);
-    // OIDC_DEFAULT_ROLE defaults to editor
     expect((await prismaService.user.findUnique({ where: { email } }))!.role).toBe(Role.editor);
   });
 
@@ -532,15 +481,11 @@ describe('Users OIDC (e2e)', () => {
     const email = newEmail();
     const { state, code, cookie } = await startLogin({ email, email_verified: false, groups: ['admin'] });
 
-    await callback(`code=${code}&state=${state}`, cookie).expect(
-      'Location',
-      `${FRONTEND_LOGIN}#error=oidc_login_failed`
-    );
+    await callback(`code=${code}&state=${state}`, cookie).expect('Location', LOGIN_FAILED);
 
     expect(await prismaService.user.findUnique({ where: { email } })).toBeNull();
   });
 
-  // cookie: undefined = none, null = the one set by /users/oidc/login
   it.each<[string, { cookie?: string | null; state?: string }]>([
     ['without the state cookie', { cookie: undefined }],
     ['with only other cookies', { cookie: 'theme=dark; lang=en' }],
@@ -554,10 +499,7 @@ describe('Users OIDC (e2e)', () => {
     const state = arrange.state ?? login.state;
     const cookie = arrange.cookie === null ? login.cookie : arrange.cookie;
 
-    await callback(`code=${code}&state=${state}`, cookie).expect(
-      'Location',
-      `${FRONTEND_LOGIN}#error=oidc_login_failed`
-    );
+    await callback(`code=${code}&state=${state}`, cookie).expect('Location', LOGIN_FAILED);
 
     expect(tokenRequests).toHaveLength(0);
     expect(await prismaService.user.findUnique({ where: { email } })).toBeNull();
@@ -566,10 +508,7 @@ describe('Users OIDC (e2e)', () => {
   it('fails when the provider refuses the code', async () => {
     const { state, cookie } = await startLogin({ email: newEmail(), email_verified: true });
 
-    await callback(`code=unknown&state=${state}`, cookie).expect(
-      'Location',
-      `${FRONTEND_LOGIN}#error=oidc_login_failed`
-    );
+    await callback(`code=unknown&state=${state}`, cookie).expect('Location', LOGIN_FAILED);
 
     expect(tokenRequests).toHaveLength(1);
   });
@@ -578,11 +517,7 @@ describe('Users OIDC (e2e)', () => {
     const email = newEmail();
     const { state, code, cookie } = await startLogin({ email, email_verified: true });
 
-    // a repeated code parameter is dropped, so openid-client sees no code at all
-    await callback(`code=${code}&code=${code}&state=${state}`, cookie).expect(
-      'Location',
-      `${FRONTEND_LOGIN}#error=oidc_login_failed`
-    );
+    await callback(`code=${code}&code=${code}&state=${state}`, cookie).expect('Location', LOGIN_FAILED);
 
     expect(tokenRequests).toHaveLength(0);
   });

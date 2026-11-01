@@ -40,14 +40,13 @@ describe('TestRunResultDto', () => {
     expect(result.baselineName).toBe('baseline of the variation');
   });
 
-  it('builds the link even when the frontend url is not configured', () => {
+  it('renders a missing APP_FRONTEND_URL as "undefined" (startup warns about it)', () => {
     delete process.env.APP_FRONTEND_URL;
     const testRun = generateTestRun();
     const testVariation = generateTestVariation({ projectId: 'project-id' });
 
     const result = new TestRunResultDto(testRun, testVariation);
 
-    // NOTE: current behavior — a missing APP_FRONTEND_URL is rendered as the literal string "undefined"
     expect(result.url).toBe(`undefined/project-id?buildId=${testRun.buildId}&testId=${testRun.id}`);
   });
 });

@@ -1,41 +1,15 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { LdapUsersService } from './ldapusers.service';
 import { AuthService } from '../../auth/auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { Role, User } from '@prisma/client';
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { UserLoginResponseDto } from '../dto/user-login-response.dto';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { Entry as LdapEntry, Client as LdapClient, SearchOptions, SearchResult } from 'ldapts';
+import { Client as LdapClient } from 'ldapts';
 
 jest.mock('ldapts', () => {
-  const mockLdapClient = {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    search: jest.fn((_searchDN, searchOptions: SearchOptions): Promise<SearchResult> => {
-      if (searchOptions.filter!.toString().includes('exists@example.com')) {
-        return Promise.resolve({
-          searchEntries: [
-            {
-              dn: 'dn',
-              LDAP_ATTRIBUTE_MAIL: 'exists@example.com',
-              LDAP_ATTRIBUTE_FIRST_NAME: 'first',
-              LDAP_ATTRIBUTE_LAST_NAME: 'last',
-            },
-          ],
-          searchReferences: [],
-        });
-      } else {
-        return Promise.resolve({ searchEntries: [], searchReferences: [] });
-      }
-    }),
-    bind: jest.fn(),
-    unbind: jest.fn(),
-  };
-
-  return {
-    Client: jest.fn(() => mockLdapClient),
-  };
+  const mockLdapClient = { search: jest.fn(), bind: jest.fn(), unbind: jest.fn().mockResolvedValue(undefined) };
+  return { Client: jest.fn(() => mockLdapClient) };
 });
 
 const user: User = {
@@ -51,133 +25,7 @@ const user: User = {
   createdAt: new Date(),
 };
 
-describe('LdapUsersService match from ldap', () => {
-  let service: LdapUsersService;
-  let prismaService: PrismaService;
-  let configService: ConfigService;
-  let authService: AuthService;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn().mockReturnValue('true'),
-            getOrThrow: jest.fn((string) => (string === 'LDAP_USERS_SEARCH_FILTER' ? '(&(mail={{email}}))' : string)),
-          },
-        },
-        {
-          provide: PrismaService,
-          useValue: {
-            user: {
-              findMany: jest.fn().mockResolvedValueOnce([]),
-              findUnique: jest.fn(),
-              create: jest.fn(),
-              update: jest.fn(),
-            },
-          },
-        },
-        {
-          provide: AuthService,
-          useValue: {
-            generateApiKey: jest.fn(() => 'generatedApiKey'),
-            encryptPassword: jest.fn(() => 'encryptedPassword'),
-            signToken: jest.fn(() => 'token'),
-          },
-        },
-      ],
-    }).compile();
-    configService = module.get<ConfigService>(ConfigService);
-    prismaService = module.get<PrismaService>(PrismaService);
-    authService = module.get<AuthService>(AuthService);
-    service = new LdapUsersService(configService, prismaService, authService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
-  it('should create new user on login', async () => {
-    jest.spyOn(prismaService.user, 'findUnique').mockResolvedValue(null);
-    const prismaUserCreateMock = jest.spyOn(prismaService.user, 'create').mockResolvedValue(user);
-    await service.login({ email: 'exists@example.com', password: 'password' });
-    expect(prismaUserCreateMock).toHaveBeenCalled();
-  });
-
-  it('should login with user already in db', async () => {
-    jest.spyOn(prismaService.user, 'findUnique').mockResolvedValue(user);
-    const prismaUserCreateMock = jest.spyOn(prismaService.user, 'create');
-    await service.login({ email: 'exists@example.com', password: 'password' });
-    expect(prismaUserCreateMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('LdapUsersService with no results from ldap', () => {
-  let service: LdapUsersService;
-  let prismaService: PrismaService;
-  let configService: ConfigService;
-  let authService: AuthService;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn().mockReturnValue('true'),
-            getOrThrow: jest.fn().mockReturnValue('string'),
-          },
-        },
-        {
-          provide: PrismaService,
-          useValue: {
-            user: {
-              findMany: jest.fn().mockResolvedValueOnce([]),
-              create: jest.fn(),
-              update: jest.fn(),
-            },
-          },
-        },
-        {
-          provide: AuthService,
-          useValue: {
-            generateApiKey: jest.fn(() => 'generatedApiKey'),
-            encryptPassword: jest.fn(() => 'encryptedPassword'),
-          },
-        },
-      ],
-    }).compile();
-    configService = module.get<ConfigService>(ConfigService);
-    prismaService = module.get<PrismaService>(PrismaService);
-    authService = module.get<AuthService>(AuthService);
-    service = new LdapUsersService(configService, prismaService, authService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
-  it('should never change a password', async () => {
-    const prismaUserCreateMock = jest.spyOn(prismaService.user, 'create');
-    const prismaUserUpdateMock = jest.spyOn(prismaService.user, 'update');
-    const result = await service.changePassword(user, 'newPassword');
-    expect(prismaUserCreateMock).not.toHaveBeenCalled();
-    expect(prismaUserUpdateMock).not.toHaveBeenCalled();
-    expect(result).toBe(true);
-  });
-
-  it('should not login when ldap search results are empty', async () => {
-    expect.assertions(1);
-    try {
-      await service.login({ email: 'testÜ*()\\\0@example.com', password: 'password' });
-    } catch (e) {
-      expect((e as Error).message).toBe('Invalid email or password.');
-    }
-  });
-});
-
-describe('LdapUsersService characterization', () => {
+describe('LdapUsersService', () => {
   let service: LdapUsersService;
   let ldapClient: { search: jest.Mock; bind: jest.Mock; unbind: jest.Mock };
   let prisma: { user: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock } };
@@ -213,6 +61,13 @@ describe('LdapUsersService characterization', () => {
     );
   };
 
+  const found = () => {
+    ldapClient.search.mockResolvedValueOnce({ searchEntries: [entry], searchReferences: [] });
+    prisma.user.findUnique.mockResolvedValueOnce(user);
+  };
+  const login = (svc = service, password = 'pw') => svc.login({ email: 'jane', password });
+  const invalidLogin = new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST);
+
   beforeEach(() => {
     jest.clearAllMocks();
     prisma = { user: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } };
@@ -222,18 +77,52 @@ describe('LdapUsersService characterization', () => {
       signToken: jest.fn().mockReturnValue('token'),
     };
     service = createService();
-    ldapClient = (service as any).ldapClient;
+    ldapClient = new (LdapClient as unknown as jest.Mock)();
+    (LdapClient as unknown as jest.Mock).mockClear();
   });
 
   it.each([
     ['false', true],
     ['TRUE', false],
-  ])('creates the client with LDAP_TLS_NO_VERIFY=%s -> rejectUnauthorized %s', (tlsNoVerify, rejectUnauthorized) => {
-    (LdapClient as unknown as jest.Mock).mockClear();
+  ])(
+    'creates the client with LDAP_TLS_NO_VERIFY=%s -> rejectUnauthorized %s',
+    async (tlsNoVerify, rejectUnauthorized) => {
+      found();
 
-    createService(tlsNoVerify);
+      await login(createService(tlsNoVerify));
 
-    expect(LdapClient).toHaveBeenCalledWith({ url: 'ldaps://ldap.example.com', tlsOptions: { rejectUnauthorized } });
+      expect(LdapClient).toHaveBeenCalledWith(expect.objectContaining({ tlsOptions: { rejectUnauthorized } }));
+    }
+  );
+
+  it('passes timeouts to every client', async () => {
+    found();
+
+    await login();
+
+    expect(LdapClient).toHaveBeenCalledTimes(2);
+    expect(LdapClient).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ url: 'ldaps://ldap.example.com', timeout: 10000, connectTimeout: 5000 })
+    );
+    expect(LdapClient).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ url: 'ldaps://ldap.example.com', timeout: 10000, connectTimeout: 5000 })
+    );
+  });
+
+  it('never changes a password', async () => {
+    await expect(service.changePassword(user, 'newPassword')).rejects.toThrow(
+      new HttpException('Password changes are disabled. Change your password in the directory.', HttpStatus.BAD_REQUEST)
+    );
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an email the directory does not know', async () => {
+    ldapClient.search.mockResolvedValueOnce({ searchEntries: [], searchReferences: [] });
+
+    await expect(service.login({ email: 'testÜ*()\\\0@example.com', password: 'pw' })).rejects.toThrow(invalidLogin);
   });
 
   it('refuses to create users', async () => {
@@ -245,9 +134,17 @@ describe('LdapUsersService characterization', () => {
   });
 
   describe('login', () => {
+    it.each([
+      ['an empty string', ''],
+      ['a missing value', undefined as unknown as string],
+    ])('rejects %s as the password without contacting LDAP', async (_name, password) => {
+      await expect(service.login({ email: 'exists@example.com', password })).rejects.toThrow(invalidLogin);
+      expect(ldapClient.bind).not.toHaveBeenCalled();
+      expect(ldapClient.search).not.toHaveBeenCalled();
+    });
+
     it('searches as the bind user with the escaped, trimmed email in every placeholder', async () => {
-      ldapClient.search.mockResolvedValueOnce({ searchEntries: [entry], searchReferences: [] });
-      prisma.user.findUnique.mockResolvedValueOnce(user);
+      found();
 
       await service.login({ email: ' j*ne(x)\\@example.com ', password: 'pw' });
 
@@ -260,10 +157,9 @@ describe('LdapUsersService characterization', () => {
     });
 
     it('binds as the found user and signs in the existing VRT user by the lower-cased LDAP email', async () => {
-      ldapClient.search.mockResolvedValueOnce({ searchEntries: [entry], searchReferences: [] });
-      prisma.user.findUnique.mockResolvedValueOnce(user);
+      found();
 
-      const result = await service.login({ email: 'jane', password: 'pw' });
+      const result = await login();
 
       expect(ldapClient.bind).toHaveBeenNthCalledWith(2, 'uid=jane,ou=people', 'pw');
       expect(ldapClient.unbind).toHaveBeenCalledTimes(2);
@@ -278,7 +174,7 @@ describe('LdapUsersService characterization', () => {
       prisma.user.findUnique.mockResolvedValueOnce(null);
       prisma.user.create.mockResolvedValueOnce(user);
 
-      await service.login({ email: 'jane', password: 'pw' });
+      await login();
 
       expect(auth.encryptPassword).toHaveBeenCalledWith(expect.any(String));
       expect(auth.encryptPassword.mock.calls[0][0]).toHaveLength(12);
@@ -298,9 +194,7 @@ describe('LdapUsersService characterization', () => {
       ldapClient.search.mockResolvedValueOnce({ searchEntries: [entry], searchReferences: [] });
       ldapClient.bind.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('invalid credentials'));
 
-      await expect(service.login({ email: 'jane', password: 'wrong' })).rejects.toThrow(
-        new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST)
-      );
+      await expect(login(service, 'wrong')).rejects.toThrow(invalidLogin);
       expect(ldapClient.unbind).toHaveBeenCalledTimes(2);
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
     });
@@ -311,46 +205,90 @@ describe('LdapUsersService characterization', () => {
         const incomplete: Partial<typeof entry> = { ...entry, [attribute]: undefined };
         ldapClient.search.mockResolvedValueOnce({ searchEntries: [incomplete], searchReferences: [] });
 
-        await expect(service.login({ email: 'jane', password: 'pw' })).rejects.toThrow(
-          new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST)
-        );
+        await expect(login()).rejects.toThrow(invalidLogin);
         expect(ldapClient.bind).toHaveBeenCalledTimes(1);
         expect(ldapClient.unbind).toHaveBeenCalledTimes(1);
       }
     );
 
-    it('passes a failing service bind through and still unbinds', async () => {
+    it('answers 503 when the service bind fails and still unbinds', async () => {
       ldapClient.bind.mockRejectedValueOnce(new Error('ldap down'));
 
-      await expect(service.login({ email: 'jane', password: 'pw' })).rejects.toThrow('ldap down');
+      await expect(login()).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(ldapClient.search).not.toHaveBeenCalled();
       expect(ldapClient.unbind).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers 503 when the search fails and still unbinds', async () => {
+      ldapClient.search.mockRejectedValueOnce(new Error('timeout'));
+
+      await expect(login()).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(ldapClient.unbind).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fail the login when unbind throws', async () => {
+      found();
+      ldapClient.unbind.mockRejectedValue(new Error('socket already closed'));
+
+      await expect(login()).resolves.toEqual(new UserLoginResponseDto(user, 'token'));
+      ldapClient.unbind.mockResolvedValue(undefined);
     });
   });
 
   describe('update', () => {
-    it('overwrites the profile with the LDAP entry found for the new email', async () => {
-      ldapClient.search.mockResolvedValueOnce({
-        searchEntries: [{ ...entry, mail: ' Jane.Roe@Example.com', givenName: 'J.', sn: 'R.' }],
-        searchReferences: [],
-      });
+    const own = { ...user, email: 'exists@example.com' };
+
+    it("refreshes the caller's own LDAP entry and ignores the email sent by the client", async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(own);
+      ldapClient.search.mockResolvedValueOnce({ searchEntries: [entry], searchReferences: [] });
       prisma.user.update.mockResolvedValueOnce(user);
 
-      const result = await service.update('1', { email: 'jane', firstName: 'ignored', lastName: 'ignored' });
+      const result = await service.update('1', { email: 'cfo@corp.com', firstName: 'x', lastName: 'y' });
 
-      // NOTE: current behavior — update reads the hard-coded `mail`, `givenName`
-      // and `sn` attributes, not the configured LDAP_ATTRIBUTE_* ones login uses
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: '1' } });
+      const filter = ldapClient.search.mock.calls[0][1].filter as string;
+      expect(filter).toContain('exists@example.com');
+      expect(filter).not.toContain('cfo@corp.com');
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: '1' },
-        data: { email: 'jane.roe@example.com', firstName: 'J.', lastName: 'R.' },
+        data: { email: 'jane@example.com', firstName: 'Jane', lastName: 'Roe' },
       });
       expect(result).toEqual(new UserLoginResponseDto(user, 'token'));
     });
 
-    it('fails with a TypeError when the entry has no `mail` attribute', async () => {
-      ldapClient.search.mockResolvedValueOnce({ searchEntries: [entry], searchReferences: [] });
+    it('reads the configured attribute names', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(own);
+      ldapClient.search.mockResolvedValueOnce({
+        searchEntries: [{ ...entry, mail: 'wrong@example.com', givenName: 'wrong', sn: 'wrong' }],
+        searchReferences: [],
+      });
+      prisma.user.update.mockResolvedValueOnce(user);
 
-      await expect(service.update('1', { email: 'jane', firstName: 'a', lastName: 'b' })).rejects.toThrow(TypeError);
+      await service.update('1', { email: 'jane', firstName: 'a', lastName: 'b' });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: '1' },
+        data: { email: 'jane@example.com', firstName: 'Jane', lastName: 'Roe' },
+      });
+    });
+
+    it('answers 404 when the caller no longer exists', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(null);
+
+      await expect(service.update('1', { email: 'jane', firstName: 'a', lastName: 'b' })).rejects.toBeInstanceOf(
+        NotFoundException
+      );
+      expect(ldapClient.search).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('answers 503 when the directory is not reachable', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(own);
+      ldapClient.bind.mockRejectedValueOnce(new Error('ldap down'));
+
+      await expect(service.update('1', { email: 'jane', firstName: 'a', lastName: 'b' })).rejects.toBeInstanceOf(
+        ServiceUnavailableException
+      );
       expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });

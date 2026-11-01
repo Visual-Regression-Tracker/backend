@@ -87,8 +87,6 @@ describe('OllamaController', () => {
   });
 
   it('passes a missing temperature on as NaN', async () => {
-    // NOTE: current behavior — the query value is not validated, so leaving it
-    // out reaches the provider as NaN rather than its default temperature.
     ollamaService.generate.mockResolvedValue({});
 
     await controller.compareImages([image('a'), image('b')], 'gemma3:12b', 'prompt', undefined as unknown as string);

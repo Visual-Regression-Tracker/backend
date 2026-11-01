@@ -9,9 +9,10 @@ import { Role, User } from '@prisma/client';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { randomUUID } from 'crypto';
-import { UserDto } from './dto/user.dto';
+import { toUserSummary } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
 import { OidcUsersService } from './oidc/oidcusers.service';
+import { LdapUsersService } from './ldap/ldapusers.service';
 
 const user: User = {
   id: '1',
@@ -29,17 +30,17 @@ const user: User = {
 describe('UsersService with DbUserService implementation', () => {
   let service: UsersService;
   let prismaService: PrismaService;
+  let configService: { get: jest.Mock };
 
   beforeEach(async () => {
+    configService = { get: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         UsersFactoryService,
         {
           provide: ConfigService,
-          useValue: {
-            get: jest.fn(),
-          },
+          useValue: configService,
         },
         {
           provide: PrismaService,
@@ -69,25 +70,17 @@ describe('UsersService with DbUserService implementation', () => {
     prismaService = module.get<PrismaService>(PrismaService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   it('should generate new api key', async () => {
-    // Arrange
     const prismaUserUpdateMock = jest.spyOn(prismaService.user, 'update');
     prismaUserUpdateMock.mockResolvedValueOnce(user);
 
-    // Act
     const result = await service.generateNewApiKey(user);
 
-    // Assert
     expect(prismaUserUpdateMock).toHaveBeenCalled();
     expect(typeof result).toBe('string');
   });
 
   it('should create a new user', async () => {
-    // Arrange
     const createUserDto = {
       email: 'test@example.com',
       firstName: 'John',
@@ -98,10 +91,8 @@ describe('UsersService with DbUserService implementation', () => {
     const prismaUserCreateMock = jest.spyOn(prismaService.user, 'create');
     prismaUserCreateMock.mockResolvedValueOnce(user);
 
-    // Act
     const result = await service.create(createUserDto);
 
-    // Assert
     expect(prismaUserCreateMock).toHaveBeenCalledWith({
       data: {
         email: 'test@example.com',
@@ -115,7 +106,6 @@ describe('UsersService with DbUserService implementation', () => {
   });
 
   it('should update a user', async () => {
-    // Arrange
     const updateUserDto: UpdateUserDto = {
       email: 'test@example.com',
       firstName: 'John',
@@ -125,43 +115,33 @@ describe('UsersService with DbUserService implementation', () => {
     const prismaUserUpdateMock = jest.spyOn(prismaService.user, 'update');
     prismaUserUpdateMock.mockResolvedValueOnce(user);
 
-    // Act
     const result = await service.update(user.id, updateUserDto);
 
-    // Assert
     expect(prismaUserUpdateMock).toHaveBeenCalled();
     expect(result).toEqual(expect.any(UserLoginResponseDto));
   });
 
   it('should change password', async () => {
-    // Arrange
     const prismaUserUpdateMock = jest.spyOn(prismaService.user, 'update');
     prismaUserUpdateMock.mockResolvedValueOnce(user);
 
-    // Act
     const result = await service.changePassword(user, 'newPassword');
 
-    // Assert
     expect(result).toEqual(true);
   });
 
   it('should login existing user', async () => {
-    // Act
     const result = await service.login({ email: 'test@example.com', password: 'doesntmatter' });
 
-    // Assert
     expect(result).toEqual(expect.any(UserLoginResponseDto));
   });
 
   it('should delete existing user', async () => {
-    // Arrange
     const prismaUserDeleteMock = jest.spyOn(prismaService.user, 'delete');
     prismaUserDeleteMock.mockResolvedValueOnce(user);
 
-    // Act
     await service.delete(user.id);
 
-    // Assert
     expect(prismaUserDeleteMock).toHaveBeenCalledWith({ where: { id: user.id } });
   });
 
@@ -190,15 +170,6 @@ describe('UsersService with DbUserService implementation', () => {
     });
   });
 
-  it('should get existing user', async () => {
-    // Act
-    const result = await service.get(user.id);
-
-    // Assert
-    expect(result).toBeInstanceOf(UserDto);
-    expect(prismaService.user.findUnique).toHaveBeenCalledWith({ where: { id: user.id } });
-  });
-
   it('looks a user up by id', async () => {
     const found = await service.findOne(user.id);
 
@@ -207,7 +178,6 @@ describe('UsersService with DbUserService implementation', () => {
   });
 
   it('should assign role to user', async () => {
-    // Arrange
     const assignRoleDto: AssignRoleDto = {
       id: randomUUID(),
       role: Role.editor,
@@ -216,12 +186,28 @@ describe('UsersService with DbUserService implementation', () => {
     const prismaUserCreateMock = jest.spyOn(prismaService.user, 'update');
     prismaUserCreateMock.mockResolvedValueOnce(user);
 
-    // Act
     const result = await service.assignRole(assignRoleDto);
 
-    // Assert
     expect(prismaUserCreateMock).toHaveBeenCalled();
-    expect(result).toBeInstanceOf(UserDto);
+    expect(result).toEqual(toUserSummary(user));
+    expect(result).not.toHaveProperty('apiKey');
+  });
+
+  it.each([
+    [undefined, true],
+    ['true', true],
+    ['TRUE', true],
+    ['yes', true],
+    ['', true],
+    ['false', false],
+    ['0', false],
+    [' OFF ', false],
+    ['No', false],
+  ])('with REGISTRATION_ENABLED %j registration is allowed: %s', (value, allowed) => {
+    configService.get.mockImplementation((key: string) => (key === 'REGISTRATION_ENABLED' ? value : undefined));
+
+    expect(service.isRegistrationAllowedByConfig()).toBe(allowed);
+    expect(service.isRegistrationEnabled()).toBe(allowed);
   });
 
   it('reports OIDC as disabled for the DB implementation', () => {
@@ -233,34 +219,44 @@ describe('UsersService with DbUserService implementation', () => {
   });
 });
 
-describe('UsersService with OidcUsersService implementation', () => {
-  let service: UsersService;
-  let oidcUsersService: OidcUsersService;
+const serviceWith = async (implementation: object, get = jest.fn()) => {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      UsersService,
+      { provide: UsersFactoryService, useValue: { getUsersService: () => implementation } },
+      { provide: PrismaService, useValue: {} },
+      { provide: AuthService, useValue: {} },
+      { provide: ConfigService, useValue: { get } },
+    ],
+  }).compile();
+  return module.get<UsersService>(UsersService);
+};
 
-  beforeEach(async () => {
-    oidcUsersService = Object.assign(Object.create(OidcUsersService.prototype), {
+describe('UsersService with an identity-provider implementation', () => {
+  const withoutRegistration = (prototype: object, members: object = {}) =>
+    Object.assign(Object.create(prototype), { allowsRegistration: false, ...members });
+
+  it.each([
+    ['OIDC', OidcUsersService.prototype, true],
+    ['LDAP', LdapUsersService.prototype, false],
+  ])('%s: registration is disabled whatever the flag says', async (_name, prototype, oidc) => {
+    const service = await serviceWith(
+      withoutRegistration(prototype),
+      jest.fn(() => 'true')
+    );
+
+    expect(service.isRegistrationAllowedByConfig()).toBe(true);
+    expect(service.isRegistrationEnabled()).toBe(false);
+    expect(service.isOidcEnabled()).toBe(oidc);
+  });
+
+  it('delegates authorization url, callback and redirect building to OIDC', async () => {
+    const oidcUsersService = withoutRegistration(OidcUsersService.prototype, {
       getAuthorizationUrl: jest.fn(),
       handleCallback: jest.fn(),
       buildFrontendRedirect: jest.fn(),
     }) as OidcUsersService;
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        UsersService,
-        { provide: UsersFactoryService, useValue: { getUsersService: () => oidcUsersService } },
-        { provide: PrismaService, useValue: {} },
-        { provide: AuthService, useValue: {} },
-      ],
-    }).compile();
-
-    service = module.get<UsersService>(UsersService);
-  });
-
-  it('reports OIDC as enabled', () => {
-    expect(service.isOidcEnabled()).toBe(true);
-  });
-
-  it('delegates authorization url, callback and redirect building', async () => {
+    const service = await serviceWith(oidcUsersService);
     const authorization = { url: 'https://idp/authorize', state: 'state', codeVerifier: 'verifier' };
     (oidcUsersService.getAuthorizationUrl as jest.Mock).mockResolvedValue(authorization);
     (oidcUsersService.handleCallback as jest.Mock).mockResolvedValue({ token: 'jwt' });

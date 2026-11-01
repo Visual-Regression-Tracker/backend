@@ -1,22 +1,97 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, Type } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Build } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
 import path from 'path';
 import { PNG } from 'pngjs';
+import { TEST_PROJECT } from '../src/_data_';
 import { AppModule } from '../src/app.module';
+import { ProjectsService } from '../src/projects/projects.service';
+import { GlobalValidationPipe } from '../src/shared/validation';
 import { HDD_IMAGE_PATH } from '../src/static/hdd/constants';
+import { TestRunsService } from '../src/test-runs/test-runs.service';
+import { LoggedUser, requestWithApiKey, requestWithAuth } from './preconditions';
 
-/** Boots the whole app the same way the other e2e specs do. */
-export const createE2eApp = async (): Promise<{ app: INestApplication; moduleFixture: TestingModule }> => {
-  const moduleFixture: TestingModule = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
+interface E2eAppOptions {
+  overrides?: Array<[Type<unknown>, unknown]>;
+  validation?: boolean;
+  configure?: (app: NestExpressApplication) => void;
+}
 
-  const app = moduleFixture.createNestApplication();
-  app.useGlobalPipes(new ValidationPipe());
+export const createE2eApp = async ({ overrides = [], validation = true, configure }: E2eAppOptions = {}) => {
+  let builder = Test.createTestingModule({ imports: [AppModule] });
+  for (const [token, value] of overrides) {
+    builder = builder.overrideProvider(token).useValue(value);
+  }
+  const moduleFixture: TestingModule = await builder.compile();
+  const app = moduleFixture.createNestApplication<NestExpressApplication>();
+  if (validation) {
+    app.useGlobalPipes(new GlobalValidationPipe());
+  }
+  configure?.(app);
   await app.init();
-  return { app, moduleFixture };
+  return { app, moduleFixture, get: <T>(token: Type<T>): T => moduleFixture.get(token) };
 };
+
+export const haveProject = (
+  projectsService: ProjectsService,
+  label: string,
+  overrides: Partial<Parameters<ProjectsService['create']>[0]> = {}
+) => projectsService.create({ ...TEST_PROJECT, ...overrides, name: `${label} ${randomUUID()}` });
+
+export const postRunDirect = (testRunsService: TestRunsService, build: Build, image: Buffer, name = 'Screen') =>
+  testRunsService.postTestRun({
+    createTestRequestDto: { projectId: build.projectId, buildId: build.id, branchName: build.branchName!, name },
+    imageBuffer: image,
+  });
+
+export const postRunBase64 = async (
+  app: INestApplication,
+  user: LoggedUser,
+  build: Build,
+  image: Buffer,
+  extra: Record<string, unknown> = {}
+): Promise<Record<string, any>> =>
+  (
+    await requestWithApiKey(app, 'post', '/test-runs', user.apiKey)
+      .send({
+        projectId: build.projectId,
+        buildId: build.id,
+        branchName: build.branchName,
+        name: 'Screen',
+        imageBase64: image.toString('base64'),
+        ...extra,
+      })
+      .expect(201)
+  ).body;
+
+export const setEnv = (vars: Record<string, string>): (() => void) => {
+  const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, vars);
+  return () => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  };
+};
+
+export const withEnv = async <T>(vars: Record<string, string>, fn: () => PromiseLike<T>): Promise<T> => {
+  const restore = setEnv(vars);
+  try {
+    return await fn();
+  } finally {
+    restore();
+  }
+};
+
+export const approveRuns = (app: INestApplication, user: LoggedUser, ids: string[], merge = false) =>
+  requestWithAuth(app, 'post', `/test-runs/approve?merge=${merge}`, user.token).send(ids).expect(201);
 
 export interface Rect {
   x: number;
@@ -26,10 +101,6 @@ export interface Rect {
   color: [number, number, number];
 }
 
-/**
- * A tiny white PNG with solid rectangles painted on it. Synthetic images keep
- * the diffs fast and make the change (its colour and its area) exact.
- */
 export const pngBuffer = (rects: Rect[] = [], width = 60, height = 60): Buffer => {
   const png = new PNG({ width, height });
   png.data.fill(255);
@@ -50,12 +121,14 @@ export const pngBuffer = (rects: Rect[] = [], width = 60, height = 60): Buffer =
 export const RED: [number, number, number] = [255, 0, 0];
 export const BLUE: [number, number, number] = [0, 0, 255];
 
-/** Where the HDD storage keeps a stored image (the default STATIC_SERVICE). */
+export const WHITE = pngBuffer();
+export const redAt = (x: number, y: number, size = 10): Rect => ({ x, y, w: size, h: size, color: RED });
+export const CHANGED = pngBuffer([redAt(5, 5)]);
+
 export const storedImagePath = (imageName: string): string => path.resolve(HDD_IMAGE_PATH, imageName);
 
 export const imageExists = (imageName: string | null): boolean => !!imageName && existsSync(storedImagePath(imageName));
 
-/** Polls until the predicate holds — for image deletions the app fires and does not await. */
 export const waitFor = async (predicate: () => boolean | Promise<boolean>, timeoutMs = 5000): Promise<void> => {
   const deadline = Date.now() + timeoutMs;
   while (!(await predicate())) {
@@ -66,7 +139,6 @@ export const waitFor = async (predicate: () => boolean | Promise<boolean>, timeo
   }
 };
 
-/** Keys of TestRunDto — what the API exposes for a test run. */
 export const TEST_RUN_DTO_KEYS = [
   'baselineBranchName',
   'baselineName',

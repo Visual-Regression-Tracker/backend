@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { BuildsService } from './builds.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
@@ -7,92 +7,72 @@ import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { mocked, MockedObject } from 'jest-mock';
 import { BuildDto } from './dto/build.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
-import { NotFoundException } from '@nestjs/common';
-import { ProjectsService } from '../projects/projects.service';
-import { generateTestRun, TEST_PROJECT } from '../_data_';
-import { Prisma as PrismaRuntime } from '@prisma/client';
-const { PrismaClientKnownRequestError } = PrismaRuntime;
+import { ConflictException, NotFoundException } from '@nestjs/common';
+import { StaticService } from '../static/static.service';
+import { generateTestRun } from '../_data_';
+
+const { PrismaClientKnownRequestError } = Prisma;
 
 jest.mock('./dto/build.dto');
 
-const initService = async ({
-  buildFindManyMock = jest.fn(),
-  buildCreateMock = jest.fn(),
-  buildUpdateMock = jest.fn(),
-  // a row for whatever id is asked: findOne answers 404 for a missing build
-  buildFindUniqueMock = jest.fn().mockImplementation(async ({ where }) => ({ id: where.id })),
-  buildFindFirstMock = jest.fn(),
-  buildDeleteMock = jest.fn(),
-  buildUpsertMock = jest.fn(),
-  buildCountMock = jest.fn(),
-  testRunDeleteMock = jest.fn(),
-  testRunApproveMock = jest.fn(),
-  testRunFindManyMock = jest.fn(),
-  testRunGroupByMock = jest.fn().mockResolvedValue([]),
-  eventsBuildUpdatedMock = jest.fn(),
-  eventsBuildCreatedMock = jest.fn(),
-  eventBuildDeletedMock = jest.fn(),
-  projectFindOneMock = jest.fn(),
-  projectUpdateMock = jest.fn(),
-}) => {
-  const module: TestingModule = await Test.createTestingModule({
+const prismaError = (code: string) => new PrismaClientKnownRequestError(code, { code, clientVersion: '5' });
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+const silentLogger = () => ({ warn: jest.fn(), debug: jest.fn(), log: jest.fn() });
+
+const setup = async () => {
+  const prisma = {
+    project: { update: jest.fn() },
+    build: {
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      findUnique: jest.fn(async ({ where }): Promise<unknown> => ({ id: where.id })),
+      findUniqueOrThrow: jest.fn(),
+      findFirst: jest.fn(),
+      delete: jest.fn(),
+      upsert: jest.fn(),
+      count: jest.fn(),
+      updateManyAndReturn: jest.fn(),
+    },
+    testRun: {
+      groupBy: jest.fn().mockResolvedValue([]),
+      findMany: jest.fn().mockResolvedValue([]),
+      deleteMany: jest.fn(),
+    },
+    $transaction: jest.fn(),
+  };
+  prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) => fn(prisma));
+  const events = {
+    buildUpdated: jest.fn(),
+    buildCreated: jest.fn(),
+    buildDeleted: jest.fn(),
+    testRunDeleted: jest.fn(),
+  };
+  const testRuns = { approve: jest.fn(), delete: jest.fn(), findMany: jest.fn() };
+  const deleteImage = jest.fn().mockResolvedValue(true);
+
+  const module = await Test.createTestingModule({
     providers: [
       BuildsService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: TestRunsService, useValue: testRuns },
+      { provide: EventsGateway, useValue: events },
       {
-        provide: PrismaService,
+        provide: StaticService,
         useValue: {
-          project: {
-            update: projectUpdateMock,
+          deleteImages: async (names: Iterable<string | null | undefined>) => {
+            for (const name of names) if (name) await deleteImage(name);
           },
-          build: {
-            findMany: buildFindManyMock,
-            create: buildCreateMock,
-            update: buildUpdateMock,
-            findUnique: buildFindUniqueMock,
-            findFirst: buildFindFirstMock,
-            delete: buildDeleteMock,
-            upsert: buildUpsertMock,
-            count: buildCountMock,
-          },
-          testRun: {
-            groupBy: testRunGroupByMock,
-          },
-        },
-      },
-      {
-        provide: TestRunsService,
-        useValue: {
-          approve: testRunApproveMock,
-          delete: testRunDeleteMock,
-          findMany: testRunFindManyMock,
-        },
-      },
-      {
-        provide: EventsGateway,
-        useValue: {
-          buildUpdated: eventsBuildUpdatedMock,
-          buildCreated: eventsBuildCreatedMock,
-          buildDeleted: eventBuildDeletedMock,
-        },
-      },
-      {
-        provide: ProjectsService,
-        useValue: {
-          findOne: projectFindOneMock,
         },
       },
     ],
   }).compile();
 
-  return module.get<BuildsService>(BuildsService);
+  return { service: module.get(BuildsService), prisma, events, testRuns, deleteImage };
 };
 
 describe('BuildsService', () => {
-  let service: BuildsService;
-
-  const build: Build & {
-    testRuns: TestRun[];
-  } = {
+  const build: Build & { testRuns: TestRun[] } = {
     id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
     ciBuildId: null,
     number: null,
@@ -105,6 +85,8 @@ describe('BuildsService', () => {
     isRunning: true,
     testRuns: [generateTestRun()],
   };
+  const { testRuns: buildRuns, ...buildRow } = build;
+  const [run] = buildRuns;
 
   const buildDto: BuildDto = {
     id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
@@ -122,18 +104,22 @@ describe('BuildsService', () => {
     isRunning: true,
     merge: false,
   };
+  const returnDtoOnce = () => mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
+  const buildOrder = [{ createdAt: 'desc' }, { id: 'desc' }];
+  const unhandledRejections = () => {
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+    return { unhandled, stop: () => process.off('unhandledRejection', unhandled) };
+  };
 
   it('findOne', async () => {
-    const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-    const testRunGroupByMock = jest
-      .fn()
-      .mockResolvedValueOnce([
-        { buildId: 'someId', status: TestStatus.ok, _count: { _all: 2 } },
-        { buildId: 'someId', status: TestStatus.unresolved, _count: { _all: 1 } },
-      ])
-      .mockResolvedValueOnce([{ buildId: 'someId' }]);
-    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-    service = await initService({ buildFindUniqueMock, testRunGroupByMock });
+    const { service, prisma } = await setup();
+    prisma.build.findUnique.mockResolvedValueOnce(build);
+    prisma.testRun.groupBy.mockResolvedValueOnce([
+      { buildId: 'someId', status: TestStatus.ok, merge: false, _count: { _all: 2 } },
+      { buildId: 'someId', status: TestStatus.unresolved, merge: true, _count: { _all: 1 } },
+    ]);
+    returnDtoOnce();
 
     const result = await service.findOne('someId');
 
@@ -147,309 +133,417 @@ describe('BuildsService', () => {
   });
 
   it('findOne throws NotFoundException for an unknown id', async () => {
-    const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(null);
-    const testRunGroupByMock = jest.fn().mockResolvedValue([]);
-    service = await initService({ buildFindUniqueMock, testRunGroupByMock });
+    const { service, prisma } = await setup();
+    prisma.build.findUnique.mockResolvedValueOnce(null);
 
     await expect(service.findOne('missing')).rejects.toThrow(new NotFoundException('Build not found: missing'));
   });
 
   it('update writes only the columns a client may change', async () => {
-    const buildUpdateMock = jest.fn();
-    service = await initService({ buildUpdateMock, eventsBuildUpdatedMock: jest.fn() });
+    const { service, prisma } = await setup();
     service.findOne = jest.fn();
 
     await service.update('id', { isRunning: false, ciBuildId: 'ci', branchName: 'other' } as ModifyBuildDto);
 
-    expect(buildUpdateMock.mock.calls[0][0].data).toStrictEqual({ ciBuildId: 'ci', isRunning: false });
+    expect(prisma.build.update.mock.calls[0][0].data).toStrictEqual({ ciBuildId: 'ci', isRunning: false });
   });
 
-  it('findMany', async () => {
-    const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
-    const buildCountMock = jest.fn().mockResolvedValueOnce(33);
-    const projectId = 'someId';
-    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-    service = await initService({ buildFindManyMock, buildCountMock });
+  it('update announces the change and returns the build', async () => {
+    const { service, prisma, events } = await setup();
+    returnDtoOnce();
 
-    const result = await service.findMany(projectId, 10, 20);
+    const result = await service.update('some id', { isRunning: false });
 
-    expect(buildCountMock).toHaveBeenCalledWith({
-      where: { projectId },
-    });
-    expect(buildFindManyMock).toHaveBeenCalledWith({
-      take: 10,
-      skip: 20,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      where: { projectId },
-    });
-    expect(result).toEqual({
-      data: [buildDto],
-      total: 33,
-      take: 10,
-      skip: 20,
-    });
+    expect(prisma.build.update).toHaveBeenCalledWith({ where: { id: 'some id' }, data: { isRunning: false } });
+    expect(events.buildUpdated).toHaveBeenCalledWith('some id');
+    expect(result).toBe(buildDto);
   });
 
-  it('findMany filtered by ciBuildId', async () => {
-    const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
-    const buildCountMock = jest.fn().mockResolvedValueOnce(1);
+  describe('findMany', () => {
     const projectId = 'someId';
-    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-    service = await initService({ buildFindManyMock, buildCountMock });
+    const ciBuildId = { contains: 'Onboarding', mode: Prisma.QueryMode.insensitive };
 
-    await service.findMany(projectId, 10, 0, 'Onboarding');
+    it('pages the builds of a project', async () => {
+      const { service, prisma } = await setup();
+      prisma.build.findMany.mockResolvedValueOnce([build]);
+      prisma.build.count.mockResolvedValueOnce(33);
+      returnDtoOnce();
 
-    const where = {
-      projectId,
-      ciBuildId: { contains: 'Onboarding', mode: Prisma.QueryMode.insensitive },
-    };
-    expect(buildCountMock).toHaveBeenCalledWith({ where });
-    expect(buildFindManyMock).toHaveBeenCalledWith({
-      take: 10,
-      skip: 0,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      where,
-    });
-  });
+      const result = await service.findMany(projectId, 10, 20);
 
-  it('findMany ignores an empty ciBuildId', async () => {
-    const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
-    const buildCountMock = jest.fn().mockResolvedValueOnce(33);
-    const projectId = 'someId';
-    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-    service = await initService({ buildFindManyMock, buildCountMock });
-
-    await service.findMany(projectId, 10, 0, '');
-
-    expect(buildCountMock).toHaveBeenCalledWith({ where: { projectId } });
-    expect(buildFindManyMock).toHaveBeenCalledWith({
-      take: 10,
-      skip: 0,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      where: { projectId },
-    });
-  });
-
-  describe('findMany around a build', () => {
-    const aroundBuildId = '7428548b-863f-40e8-b26d-2187cc98afa1';
-    const createdAt = new Date('2026-09-01T10:00:00.000Z');
-    const projectId = 'someId';
-
-    it('returns the page that holds the build rather than the one asked for', async () => {
-      const buildFindFirstMock = jest.fn().mockResolvedValueOnce({ id: aroundBuildId, createdAt });
-      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
-      // 35 builds sit ahead of it, then the total
-      const buildCountMock = jest.fn().mockResolvedValueOnce(35).mockResolvedValueOnce(50);
-      mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-      service = await initService({ buildFindFirstMock, buildFindManyMock, buildCountMock });
-
-      const result = await service.findMany(projectId, 10, 0, undefined, aroundBuildId);
-
-      expect(buildFindFirstMock).toHaveBeenCalledWith({
-        where: { projectId, id: aroundBuildId },
-        select: { id: true, createdAt: true },
-      });
-      expect(buildCountMock).toHaveBeenNthCalledWith(1, {
-        where: {
-          projectId,
-          OR: [{ createdAt: { gt: createdAt } }, { createdAt, id: { gt: aroundBuildId } }],
-        },
-      });
-      // the fourth page of ten starts at 30, and 35 is on it
-      expect(buildFindManyMock).toHaveBeenCalledWith({
+      expect(prisma.build.count).toHaveBeenCalledWith({ where: { projectId } });
+      expect(prisma.build.findMany).toHaveBeenCalledWith({
         take: 10,
-        skip: 30,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: 20,
+        orderBy: buildOrder,
         where: { projectId },
       });
-      expect(result.skip).toBe(30);
+      expect(result).toEqual({ data: [buildDto], total: 33, take: 10, skip: 20 });
     });
 
-    it('counts only what the search left, so the page matches the list on screen', async () => {
-      const buildFindFirstMock = jest.fn().mockResolvedValueOnce({ id: aroundBuildId, createdAt });
-      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
-      const buildCountMock = jest.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(4);
-      mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-      service = await initService({ buildFindFirstMock, buildFindManyMock, buildCountMock });
+    it.each([
+      ['ciBuildId', 'Onboarding', { projectId, ciBuildId }],
+      ['an empty ciBuildId', '', { projectId }],
+    ])('filters by %s', async (_, search, where) => {
+      const { service, prisma } = await setup();
+      prisma.build.findMany.mockResolvedValueOnce([build]);
+      prisma.build.count.mockResolvedValueOnce(1);
+      returnDtoOnce();
 
-      await service.findMany(projectId, 2, 0, 'Onboarding', aroundBuildId);
+      await service.findMany(projectId, 10, 0, search);
 
-      const ciBuildId = { contains: 'Onboarding', mode: Prisma.QueryMode.insensitive };
-      expect(buildFindFirstMock).toHaveBeenCalledWith({
-        where: { projectId, ciBuildId, id: aroundBuildId },
-        select: { id: true, createdAt: true },
+      expect(prisma.build.count).toHaveBeenCalledWith({ where });
+      expect(prisma.build.findMany).toHaveBeenCalledWith({ take: 10, skip: 0, orderBy: buildOrder, where });
+    });
+
+    describe('around a build', () => {
+      const aroundBuildId = '7428548b-863f-40e8-b26d-2187cc98afa1';
+      const createdAt = new Date('2026-09-01T10:00:00.000Z');
+      const ahead = [{ createdAt: { gt: createdAt } }, { createdAt, id: { gt: aroundBuildId } }];
+
+      const around = async (found: unknown, counts: number[]) => {
+        const ctx = await setup();
+        ctx.prisma.build.findFirst.mockResolvedValueOnce(found);
+        ctx.prisma.build.findMany.mockResolvedValueOnce([build]);
+        counts.forEach((count) => ctx.prisma.build.count.mockResolvedValueOnce(count));
+        returnDtoOnce();
+        return ctx;
+      };
+
+      it('returns the page that holds the build rather than the one asked for', async () => {
+        const { service, prisma } = await around({ id: aroundBuildId, createdAt }, [35, 50]);
+
+        const result = await service.findMany(projectId, 10, 0, undefined, aroundBuildId);
+
+        expect(prisma.build.findFirst).toHaveBeenCalledWith({
+          where: { projectId, id: aroundBuildId },
+          select: { id: true, createdAt: true },
+        });
+        expect(prisma.build.count).toHaveBeenNthCalledWith(1, { where: { projectId, OR: ahead } });
+        expect(prisma.build.findMany).toHaveBeenCalledWith({
+          take: 10,
+          skip: 30,
+          orderBy: buildOrder,
+          where: { projectId },
+        });
+        expect(result.skip).toBe(30);
       });
-      expect(buildCountMock).toHaveBeenNthCalledWith(1, {
-        where: {
-          projectId,
-          ciBuildId,
-          OR: [{ createdAt: { gt: createdAt } }, { createdAt, id: { gt: aroundBuildId } }],
-        },
+
+      it('counts only what the search left, so the page matches the list on screen', async () => {
+        const { service, prisma } = await around({ id: aroundBuildId, createdAt }, [2, 4]);
+
+        await service.findMany(projectId, 2, 0, 'Onboarding', aroundBuildId);
+
+        expect(prisma.build.findFirst).toHaveBeenCalledWith({
+          where: { projectId, ciBuildId, id: aroundBuildId },
+          select: { id: true, createdAt: true },
+        });
+        expect(prisma.build.count).toHaveBeenNthCalledWith(1, { where: { projectId, ciBuildId, OR: ahead } });
+        expect(prisma.build.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 2 }));
       });
-      expect(buildFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ skip: 2 }));
-    });
 
-    it('falls back to the page asked for when the build is not in the list', async () => {
-      // deleted, another project's, or filtered out by the search: a stale link
-      // should still open the list rather than fail
-      const buildFindFirstMock = jest.fn().mockResolvedValueOnce(null);
-      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
-      const buildCountMock = jest.fn().mockResolvedValueOnce(50);
-      mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-      service = await initService({ buildFindFirstMock, buildFindManyMock, buildCountMock });
+      it('falls back to the page asked for when the build is not in the list', async () => {
+        const { service, prisma } = await around(null, [50]);
 
-      const result = await service.findMany(projectId, 10, 20, undefined, aroundBuildId);
+        const result = await service.findMany(projectId, 10, 20, undefined, aroundBuildId);
 
-      expect(buildCountMock).toHaveBeenCalledTimes(1);
-      expect(buildFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ skip: 20 }));
-      expect(result.skip).toBe(20);
-    });
+        expect(prisma.build.count).toHaveBeenCalledTimes(1);
+        expect(prisma.build.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 20 }));
+        expect(result.skip).toBe(20);
+      });
 
-    it('does not divide by a page of no size', async () => {
-      const buildFindFirstMock = jest.fn().mockResolvedValueOnce({ id: aroundBuildId, createdAt });
-      const buildFindManyMock = jest.fn().mockResolvedValueOnce([build]);
-      const buildCountMock = jest.fn().mockResolvedValueOnce(0);
-      mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-      service = await initService({ buildFindFirstMock, buildFindManyMock, buildCountMock });
+      it('does not divide by a page of no size', async () => {
+        const { service, prisma } = await around({ id: aroundBuildId, createdAt }, [0]);
 
-      const result = await service.findMany(projectId, 0, 0, undefined, aroundBuildId);
+        const result = await service.findMany(projectId, 0, 0, undefined, aroundBuildId);
 
-      expect(result.skip).toBe(0);
-      expect(buildFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ skip: 0 }));
+        expect(result.skip).toBe(0);
+        expect(prisma.build.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 0 }));
+      });
     });
   });
 
   describe('remove', () => {
-    it('should remove a build successfully', async () => {
-      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-      const buildFindManyMock = jest.fn().mockImplementation(() => Promise.resolve(build));
-      const buildDeleteMock = jest.fn().mockImplementation(() => Promise.resolve(build));
-      const testRunDeleteMock = jest.fn();
-      const eventBuildDeletedMock = jest.fn();
-      service = await initService({
-        buildFindUniqueMock,
-        buildDeleteMock,
-        testRunDeleteMock,
-        eventBuildDeletedMock,
-        buildFindManyMock,
-      });
+    const removedBuild = { ...buildRow, testRuns: [run] };
 
-      await service.remove(build.id);
-
-      expect(buildFindUniqueMock).toHaveBeenCalledWith({
-        where: { id: build.id },
-        include: {
-          testRuns: true,
-        },
-      });
-      expect(testRunDeleteMock).toHaveBeenCalledWith(build.testRuns[0].id);
-      expect(eventBuildDeletedMock).toHaveBeenCalledWith(new BuildDto(build));
-      expect(buildDeleteMock).toHaveBeenCalledWith({
-        where: { id: build.id },
-      });
-    });
-
-    it('should handle undefined ID gracefully', async () => {
-      const buildFindUniqueMock = jest.fn();
-      const loggerWarnMock = jest.fn();
-      service = await initService({ buildFindUniqueMock });
-      (service as any).logger = { warn: loggerWarnMock }; // Mock the logger
-
-      await service.remove(undefined as unknown as string);
-
-      expect(loggerWarnMock).toHaveBeenCalledWith('Attempted to remove build with undefined ID.');
-      expect(buildFindUniqueMock).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('remove (characterization)', () => {
-    it('does nothing when the build does not exist', async () => {
-      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(null);
-      const buildDeleteMock = jest.fn();
-      const eventBuildDeletedMock = jest.fn();
-      service = await initService({ buildFindUniqueMock, buildDeleteMock, eventBuildDeletedMock });
-
-      await expect(service.remove('missing')).resolves.toBeUndefined();
-
-      expect(buildDeleteMock).not.toHaveBeenCalled();
-      expect(eventBuildDeletedMock).not.toHaveBeenCalled();
-    });
-
-    it('treats a build deleted in the meantime (P2025) as done, without an event', async () => {
-      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-      const buildDeleteMock = jest
-        .fn()
-        .mockRejectedValueOnce(new PrismaClientKnownRequestError('gone', { code: 'P2025', clientVersion: '5' }));
-      const testRunDeleteMock = jest.fn();
-      const eventBuildDeletedMock = jest.fn();
-      service = await initService({ buildFindUniqueMock, buildDeleteMock, testRunDeleteMock, eventBuildDeletedMock });
-
-      await expect(service.remove(build.id)).resolves.toBeUndefined();
-
-      expect(testRunDeleteMock).toHaveBeenCalledWith(build.testRuns[0].id);
-      expect(eventBuildDeletedMock).not.toHaveBeenCalled();
-    });
-
-    it.each([
-      ['another Prisma error', new PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: '5' })],
-      ['any other error', new Error('connection lost')],
-    ])('swallows %s on delete and still reports the build as deleted', async (_, error) => {
-      const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-      const buildDeleteMock = jest.fn().mockRejectedValueOnce(error);
-      const eventBuildDeletedMock = jest.fn();
-      service = await initService({ buildFindUniqueMock, buildDeleteMock, eventBuildDeletedMock });
+    it('removes a build, its runs, their files and announces it', async () => {
+      const { service, prisma, events, testRuns, deleteImage } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+      prisma.build.delete.mockResolvedValueOnce(buildRow);
+      prisma.testRun.findMany.mockResolvedValueOnce([run]);
 
       const result = await service.remove(build.id);
 
-      // NOTE: current behavior — only P2025 is handled; every other delete error
-      // is swallowed and the build is announced as deleted although it is not.
-      expect(result).toBe(build);
-      expect(eventBuildDeletedMock).toHaveBeenCalledTimes(1);
+      expect(prisma.build.findUnique).toHaveBeenCalledWith({ where: { id: build.id } });
+      expect(prisma.testRun.findMany).toHaveBeenCalledWith({ where: { buildId: build.id }, take: 500 });
+      expect(prisma.testRun.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [run.id] } } });
+      expect(deleteImage).toHaveBeenCalledTimes(2);
+      expect(deleteImage).toHaveBeenCalledWith(run.imageName);
+      expect(deleteImage).toHaveBeenCalledWith(run.diffName);
+      expect(events.testRunDeleted).toHaveBeenCalledWith(run);
+      expect(prisma.build.delete).toHaveBeenCalledWith({ where: { id: build.id } });
+      expect(mocked(BuildDto).mock.calls.at(-1)).toEqual([removedBuild]);
+      expect(events.buildDeleted).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(removedBuild);
+      expect(testRuns.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes the rows of a chunk before its files', async () => {
+      const { service, prisma, deleteImage } = await setup();
+      const calls: string[] = [];
+      prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+      prisma.testRun.findMany.mockResolvedValueOnce([run]);
+      prisma.testRun.deleteMany.mockImplementation(async () => void calls.push('rows'));
+      deleteImage.mockImplementation(async () => void calls.push('file'));
+
+      await service.remove(build.id);
+
+      expect(calls).toEqual(['rows', 'file', 'file']);
+    });
+
+    it('removes the runs chunk by chunk', async () => {
+      const { service, prisma } = await setup();
+      const a = generateTestRun({ id: 'a' });
+      const b = generateTestRun({ id: 'b' });
+      prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+      prisma.testRun.findMany.mockResolvedValueOnce([a]).mockResolvedValueOnce([b]);
+
+      const result = await service.remove(build.id);
+
+      expect(prisma.testRun.deleteMany).toHaveBeenCalledTimes(2);
+      expect(prisma.testRun.deleteMany).toHaveBeenNthCalledWith(1, { where: { id: { in: ['a'] } } });
+      expect(prisma.testRun.deleteMany).toHaveBeenNthCalledWith(2, { where: { id: { in: ['b'] } } });
+      expect(result?.testRuns).toEqual([a, b]);
+    });
+
+    it('should handle undefined ID gracefully', async () => {
+      const { service, prisma } = await setup();
+      const warn = jest.fn();
+      (service as any).logger = { warn };
+
+      await service.remove(undefined as unknown as string);
+
+      expect(warn).toHaveBeenCalledWith('Attempted to remove build with undefined ID.');
+      expect(prisma.build.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the build does not exist', async () => {
+      const { service, prisma, events } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce(null);
+
+      await expect(service.remove('missing')).resolves.toBeUndefined();
+
+      expect(prisma.build.delete).not.toHaveBeenCalled();
+      expect(events.buildDeleted).not.toHaveBeenCalled();
+    });
+
+    it('treats a build deleted in the meantime (P2025) as done, without an event', async () => {
+      const { service, prisma, events } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+      prisma.build.delete.mockRejectedValueOnce(prismaError('P2025'));
+      prisma.testRun.findMany.mockResolvedValueOnce([run]);
+
+      await expect(service.remove(build.id)).resolves.toBeUndefined();
+
+      expect(prisma.testRun.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [run.id] } } });
+      expect(events.buildDeleted).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a Prisma error other than P2003 and P2025', prismaError('P2034')],
+      ['any other error', new Error('connection lost')],
+    ])('rethrows %s from build.delete and announces nothing', async (_, error) => {
+      const { service, prisma, events } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+      prisma.build.delete.mockRejectedValueOnce(error);
+
+      await expect(service.remove(build.id)).rejects.toBe(error);
+
+      expect(prisma.build.delete).toHaveBeenCalledTimes(1);
+      expect(events.buildDeleted).not.toHaveBeenCalled();
+    });
+
+    it('deletes a run that arrived meanwhile and retries (P2003)', async () => {
+      const { service, prisma, events } = await setup();
+      const r1 = generateTestRun({ id: 'r1' });
+      const r2 = generateTestRun({ id: 'r2' });
+      prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+      prisma.build.delete.mockRejectedValueOnce(prismaError('P2003')).mockResolvedValueOnce(buildRow);
+      prisma.testRun.findMany.mockResolvedValueOnce([r1]).mockResolvedValueOnce([]).mockResolvedValueOnce([r2]);
+
+      const result = await service.remove(build.id);
+
+      expect(prisma.build.delete).toHaveBeenCalledTimes(2);
+      expect(result?.testRuns).toEqual([r1, r2]);
+      expect(events.buildDeleted).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers 409 when runs keep arriving', async () => {
+      const { service, prisma, events } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+      prisma.build.delete.mockRejectedValue(prismaError('P2003'));
+
+      await expect(service.remove(build.id)).rejects.toThrow(ConflictException);
+
+      expect(prisma.build.delete).toHaveBeenCalledTimes(3);
+      expect(events.buildDeleted).not.toHaveBeenCalled();
+    });
+
+    it('skips the file names a run does not have', async () => {
+      const { service, prisma, deleteImage } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+      prisma.testRun.findMany.mockResolvedValueOnce([
+        generateTestRun({ imageName: null as unknown as string, diffName: null }),
+      ]);
+
+      await service.remove(build.id);
+
+      expect(deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('does not look at activity without a cutoff', async () => {
+      const { service, prisma } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+
+      await service.remove(build.id);
+
+      expect(prisma.build.findFirst).not.toHaveBeenCalled();
+    });
+
+    describe('only if the build is idle', () => {
+      const since = new Date('2026-01-01T00:00:00Z');
+
+      it('keeps a build in use: no rows, files or events', async () => {
+        const { service, prisma, events, deleteImage } = await setup();
+        prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+        prisma.build.findFirst.mockResolvedValue(null);
+        prisma.testRun.findMany.mockResolvedValueOnce([run]);
+
+        await expect(service.remove(build.id, { onlyIfIdleSince: since })).resolves.toBeUndefined();
+
+        expect(prisma.testRun.deleteMany).not.toHaveBeenCalled();
+        expect(deleteImage).not.toHaveBeenCalled();
+        expect(prisma.build.delete).not.toHaveBeenCalled();
+        expect(events.testRunDeleted).not.toHaveBeenCalled();
+        expect(events.buildDeleted).not.toHaveBeenCalled();
+      });
+
+      it('stops when the build becomes active between chunks', async () => {
+        const { service, prisma, events } = await setup();
+        prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+        prisma.build.findFirst.mockResolvedValueOnce({ id: build.id }).mockResolvedValue(null);
+        prisma.testRun.findMany.mockResolvedValueOnce([generateTestRun({ id: 'r1' })]);
+
+        await expect(service.remove(build.id, { onlyIfIdleSince: since })).resolves.toBeUndefined();
+
+        expect(prisma.testRun.deleteMany).toHaveBeenCalledTimes(1);
+        expect(prisma.build.delete).not.toHaveBeenCalled();
+        expect(events.buildDeleted).not.toHaveBeenCalled();
+      });
+
+      it('removes an idle build', async () => {
+        const { service, prisma, events } = await setup();
+        prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+        prisma.build.findFirst.mockResolvedValue({ id: build.id });
+        prisma.build.delete.mockResolvedValueOnce(buildRow);
+        prisma.testRun.findMany.mockResolvedValueOnce([run]);
+
+        const result = await service.remove(build.id, { onlyIfIdleSince: since });
+
+        expect(prisma.build.findFirst).toHaveBeenCalledWith({
+          where: { id: build.id, updatedAt: { lt: since }, testRuns: { none: { createdAt: { gte: since } } } },
+          select: { id: true },
+        });
+        expect(prisma.build.delete).toHaveBeenCalledWith({ where: { id: build.id } });
+        expect(result).toEqual(removedBuild);
+        expect(events.buildDeleted).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not retry P2003 when pruning', async () => {
+        const { service, prisma, events } = await setup();
+        prisma.build.findUnique.mockResolvedValueOnce(buildRow);
+        prisma.build.findFirst.mockResolvedValue({ id: build.id });
+        prisma.build.delete.mockRejectedValue(prismaError('P2003'));
+
+        await expect(service.remove(build.id, { onlyIfIdleSince: since })).resolves.toBeUndefined();
+
+        expect(prisma.build.delete).toHaveBeenCalledTimes(1);
+        expect(events.buildDeleted).not.toHaveBeenCalled();
+      });
     });
   });
 
-  describe('incrementBuildNumber', () => {
-    it("bumps the project's build counter and gives the build the new number", async () => {
-      const projectUpdateMock = jest.fn().mockResolvedValueOnce({ ...TEST_PROJECT, buildsCounter: 43 });
-      const buildUpdateMock = jest.fn().mockResolvedValueOnce({ ...build, number: 43 });
-      service = await initService({ projectUpdateMock, buildUpdateMock });
+  describe('findOrCreate', () => {
+    const params = { projectId: 'projectId', branchName: 'develop', ciBuildId: 'ci' };
 
-      const result = await service.incrementBuildNumber(build.id, 'projectId');
+    it('numbers a new build and announces it', async () => {
+      const { service, prisma, events } = await setup();
+      const numbered = { ...build, number: 3 };
+      prisma.build.upsert.mockResolvedValueOnce(build);
+      prisma.project.update.mockResolvedValueOnce({ buildsCounter: 3 });
+      prisma.build.updateManyAndReturn.mockResolvedValueOnce([numbered]);
 
-      expect(projectUpdateMock).toHaveBeenCalledWith({
+      const result = await service.findOrCreate(params);
+
+      expect(prisma.project.update).toHaveBeenCalledWith({
         where: { id: 'projectId' },
         data: { buildsCounter: { increment: 1 } },
+        select: { buildsCounter: true },
       });
-      expect(buildUpdateMock).toHaveBeenCalledWith({ where: { id: build.id }, data: { number: 43 } });
-      expect(result).toEqual({ ...build, number: 43 });
-    });
-  });
-
-  describe('findOrCreate (characterization)', () => {
-    it('numbers a new build and announces it', async () => {
-      const numbered = { ...build, number: 3 };
-      const buildUpsertMock = jest.fn().mockResolvedValueOnce(build);
-      const eventsBuildCreatedMock = jest.fn();
-      service = await initService({ buildUpsertMock, eventsBuildCreatedMock });
-      service.incrementBuildNumber = jest.fn().mockResolvedValueOnce(numbered);
-
-      const result = await service.findOrCreate({ projectId: 'projectId', branchName: 'develop', ciBuildId: 'ci' });
-
-      expect(service.incrementBuildNumber).toHaveBeenCalledWith(build.id, 'projectId');
-      expect(eventsBuildCreatedMock).toHaveBeenCalledWith(new BuildDto(numbered));
+      expect(prisma.build.updateManyAndReturn).toHaveBeenCalledWith({
+        where: { id: build.id, number: null },
+        data: { number: 3 },
+      });
+      expect(mocked(BuildDto).mock.calls.at(-1)).toEqual([numbered]);
+      expect(events.buildCreated).toHaveBeenCalledTimes(1);
       expect(result).toBe(numbered);
     });
 
+    it('numbers a new build once when parallel callers join it', async () => {
+      const { service, prisma, events } = await setup();
+      prisma.build.upsert.mockResolvedValue({ ...build, number: null });
+      prisma.project.update.mockResolvedValueOnce({ buildsCounter: 42 }).mockResolvedValueOnce({ buildsCounter: 43 });
+      prisma.build.updateManyAndReturn.mockResolvedValueOnce([{ ...build, number: 42 }]).mockResolvedValueOnce([]);
+      prisma.build.findUniqueOrThrow.mockResolvedValue({ ...build, number: 42 });
+
+      const results = await Promise.all([service.findOrCreate(params), service.findOrCreate(params)]);
+
+      expect(events.buildCreated).toHaveBeenCalledTimes(1);
+      expect(results.map((result) => result.number)).toEqual([42, 42]);
+    });
+
+    it('returns the build another caller numbered, without announcing it', async () => {
+      const { service, prisma, events } = await setup();
+      prisma.build.upsert.mockResolvedValueOnce(build);
+      prisma.project.update.mockResolvedValueOnce({ buildsCounter: 8 });
+      prisma.build.updateManyAndReturn.mockResolvedValueOnce([]);
+      prisma.build.findUniqueOrThrow.mockResolvedValueOnce({ ...build, number: 7 });
+
+      const result = await service.findOrCreate(params);
+
+      expect(prisma.build.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: build.id } });
+      expect(events.buildCreated).not.toHaveBeenCalled();
+      expect(result).toEqual({ ...build, number: 7 });
+    });
+
+    it('rethrows a failure of the numbering transaction', async () => {
+      const { service, prisma, events } = await setup();
+      const error = new Error('connection lost');
+      prisma.build.upsert.mockResolvedValueOnce(build);
+      prisma.project.update.mockRejectedValueOnce(error);
+
+      await expect(service.findOrCreate(params)).rejects.toBe(error);
+      expect(events.buildCreated).not.toHaveBeenCalled();
+    });
+
     it('retries a concurrent upsert (P2002) as an update with the same unique key', async () => {
-      const buildUpsertMock = jest
-        .fn()
-        .mockRejectedValueOnce(new PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '5' }));
-      const buildUpdateMock = jest.fn().mockResolvedValueOnce({ ...build, number: 9 });
-      service = await initService({ buildUpsertMock, buildUpdateMock });
+      const { service, prisma } = await setup();
+      prisma.build.upsert.mockRejectedValueOnce(prismaError('P2002'));
+      prisma.build.update.mockResolvedValueOnce({ ...build, number: 9 });
 
-      const result = await service.findOrCreate({ projectId: 'projectId', branchName: 'develop', ciBuildId: 'ci' });
+      const result = await service.findOrCreate(params);
 
-      expect(buildUpdateMock).toHaveBeenCalledWith({
+      expect(prisma.build.update).toHaveBeenCalledWith({
         where: { projectId_ciBuildId: { projectId: 'projectId', ciBuildId: 'ci' } },
         data: { isRunning: true },
       });
@@ -457,254 +551,256 @@ describe('BuildsService', () => {
     });
 
     it.each([
-      ['another Prisma error', new PrismaClientKnownRequestError('x', { code: 'P2003', clientVersion: '5' })],
+      ['another Prisma error', prismaError('P2003')],
       ['any other error', new Error('connection lost')],
-    ])('turns %s on upsert into a TypeError', async (_, error) => {
-      const buildUpsertMock = jest.fn().mockRejectedValueOnce(error);
-      const buildUpdateMock = jest.fn();
-      service = await initService({ buildUpsertMock, buildUpdateMock });
+    ])('rethrows %s from upsert unchanged', async (_, error) => {
+      const { service, prisma } = await setup();
+      prisma.build.upsert.mockRejectedValueOnce(error);
 
-      // NOTE: current behavior — the original error is swallowed and the
-      // undefined build is dereferenced afterwards
-      await expect(
-        service.findOrCreate({ projectId: 'projectId', branchName: 'develop', ciBuildId: 'ci' })
-      ).rejects.toThrow(TypeError);
-      expect(buildUpdateMock).not.toHaveBeenCalled();
+      await expect(service.findOrCreate(params)).rejects.toBe(error);
+      expect(prisma.build.update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['without ciBuildId', undefined, { id: '111' }],
+      ['with ciBuildId', '222', { projectId_ciBuildId: { projectId: '111', ciBuildId: '222' } }],
+    ])('upserts %s', async (_, ciBuildId, where) => {
+      const { service, prisma } = await setup();
+      prisma.build.upsert.mockResolvedValueOnce({ ...build, number: 1 });
+
+      await service.findOrCreate({ projectId: '111', branchName: 'develop', ciBuildId });
+
+      expect(prisma.build.upsert).toHaveBeenCalledWith({
+        where,
+        create: {
+          branchName: 'develop',
+          ...(ciBuildId && { ciBuildId }),
+          isRunning: true,
+          project: { connect: { id: '111' } },
+        },
+        update: { isRunning: true },
+      });
+    });
+
+    it('leaves an already numbered build alone', async () => {
+      const { service, prisma } = await setup();
+      prisma.build.upsert.mockResolvedValueOnce({ ...build, number: 100 });
+
+      const result = await service.findOrCreate({ projectId: '111', branchName: 'develop' });
+
+      expect(prisma.project.update).not.toHaveBeenCalled();
+      expect(result).toEqual({ ...build, number: 100 });
     });
   });
 
   describe('deleteOldBuilds', () => {
     const projectId = 'someProjectId';
-    const orderBy = [{ createdAt: 'desc' }, { id: 'desc' }];
+    const ids = (...names: string[]) => names.map((id) => ({ id }));
 
     const init = async (oldBuilds: { id: string }[]) => {
-      const buildFindManyMock = jest.fn().mockResolvedValueOnce(oldBuilds);
-      service = await initService({ buildFindManyMock });
-      service.remove = jest.fn().mockResolvedValue(undefined);
-      return buildFindManyMock;
+      const ctx = await setup();
+      ctx.prisma.build.findMany.mockResolvedValueOnce(oldBuilds);
+      ctx.service.remove = jest.fn().mockResolvedValue(undefined);
+      return ctx;
     };
 
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('removes every build past the newest maxBuildAllowed - 1, making room for the new one', async () => {
-      const buildFindManyMock = await init([{ id: 'build1' }, { id: 'build2' }]);
+      const { service, prisma } = await init(ids('build1', 'build2'));
 
-      await service.deleteOldBuilds(projectId, 3);
+      await service.deleteOldBuilds(projectId, 3, 'b-new');
 
-      expect(buildFindManyMock).toHaveBeenCalledWith({ where: { projectId }, orderBy, skip: 2, select: { id: true } });
+      expect(prisma.build.findMany).toHaveBeenCalledWith({
+        where: { projectId, id: { not: 'b-new' } },
+        orderBy: buildOrder,
+        skip: 2,
+        select: { id: true },
+      });
       expect(service.remove).toHaveBeenCalledTimes(2);
-      expect(service.remove).toHaveBeenCalledWith('build1');
-      expect(service.remove).toHaveBeenCalledWith('build2');
+      expect(service.remove).toHaveBeenCalledWith('build1', expect.anything());
+      expect(service.remove).toHaveBeenCalledWith('build2', expect.anything());
     });
 
-    it.each([
-      [1, 0],
-      [0, 0],
-    ])('with maxBuildAllowed=%p keeps no old build at all', async (max, skip) => {
-      const buildFindManyMock = await init([]);
+    it.each([[1], [0]])('with maxBuildAllowed=%p keeps no old build at all', async (max) => {
+      const { service, prisma } = await init([]);
 
-      await service.deleteOldBuilds(projectId, max);
+      await service.deleteOldBuilds(projectId, max, 'b-new');
 
-      expect(buildFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ skip }));
+      expect(prisma.build.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 0 }));
     });
 
-    it('never prunes the build a CI build id is about to reuse', async () => {
-      const buildFindManyMock = await init([]);
+    it('passes the grace cutoff to remove', async () => {
+      jest.useFakeTimers({ now: new Date('2026-05-01T12:00:00Z'), doNotFake: ['setImmediate', 'nextTick'] });
+      const { service } = await init(ids('build1'));
 
-      await service.deleteOldBuilds(projectId, 1, 'ci-1');
+      await service.deleteOldBuilds(projectId, 1, 'b-new');
 
-      expect(buildFindManyMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { projectId, OR: [{ ciBuildId: null }, { ciBuildId: { not: 'ci-1' } }] },
-        })
+      expect(service.remove).toHaveBeenCalledWith('build1', { onlyIfIdleSince: new Date('2026-05-01T11:00:00Z') });
+    });
+
+    it('runs a separate pruning for another kept build of the same project', async () => {
+      const { service, prisma } = await setup();
+      prisma.build.findMany.mockResolvedValue([]);
+
+      await Promise.all([service.deleteOldBuilds(projectId, 2, 'b1'), service.deleteOldBuilds(projectId, 2, 'b2')]);
+
+      expect(prisma.build.findMany).toHaveBeenCalledTimes(2);
+      expect(prisma.build.findMany).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ where: { projectId, id: { not: 'b1' } } })
+      );
+      expect(prisma.build.findMany).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ where: { projectId, id: { not: 'b2' } } })
       );
     });
 
-    it('should handle concurrent calls for the same project by returning the existing promise', async () => {
-      const buildFindManyMock = await init([{ id: 'build1' }]);
+    it('should handle concurrent calls for the same kept build by returning the existing promise', async () => {
+      const { service, prisma } = await init(ids('build1'));
 
-      const promise1 = service.deleteOldBuilds(projectId, 2);
-      const promise2 = service.deleteOldBuilds(projectId, 2);
+      const promise1 = service.deleteOldBuilds(projectId, 2, 'b-new');
+      const promise2 = service.deleteOldBuilds(projectId, 2, 'b-new');
 
       expect(promise1).toStrictEqual(promise2);
       await promise1;
-      expect(buildFindManyMock).toHaveBeenCalledTimes(1);
+      expect(prisma.build.findMany).toHaveBeenCalledTimes(1);
       expect(service.remove).toHaveBeenCalledTimes(1);
     });
 
     it('should remove the promise from the map after completion (success)', async () => {
-      await init([{ id: 'build1' }]);
+      const { service } = await init(ids('build1'));
 
-      await service.deleteOldBuilds(projectId, 1);
+      await service.deleteOldBuilds(projectId, 1, 'b-new');
 
-      expect(service['ongoingDeletions'].has(projectId)).toBe(false);
+      expect(service['ongoingDeletions'].has(`${projectId}|b-new`)).toBe(false);
+    });
+
+    it('one failing old build does not stop pruning the others', async () => {
+      const { service } = await init(ids('old1', 'old2'));
+      jest.mocked(service.remove).mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(undefined);
+
+      await expect(service.deleteOldBuilds(projectId, 1, 'b-new')).resolves.toBeUndefined();
+
+      expect(service.remove).toHaveBeenCalledWith('old2', expect.anything());
     });
 
     it('hands a failure to the caller and leaves no unhandled rejection behind', async () => {
-      const unhandled = jest.fn();
-      process.on('unhandledRejection', unhandled);
+      const { unhandled, stop } = unhandledRejections();
       try {
-        const buildFindManyMock = jest.fn().mockRejectedValueOnce(new Error('db down'));
-        service = await initService({ buildFindManyMock });
+        const { service, prisma } = await setup();
+        prisma.build.findMany.mockRejectedValueOnce(new Error('db down'));
 
-        await expect(service.deleteOldBuilds(projectId, 1)).rejects.toThrow('db down');
-        await new Promise((resolve) => setImmediate(resolve));
+        await expect(service.deleteOldBuilds(projectId, 1, 'b-new')).rejects.toThrow('db down');
+        await tick();
 
         expect(unhandled).not.toHaveBeenCalled();
-        expect(service['ongoingDeletions'].has(projectId)).toBe(false);
+        expect(service['ongoingDeletions'].has(`${projectId}|b-new`)).toBe(false);
       } finally {
-        process.off('unhandledRejection', unhandled);
+        stop();
       }
     });
   });
 
-  it('should stop', async () => {
-    const id = 'some id';
-    const buildUpdateMock = jest.fn();
-    const eventsBuildUpdatedMock = jest.fn();
-    mocked(BuildDto).mockReturnValueOnce(buildDto as MockedObject<BuildDto>);
-    service = await initService({ buildUpdateMock, eventsBuildUpdatedMock });
+  describe('background retention', () => {
+    const projectId = 'someProjectId';
 
-    const result = await service.update(id, { isRunning: false });
+    it('scheduleRetention logs a failure instead of leaving it unhandled', async () => {
+      const { unhandled, stop } = unhandledRejections();
+      try {
+        const { service, prisma } = await setup();
+        prisma.build.findMany.mockRejectedValueOnce(new Error('db down'));
+        const logger = silentLogger();
+        (service as any).logger = logger;
 
-    expect(buildUpdateMock).toHaveBeenCalledWith({
-      where: { id },
-      data: { isRunning: false },
-    });
-    expect(eventsBuildUpdatedMock).toHaveBeenCalledWith(id);
-    expect(result).toBe(buildDto);
-  });
+        service.scheduleRetention(projectId, 1, 'b-new');
+        await service.whenRetentionIdle();
+        await tick();
 
-  it('approve', async () => {
-    const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(build);
-    const testRunApproveMock = jest.fn().mockResolvedValueOnce({
-      ...build.testRuns[0],
-      status: TestStatus.approved,
-    });
-    service = await initService({ buildFindUniqueMock, testRunApproveMock });
-    service.findOne = jest.fn();
-
-    await service.approve('someId', true, 'user id');
-
-    expect(buildFindUniqueMock).toHaveBeenCalledWith({
-      where: { id: 'someId' },
-      include: {
-        testRuns: {
-          where: {
-            status: {
-              in: [TestStatus.new, TestStatus.unresolved],
-            },
-          },
-        },
-      },
-    });
-    expect(testRunApproveMock).toHaveBeenCalledWith(build.testRuns[0].id, true, false, 'user id');
-  });
-
-  it('approve throws NotFoundException for an unknown build', async () => {
-    const buildFindUniqueMock = jest.fn().mockResolvedValueOnce(null);
-    service = await initService({ buildFindUniqueMock });
-
-    await expect(service.approve('missing', false)).rejects.toThrow(new NotFoundException('Build not found: missing'));
-  });
-
-  describe('findOsCreate', () => {
-    it('create without ciBuildId', async () => {
-      const buildUpsertMock = jest.fn().mockResolvedValueOnce(build);
-
-      service = await initService({ buildUpsertMock });
-      service.incrementBuildNumber = jest.fn().mockResolvedValueOnce(build);
-
-      await service.findOrCreate({
-        projectId: '111',
-        branchName: 'develop',
-      });
-
-      expect(buildUpsertMock).toHaveBeenCalledWith({
-        where: {
-          id: '111',
-        },
-        create: {
-          branchName: 'develop',
-          isRunning: true,
-          project: {
-            connect: {
-              id: '111',
-            },
-          },
-        },
-        update: {
-          isRunning: true,
-        },
-      });
+        expect(unhandled).not.toHaveBeenCalled();
+        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+      } finally {
+        stop();
+      }
     });
 
-    it('create with ciBuildId', async () => {
-      const buildUpsertMock = jest.fn().mockResolvedValueOnce(build);
-      service = await initService({ buildUpsertMock });
-      service.incrementBuildNumber = jest.fn().mockResolvedValueOnce(build);
+    it('whenRetentionIdle resolves when nothing runs', async () => {
+      const { service } = await setup();
 
-      await service.findOrCreate({
-        projectId: '111',
-        branchName: 'develop',
-        ciBuildId: '222',
-      });
-
-      expect(buildUpsertMock).toHaveBeenCalledWith({
-        where: {
-          projectId_ciBuildId: {
-            projectId: '111',
-            ciBuildId: '222',
-          },
-        },
-        create: {
-          branchName: 'develop',
-          ciBuildId: '222',
-          isRunning: true,
-          project: {
-            connect: {
-              id: '111',
-            },
-          },
-        },
-        update: {
-          isRunning: true,
-        },
-      });
+      await expect(service.whenRetentionIdle()).resolves.toBeUndefined();
     });
 
-    it('create with retry', async () => {
-      const buildUpsertMock = jest
+    it('whenRetentionIdle waits for a running pruning, even a failing one', async () => {
+      const { service, prisma } = await setup();
+      let fail: (e: Error) => void = () => undefined;
+      prisma.build.findMany.mockReturnValueOnce(new Promise((_, reject) => (fail = reject)));
+      (service as any).logger = silentLogger();
+      service.scheduleRetention(projectId, 1, 'b-new');
+      let idle = false;
+      const waiting = service.whenRetentionIdle().then(() => (idle = true));
+
+      await tick();
+      expect(idle).toBe(false);
+      fail(new Error('boom'));
+      await waiting;
+
+      expect(idle).toBe(true);
+    });
+
+    it('beforeApplicationShutdown stops between builds and waits', async () => {
+      const { service, prisma } = await setup();
+      prisma.build.findMany.mockResolvedValueOnce([{ id: 'o1' }, { id: 'o2' }]);
+      let finishFirst: () => void = () => undefined;
+      service.remove = jest
         .fn()
-        .mockRejectedValueOnce(new PrismaClientKnownRequestError('mock error', { code: 'P2002', clientVersion: '5' }));
-      const buildUpdateMock = jest.fn().mockResolvedValueOnce(build);
-      service = await initService({ buildUpsertMock, buildUpdateMock });
-      service.incrementBuildNumber = jest.fn().mockResolvedValueOnce(build);
+        .mockImplementationOnce(() => new Promise<undefined>((resolve) => (finishFirst = () => resolve(undefined))))
+        .mockResolvedValue(undefined);
+      service.scheduleRetention(projectId, 1, 'b-new');
+      await tick();
+      expect(service.remove).toHaveBeenCalledWith('o1', expect.anything());
 
-      const result = await service.findOrCreate({
-        projectId: '111',
-        branchName: 'develop',
+      let stopped = false;
+      const shutdown = service.beforeApplicationShutdown().then(() => (stopped = true));
+      await tick();
+      expect(stopped).toBe(false);
+      finishFirst();
+      await shutdown;
+
+      expect(stopped).toBe(true);
+      expect(service.remove).toHaveBeenCalledTimes(1);
+      expect(service.remove).not.toHaveBeenCalledWith('o2', expect.anything());
+    });
+  });
+
+  describe('approve', () => {
+    it('approves the new and unresolved runs of the build', async () => {
+      const { service, prisma, testRuns } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce(build);
+      testRuns.approve.mockResolvedValueOnce({ ...run, status: TestStatus.approved });
+
+      await service.approve('someId', true, 'user id');
+
+      expect(prisma.build.findUnique).toHaveBeenCalledWith({
+        where: { id: 'someId' },
+        include: {
+          testRuns: {
+            where: { status: { in: [TestStatus.new, TestStatus.unresolved] } },
+            select: { id: true },
+          },
+        },
       });
-
-      expect(result).toEqual(build);
+      expect(testRuns.approve).toHaveBeenCalledWith(run.id, true, false, 'user id');
     });
 
-    it('update already created', async () => {
-      const buildUpsertMock = jest.fn().mockResolvedValueOnce({
-        ...build,
-        number: 100,
-      });
-      service = await initService({ buildUpsertMock });
-      service.incrementBuildNumber = jest.fn();
+    it('throws NotFoundException for an unknown build', async () => {
+      const { service, prisma } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce(null);
 
-      const result = await service.findOrCreate({
-        projectId: '111',
-        branchName: 'develop',
-      });
-
-      expect(service.incrementBuildNumber).toHaveBeenCalledTimes(0);
-      expect(result).toEqual({
-        ...build,
-        number: 100,
-      });
+      await expect(service.approve('missing', false)).rejects.toThrow(
+        new NotFoundException('Build not found: missing')
+      );
     });
   });
 });

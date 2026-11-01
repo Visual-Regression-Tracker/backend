@@ -1,17 +1,17 @@
-import { Injectable } from '@nestjs/common';
 import { CreateUserDto } from './dto/user-create.dto';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { User } from '@prisma/client';
-import { UserDto } from './dto/user.dto';
+import { UserSummaryDto, toUserSummary } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
 import { AuthService } from '../auth/auth.service';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
-import { HttpException, HttpStatus, Logger, NotFoundException } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { UsersFactoryService } from './users.factory';
 import { Users } from './users.interface';
 import { OidcUsersService } from './oidc/oidcusers.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class UsersService {
@@ -21,7 +21,8 @@ export class UsersService {
   constructor(
     private readonly usersFactoryService: UsersFactoryService,
     private prismaService: PrismaService,
-    private authService: AuthService
+    private authService: AuthService,
+    private readonly configService: ConfigService
   ) {
     this.usersService = this.usersFactoryService.getUsersService();
   }
@@ -40,6 +41,18 @@ export class UsersService {
 
   async login(userLoginRequestDto: UserLoginRequestDto) {
     return this.usersService.login(userLoginRequestDto);
+  }
+
+  // default true: switching registration off is the operator's choice, not an upgrade side effect
+  isRegistrationAllowedByConfig(): boolean {
+    const value = String(this.configService.get('REGISTRATION_ENABLED') ?? 'true')
+      .trim()
+      .toLowerCase();
+    return !['false', '0', 'no', 'off'].includes(value);
+  }
+
+  isRegistrationEnabled(): boolean {
+    return this.usersService.allowsRegistration && this.isRegistrationAllowedByConfig();
   }
 
   isOidcEnabled(): boolean {
@@ -77,10 +90,6 @@ export class UsersService {
     return this.prismaService.user.delete({ where: { id } });
   }
 
-  /**
-   * All or nothing: an unknown id fails the request before anyone is removed,
-   * instead of after the users listed ahead of it are already gone.
-   */
   async deleteMany(ids: string[]): Promise<void> {
     this.logger.debug(`Removing Users: ${ids}`);
     await this.prismaService.$transaction(async (tx) => {
@@ -93,12 +102,7 @@ export class UsersService {
     });
   }
 
-  async get(id: string): Promise<UserDto> {
-    const user = await this.findOne(id);
-    return new UserDto(user!);
-  }
-
-  async assignRole(data: AssignRoleDto): Promise<UserDto> {
+  async assignRole(data: AssignRoleDto): Promise<UserSummaryDto> {
     const { id, role } = data;
     this.logger.debug(`Assigning role ${role} to User: ${id}`);
 
@@ -106,7 +110,7 @@ export class UsersService {
       where: { id },
       data: { role },
     });
-    return new UserDto(user);
+    return toUserSummary(user);
   }
 
   async generateNewApiKey(user: User): Promise<string> {

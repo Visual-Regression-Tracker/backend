@@ -35,7 +35,7 @@ export class TestVariationsController {
   @ApiOkResponse({ type: TestVariationDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestVariationDto | null> {
+  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestVariationDto> {
     return this.testVariations.getDetails(id);
   }
 

@@ -8,7 +8,6 @@ export class TestRunDto {
   buildId: string;
   @ApiProperty()
   imageName: string;
-  // small copies for the card grids; null on runs ingested before these existed
   @ApiPropertyOptional()
   imageThumbnailName?: string | null;
   @ApiPropertyOptional()

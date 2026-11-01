@@ -48,31 +48,14 @@ describe('UsersFactoryService', () => {
     configService = module.get<ConfigService>(ConfigService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
+  it.each([
+    ['neither OIDC_ENABLED nor LDAP_ENABLED is true', {}, DbUsersService],
+    ['LDAP_ENABLED is true', { ldap: true }, LdapUsersService],
+    ['OIDC_ENABLED is true', { oidc: true }, OidcUsersService],
+    ['both OIDC_ENABLED and LDAP_ENABLED are true, preferring OIDC', { oidc: true, ldap: true }, OidcUsersService],
+  ])('returns the matching implementation when %s', (_case, flags, implementation) => {
+    withFlags(flags);
 
-  it('should return DbUsersService when neither OIDC_ENABLED nor LDAP_ENABLED is true', () => {
-    withFlags({});
-    const result = service.getUsersService();
-    expect(result).toBeInstanceOf(DbUsersService);
-  });
-
-  it('should return LdapUsersService when LDAP_ENABLED is true', () => {
-    withFlags({ ldap: true });
-    const result = service.getUsersService();
-    expect(result).toBeInstanceOf(LdapUsersService);
-  });
-
-  it('should return OidcUsersService when OIDC_ENABLED is true', () => {
-    withFlags({ oidc: true });
-    const result = service.getUsersService();
-    expect(result).toBeInstanceOf(OidcUsersService);
-  });
-
-  it('should prefer OidcUsersService when both OIDC_ENABLED and LDAP_ENABLED are true', () => {
-    withFlags({ oidc: true, ldap: true });
-    const result = service.getUsersService();
-    expect(result).toBeInstanceOf(OidcUsersService);
+    expect(service.getUsersService()).toBeInstanceOf(implementation);
   });
 });

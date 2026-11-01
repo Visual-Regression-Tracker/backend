@@ -18,8 +18,6 @@ describe('PrismaModule', () => {
     await moduleRef.close();
   });
 
-  // Every PrismaService is a separate PrismaClient with its own connection pool,
-  // so the whole app must share a single instance (issue #443).
   it('creates a single PrismaService for the whole app', () => {
     const instances = new Set<unknown>();
     const declaredIn: string[] = [];

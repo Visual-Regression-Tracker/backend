@@ -32,31 +32,25 @@ export class OdiffService implements ImageComparator {
   }
 
   async getDiff(data: ImageCompareInput, config: OdiffConfig): Promise<DiffResult> {
-    const result: DiffResult = {
-      ...NO_BASELINE_RESULT,
-    };
-
     if (!data.baseline) {
       return NO_BASELINE_RESULT;
     }
 
-    // compare
     const baselinePath = this.hddService.getImagePath(data.baseline);
     const diff = this.hddService.generateNewImage('diff');
+    const ignoreRegions = ignoreAreaToRegionMapper(data.ignoreAreas);
     const compareResult = await compare(baselinePath, this.hddService.getImagePath(data.image), diff.imagePath, {
       ...config,
       diffColor: '#cd2cc9',
-      // a missing file comes back as a result instead of an error naming the file
       noFailOnFsErrors: true,
       // odiff rejects an empty --ignore= argument, so only pass regions when there are any
-      ...(data.ignoreAreas.length > 0 && { ignoreRegions: ignoreAreaToRegionMapper(data.ignoreAreas) }),
+      ...(ignoreRegions.length > 0 && { ignoreRegions }),
     });
 
     if (compareResult.match === true) {
       return EQUAL_RESULT;
     }
     if (compareResult.reason === 'file-not-exists') {
-      // same as the other comparators: a missing baseline file means there is nothing to compare with
       if (compareResult.file === baselinePath) {
         return NO_BASELINE_RESULT;
       }
@@ -66,34 +60,31 @@ export class OdiffService implements ImageComparator {
       return DIFF_DIMENSION_RESULT;
     }
 
-    // pixel diff: odiff has written the diff image
-    result.isSameDimension = true;
-    result.diffPercent = compareResult.diffPercentage;
-    result.pixelMisMatchCount = compareResult.diffCount;
-
-    // process result
-    // odiff-bin leaves the numbers out when it cannot parse the binary output: keep the run for review
-    if (!(result.diffPercent <= data.diffTollerancePercent)) {
-      // save diff
-      if (data.saveDiffAsFile) {
-        result.diffName = diff.imageName;
-      } else {
-        await this.staticService.deleteImage(diff.imageName);
-      }
-      result.status = TestStatus.unresolved;
+    const withinTolerance = compareResult.diffPercentage <= data.diffTollerancePercent;
+    const result: DiffResult = {
+      ...NO_BASELINE_RESULT,
+      isSameDimension: true,
+      diffPercent: compareResult.diffPercentage,
+      pixelMisMatchCount: compareResult.diffCount,
+      status: withinTolerance ? TestStatus.ok : TestStatus.unresolved,
+    };
+    if (!withinTolerance && data.saveDiffAsFile) {
+      result.diffName = diff.imageName;
     } else {
       await this.staticService.deleteImage(diff.imageName);
-      result.status = TestStatus.ok;
     }
     return result;
   }
 }
 
-export const ignoreAreaToRegionMapper = (ignoreAreas: IgnoreAreaDto[]): OdiffIgnoreRegions => {
-  return ignoreAreas.map((item) => ({
-    x1: item.x,
-    y1: item.y,
-    x2: item.x + item.width,
-    y2: item.y + item.height,
-  }));
-};
+export const ignoreAreaToRegionMapper = (ignoreAreas: IgnoreAreaDto[]): OdiffIgnoreRegions =>
+  ignoreAreas.flatMap((item) => {
+    const region = {
+      x1: Math.max(0, Math.floor(item.x)),
+      y1: Math.max(0, Math.floor(item.y)),
+      x2: Math.ceil(item.x + item.width),
+      y2: Math.ceil(item.y + item.height),
+    };
+    const usable = Object.values(region).every(Number.isFinite) && region.x2 >= region.x1 && region.y2 >= region.y1;
+    return usable ? [region] : [];
+  });

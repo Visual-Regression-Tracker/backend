@@ -1,11 +1,13 @@
-/**
- * @see https://www.prisma.io/docs/guides/migrate/seed-database
- */
-import type { Prisma } from '@prisma/client';
+import { randomBytes } from 'crypto';
 import { Role } from '@prisma/client';
 import { genSalt, hash } from 'bcryptjs';
 
 import prisma, { prepareConnection } from './client';
+
+const DEFAULT_EMAIL = 'visual-regression-tracker@example.com';
+const PUBLIC_DEFAULT_PASSWORD = '123456';
+const PUBLIC_DEFAULT_API_KEY = 'DEFAULTUSERAPIKEYTOBECHANGED';
+const CROCKFORD_DIGITS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 export async function seed() {
   await prepareConnection();
@@ -15,81 +17,76 @@ export async function seed() {
   await prisma.$disconnect();
 }
 
-seed()
-  .catch((e) => console.error('e', e))
-  .finally(async () => await prisma.$disconnect());
+if (require.main === module) {
+  seed()
+    .catch((error) => {
+      console.error('Seeding failed:', error);
+      process.exitCode = 1;
+    })
+    .finally(() => prisma.$disconnect());
+}
 
-async function createDefaultUser() {
-  let userList: Prisma.UserGetPayload<undefined>[] = [];
-  try {
-    userList = await prisma.user.findMany();
-    console.log(userList);
-  } catch (error) {
-    // Expected to see that "user" table does not exist
-    console.log(error.message);
+// same format as src/utils/random-key.ts; this package cannot import from src/
+export function generateApiKey(): string {
+  let key = '';
+  for (const byte of randomBytes(28)) {
+    key += CROCKFORD_DIGITS[byte & 31];
   }
+  return key;
+}
 
-  const defaultEmail = process.env.DEFAULT_USER_EMAIL || 'visual-regression-tracker@example.com';
-  const defaultPassword = process.env.DEFAULT_USER_PASSWORD || '123456';
-  const salt = await genSalt(10);
+export async function createDefaultUser(): Promise<void> {
+  const activeAdmin = await prisma.user.findFirst({
+    where: { role: Role.admin, isActive: true },
+    select: { id: true },
+  });
+  if (activeAdmin) {
+    return;
+  }
+  const email = process.env.DEFAULT_USER_EMAIL?.trim() || DEFAULT_EMAIL;
+  const existing = await prisma.user.findUnique({ where: { email }, select: { role: true, isActive: true } });
+  if (existing) {
+    // promoting it would hand admin to whoever registered this email
+    console.warn(
+      `No active admin exists, and ${email} is already a ${existing.isActive ? '' : 'deactivated '}${existing.role}; ` +
+        'it is not promoted. Give a user the admin role in the database.'
+    );
+    return;
+  }
+  // an empty variable (compose passes unset ones as '') counts as not set
+  const passwordFromEnv = process.env.DEFAULT_USER_PASSWORD || undefined;
+  const apiKeyFromEnv = process.env.DEFAULT_USER_API_KEY?.trim() || undefined;
+  const password = passwordFromEnv ?? randomBytes(18).toString('base64url');
+  const apiKey = apiKeyFromEnv ?? generateApiKey();
 
-  // Only create default user if the db has no admin user
-  if (!userList.some(({ role, isActive }) => role === Role.admin && isActive)) {
-    await prisma.user
-      .upsert({
-        where: {
-          email: defaultEmail,
-        },
-        update: {
-          role: Role.admin,
-        },
-        create: {
-          email: defaultEmail,
-          firstName: 'fname',
-          lastName: 'lname',
-          role: Role.admin,
-          apiKey: process.env.DEFAULT_USER_API_KEY || 'DEFAULTUSERAPIKEYTOBECHANGED',
-          password: await hash(defaultPassword, salt),
-        },
-      })
-      .then((user) => {
-        console.log('###########################');
-        console.log('####### DEFAULT USER ######');
-        console.log('###########################');
-        console.log('');
-        console.log(
-          `The user with the email "${defaultEmail}" and password "${defaultPassword}" was created (if not changed before)`
-        );
-        console.log(`The Api key is: ${user.apiKey}`);
-      });
+  await prisma.user.create({
+    data: {
+      email,
+      firstName: 'fname',
+      lastName: 'lname',
+      role: Role.admin,
+      apiKey,
+      password: await hash(password, await genSalt(10)),
+    },
+  });
+
+  console.log('###########################');
+  console.log('####### DEFAULT USER ######');
+  console.log('###########################');
+  console.log(`Created admin ${email}`);
+  console.log(
+    passwordFromEnv ? 'Password: from DEFAULT_USER_PASSWORD' : `Password (generated, shown once): ${password}`
+  );
+  console.log(apiKeyFromEnv ? 'API key: from DEFAULT_USER_API_KEY' : `API key (generated, shown once): ${apiKey}`);
+  if (passwordFromEnv === PUBLIC_DEFAULT_PASSWORD || apiKeyFromEnv === PUBLIC_DEFAULT_API_KEY) {
+    console.warn('The password or API key is the publicly known default: change both after the first login.');
   }
 }
 
-async function createDefaultProject() {
-  let projectList: Prisma.ProjectGetPayload<undefined>[] = [];
-  try {
-    projectList = await prisma.project.findMany();
-    console.log(projectList);
-  } catch (error) {
-    // Expected to see that "project" table does not exist
-    console.log(error.message);
+export async function createDefaultProject(): Promise<void> {
+  if ((await prisma.project.count()) > 0) {
+    return;
   }
-
-  if (projectList.length === 0) {
-    await prisma.project
-      .create({
-        data: {
-          name: 'Default project',
-        },
-      })
-      .then((project) => {
-        console.log('##############################');
-        console.log('## CREATING DEFAULT PROJECT ##');
-        console.log('##############################');
-        console.log('');
-        console.log(`Project key: ${project.id}`);
-        console.log(`Project name ${project.name}`);
-        console.log(`Project name ${project.mainBranchName}`);
-      });
-  }
+  const project = await prisma.project.create({ data: { name: 'Default project' } });
+  console.log(`Created the default project "${project.name}" (${project.id}), main branch ${project.mainBranchName}`);
 }

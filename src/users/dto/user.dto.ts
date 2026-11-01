@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, OmitType } from '@nestjs/swagger';
 import { Role, User } from '@prisma/client';
 
 export class UserDto {
@@ -29,3 +29,13 @@ export class UserDto {
     this.role = user.role;
   }
 }
+
+export class UserSummaryDto extends OmitType(UserDto, ['apiKey'] as const) {}
+
+export const toUserSummary = ({ id, email, firstName, lastName, role }: User): UserSummaryDto => ({
+  id,
+  email,
+  firstName,
+  lastName,
+  role,
+});

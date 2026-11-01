@@ -80,6 +80,7 @@ export const generateTestRun = (testRun?: Partial<TestRun>): TestRun => {
     diffTollerancePercent: 1,
     pixelMisMatchCount: 123,
     status: 'new',
+    statusBeforeDecision: null,
     buildId: '146e7a8d-89f0-4565-aa2c-e61efabb0afd',
     testVariationId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fca',
     projectId: '3bc4a5bc-006e-4d43-8e4e-eaa132627fcc',
@@ -111,10 +112,10 @@ export const generatePng = (width: number, height: number): PNG => {
   for (let y = 0; y < png.height; y++) {
     for (let x = 0; x < png.width; x++) {
       const idx = (png.width * y + x) << 2;
-      png.data[idx] = 255; // red
-      png.data[idx + 1] = 255; // green
-      png.data[idx + 2] = 255; // blue
-      png.data[idx + 3] = 255; // alpha (0 is transparent)
+      png.data[idx] = 255;
+      png.data[idx + 1] = 255;
+      png.data[idx + 2] = 255;
+      png.data[idx + 3] = 255;
     }
   }
   return png.pack();

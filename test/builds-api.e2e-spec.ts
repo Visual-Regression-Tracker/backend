@@ -1,15 +1,14 @@
 import { INestApplication } from '@nestjs/common';
 import { Build, Project, TestRun, TestStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { TEST_PROJECT } from '../src/_data_';
 import { BuildDto } from '../src/builds/dto/build.dto';
 import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
 import { UsersService } from '../src/users/users.service';
-import { createE2eApp, imageExists, pngBuffer, RED } from './api-helpers';
-import { haveUserLogged, requestWithApiKey, requestWithAuth, LoggedUser } from './preconditions';
+import { CHANGED, createE2eApp, haveProject, imageExists, postRunDirect, WHITE } from './api-helpers';
+import { haveUserLogged, requestWithApiKey, requestWithAuth, LoggedUser, withUser } from './preconditions';
 
 describe('Builds API (e2e)', () => {
   let app: INestApplication;
@@ -21,30 +20,23 @@ describe('Builds API (e2e)', () => {
   let user: LoggedUser;
   let project: Project;
 
-  const WHITE = pngBuffer();
-  const CHANGED = pngBuffer([{ x: 5, y: 5, w: 10, h: 10, color: RED }]);
-
   beforeAll(async () => {
     const created = await createE2eApp();
     app = created.app;
-    usersService = created.moduleFixture.get(UsersService);
-    projectsService = created.moduleFixture.get(ProjectsService);
-    buildsService = created.moduleFixture.get(BuildsService);
-    testRunsService = created.moduleFixture.get(TestRunsService);
-    prisma = created.moduleFixture.get(PrismaService);
+    usersService = created.get(UsersService);
+    projectsService = created.get(ProjectsService);
+    buildsService = created.get(BuildsService);
+    testRunsService = created.get(TestRunsService);
+    prisma = created.get(PrismaService);
   });
 
   beforeEach(async () => {
     user = await haveUserLogged(usersService);
-    project = await projectsService.create({
-      ...TEST_PROJECT,
-      autoApproveFeature: false,
-      maxBuildAllowed: 100,
-      name: `Builds API E2E ${randomUUID()}`,
-    });
+    project = await haveProject(projectsService, 'Builds API E2E', { autoApproveFeature: false, maxBuildAllowed: 100 });
   });
 
   afterEach(async () => {
+    await buildsService.whenRetentionIdle();
     await projectsService.remove(project.id);
     await usersService.delete(user.id);
   });
@@ -56,13 +48,16 @@ describe('Builds API (e2e)', () => {
   const newBuild = (ciBuildId?: string, projectId = project.id): Promise<Build> =>
     buildsService.findOrCreate({ projectId, branchName: 'master', ciBuildId });
 
-  const postRun = (build: Build, image: Buffer, name = 'Screen') =>
-    testRunsService.postTestRun({
-      createTestRequestDto: { projectId: build.projectId, buildId: build.id, branchName: build.branchName!, name },
-      imageBuffer: image,
-    });
+  const postRun = (build: Build, image: Buffer, name?: string) => postRunDirect(testRunsService, build, image, name);
 
-  /** The project's builds in the order the list endpoint promises: newest first, id breaking ties. */
+  const createBuild = async (ciBuildId?: string) => {
+    const res = await requestWithApiKey(app, 'post', '/builds', user.apiKey)
+      .send({ project: project.id, ciBuildId })
+      .expect(201);
+    await buildsService.whenRetentionIdle();
+    return res;
+  };
+
   const listOrder = async (): Promise<string[]> =>
     (
       await prisma.build.findMany({
@@ -106,7 +101,7 @@ describe('Builds API (e2e)', () => {
     });
 
     it('aroundBuildId that holds no page falls back to skip', async () => {
-      const otherProject = await projectsService.create({ ...TEST_PROJECT, name: `Other ${randomUUID()}` });
+      const otherProject = await haveProject(projectsService, 'Other');
       try {
         const foreign = await newBuild(undefined, otherProject.id);
 
@@ -143,7 +138,6 @@ describe('Builds API (e2e)', () => {
       expect(res.body).toMatchObject({ total: 2, take: 1, skip: 1 });
       expect(res.body.data.map((build: BuildDto) => build.id)).toEqual([oldestNightly]);
 
-      // a build the filter leaves out holds no page
       const excluded = await list(`take=1&skip=0&ciBuildId=nightly&aroundBuildId=${ordered[4]}`).expect(200);
       expect(excluded.body.skip).toBe(0);
     });
@@ -165,6 +159,7 @@ describe('Builds API (e2e)', () => {
       await list('take=2').expect(400);
       await list('take=two&skip=0').expect(400);
       await list('take=2&skip=0&aroundBuildId=nope').expect(400);
+      await list('take=10&skip=-1').expect(400);
     });
   });
 
@@ -211,7 +206,6 @@ describe('Builds API (e2e)', () => {
 
       const res = await requestWithAuth(app, 'delete', `/builds/${build.id}`, user.token).expect(200);
 
-      // the raw build row with the runs it had
       expect(res.body.id).toBe(build.id);
       expect(res.body.testRuns.map((testRun: TestRun) => testRun.id)).toEqual([run.id]);
       expect(await prisma.build.findUnique({ where: { id: build.id } })).toBeNull();
@@ -239,12 +233,9 @@ describe('Builds API (e2e)', () => {
 
     it('403 for a guest', async () => {
       const build = await newBuild();
-      const guest = await haveUserLogged(usersService, 'guest');
-      try {
-        await requestWithAuth(app, 'delete', `/builds/${build.id}`, guest.token).expect(403);
-      } finally {
-        await usersService.delete(guest.id);
-      }
+      await withUser(usersService, 'guest', (guest) =>
+        requestWithAuth(app, 'delete', `/builds/${build.id}`, guest.token).expect(403)
+      );
       expect(await prisma.build.findUnique({ where: { id: build.id } })).not.toBeNull();
     });
   });
@@ -258,7 +249,7 @@ describe('Builds API (e2e)', () => {
       const unresolved = await postRun(build, CHANGED, 'Unresolved');
       const fresh = await postRun(build, WHITE, 'New');
       const failed = await postRun(build, WHITE, 'Failed');
-      await testRunsService.setStatus(failed.id, TestStatus.failed);
+      await prisma.testRun.update({ where: { id: failed.id }, data: { status: TestStatus.failed } });
 
       await requestWithAuth(app, 'patch', `/builds/${build.id}/approve?merge=false`, user.token).expect(200);
 
@@ -270,7 +261,6 @@ describe('Builds API (e2e)', () => {
         [fresh.id]: TestStatus.approved,
         [failed.id]: TestStatus.failed,
       });
-      // like POST /test-runs/approve, each new baseline records who approved it
       const baselines = await prisma.baseline.findMany({ where: { testRunId: { in: [unresolved.id, fresh.id] } } });
       expect(baselines.map((baseline) => baseline.userId)).toEqual([user.id, user.id]);
     });
@@ -287,12 +277,9 @@ describe('Builds API (e2e)', () => {
 
     it('403 for a guest', async () => {
       const build = await newBuild();
-      const guest = await haveUserLogged(usersService, 'guest');
-      try {
-        await requestWithAuth(app, 'patch', `/builds/${build.id}/approve?merge=false`, guest.token).expect(403);
-      } finally {
-        await usersService.delete(guest.id);
-      }
+      await withUser(usersService, 'guest', (guest) =>
+        requestWithAuth(app, 'patch', `/builds/${build.id}/approve?merge=false`, guest.token).expect(403)
+      );
     });
   });
 
@@ -347,14 +334,18 @@ describe('Builds API (e2e)', () => {
   });
 
   describe('POST /builds retention (maxBuildAllowed)', () => {
-    const createBuild = () =>
-      requestWithApiKey(app, 'post', '/builds', user.apiKey).send({ project: project.id }).expect(201);
+    const idleForTwoHours = async () => {
+      const then = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      await prisma.$executeRaw`UPDATE "Build" SET "updatedAt" = ${then} WHERE "projectId" = ${project.id}`;
+      await prisma.testRun.updateMany({ where: { build: { projectId: project.id } }, data: { createdAt: then } });
+    };
 
     it('keeps at most maxBuildAllowed builds and removes the files of the dropped ones', async () => {
       await prisma.project.update({ where: { id: project.id }, data: { maxBuildAllowed: 2 } });
       const oldest = (await createBuild()).body;
       const run = await postRun({ ...oldest, projectId: project.id } as Build, WHITE);
       await createBuild();
+      await idleForTwoHours();
 
       const newest = (await createBuild()).body;
 
@@ -370,6 +361,7 @@ describe('Builds API (e2e)', () => {
 
       await createBuild();
       await createBuild();
+      await idleForTwoHours();
       const newest = (await createBuild()).body;
 
       expect(await listOrder()).toEqual([newest.id]);
@@ -377,18 +369,40 @@ describe('Builds API (e2e)', () => {
 
     it('never prunes the build a CI build id reuses, and counts it as one of those kept', async () => {
       await prisma.project.update({ where: { id: project.id }, data: { maxBuildAllowed: 2 } });
-      const joinShared = () =>
-        requestWithApiKey(app, 'post', '/builds', user.apiKey)
-          .send({ project: project.id, ciBuildId: 'shared' })
-          .expect(201);
+      const joinShared = () => createBuild('shared');
       const shared = (await joinShared()).body;
       const newer = (await createBuild()).body;
+      await idleForTwoHours();
 
-      // a parallel CI job joins the shared build, which is now the older of the two
       const joined = (await joinShared()).body;
 
       expect(joined.id).toBe(shared.id);
       expect((await listOrder()).sort()).toEqual([shared.id, newer.id].sort());
+    });
+  });
+
+  describe('POST /builds retention of builds in use', () => {
+    it('spares a build that is still receiving test runs', async () => {
+      await prisma.project.update({ where: { id: project.id }, data: { maxBuildAllowed: 1 } });
+      const live = (await createBuild()).body;
+      await postRun({ ...live, projectId: project.id } as Build, WHITE);
+
+      const newest = (await createBuild()).body;
+
+      expect((await listOrder()).sort()).toEqual([live.id, newest.id].sort());
+    });
+
+    it('removes a build idle for longer than the grace period', async () => {
+      await prisma.project.update({ where: { id: project.id }, data: { maxBuildAllowed: 1 } });
+      const idle = (await createBuild()).body;
+      await postRun({ ...idle, projectId: project.id } as Build, WHITE);
+      const then = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      await prisma.$executeRaw`UPDATE "Build" SET "updatedAt" = ${then} WHERE "id" = ${idle.id}`;
+      await prisma.testRun.updateMany({ where: { buildId: idle.id }, data: { createdAt: then } });
+
+      const newest = (await createBuild()).body;
+
+      expect(await listOrder()).toEqual([newest.id]);
     });
   });
 });

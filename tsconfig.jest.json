@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    // transpile each file on its own: ts-jest then skips type-checking, which
-    // `npm run typecheck` does once for the whole project instead
-    "isolatedModules": true,
-    "incremental": false
-  }
-}

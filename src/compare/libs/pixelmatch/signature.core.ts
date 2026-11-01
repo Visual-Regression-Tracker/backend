@@ -1,21 +1,10 @@
 import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { RawImage } from '../../utils';
-import { applyIgnoreAreas, downscale } from '../../utils';
+import { downscale, RawImage, readSameSizePair } from '../../utils';
 
-/**
- * CPU-bound part of "do these two screens carry the same change?": PNG decode,
- * downscale, pixelmatch and histogram. Extracted so it can run inside a worker
- * thread (see pixelmatch.worker.ts / DiffWorkerPool) — the variations dialog
- * asks for one of these per sibling, and decoding full-size screenshots on the
- * main thread froze the whole API for as long as it took. All input/output must
- * stay structured-clone serializable.
- */
 export interface SignatureJobInput {
   kind: 'signature';
-  // PNG bytes, not decoded pixels: decoding is the expensive part and belongs
-  // in the worker.
   baseline: Buffer | Uint8Array;
   image: Buffer | Uint8Array;
   ignoreAreas: IgnoreAreaDto[];
@@ -27,70 +16,19 @@ export interface SignatureJobOutput {
   signature: number[] | null;
 }
 
-// Colors are quantized to this many levels per RGB channel, giving
-// COLOR_BUCKETS_PER_CHANNEL^3 histogram buckets.
 const COLOR_BUCKETS_PER_CHANNEL = 4;
 
-// How many buckets a signature has. Exported so a stored one can be checked
-// against the shape this build produces: comparing signatures of two different
-// lengths yields a similarity score computed over undefined entries — a number,
-// and a meaningless one.
 export const SIGNATURE_LENGTH = COLOR_BUCKETS_PER_CHANNEL ** 3;
 
-// Longest side (px) images are downscaled to before computing the color
-// signature — keeps the histogram representative while cutting pixelmatch cost.
 const SIGNATURE_MAX_DIMENSION = 500;
 
-// Two changes are considered the same pattern when their color signatures'
-// cosine similarity is at least this value.
 export const SIGNATURE_SIMILARITY_THRESHOLD = 0.9;
 
-// postMessage turns Buffers into Uint8Array views over their own ArrayBuffer.
-function toBuffer(data: Buffer | Uint8Array): Buffer {
-  return Buffer.isBuffer(data) ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-}
-
-/**
- * Position-independent signature of a change: a normalized histogram of the
- * colors that the changed pixels take in the new image. Because it ignores
- * *where* the change is, it is robust to per-locale layout shifts (a title
- * wrapping to a different number of lines, options moving down, etc.) while
- * still capturing *what* changed (a selection highlight, a recolored button).
- * Null when there is nothing to compare: unreadable bytes, differing
- * dimensions, or no change outside the ignore areas.
- */
 export function computeChangeSignature(input: SignatureJobInput): SignatureJobOutput {
-  // A corrupt or truncated screenshot is one candidate the reviewer cannot be
-  // offered, not a failed request: the siblings are signed in a single
-  // fan-out, so throwing here would take the whole variations dialog down.
-  let baselineImage: PNG;
-  let checkpointImage: PNG;
-  try {
-    baselineImage = PNG.sync.read(toBuffer(input.baseline));
-    checkpointImage = PNG.sync.read(toBuffer(input.image));
-  } catch {
-    return { signature: null };
-  }
-
-  if (baselineImage.width !== checkpointImage.width || baselineImage.height !== checkpointImage.height) {
-    return { signature: null };
-  }
-
-  // Masked regions must not count toward the signature, so they are blanked at
-  // full resolution — the areas are given in full-resolution coordinates —
-  // before the downscale makes both images cheap to compare.
-  applyIgnoreAreas(baselineImage, input.ignoreAreas);
-  applyIgnoreAreas(checkpointImage, input.ignoreAreas);
-
-  return { signature: signatureOfDecoded(baselineImage, checkpointImage, input) };
+  const pair = readSameSizePair(input.baseline, input.image, input.ignoreAreas);
+  return { signature: pair && signatureOfDecoded(pair.baseline, pair.image, input) };
 }
 
-/**
- * The signature of a pair that is already decoded, of equal size, and with its
- * ignore areas blanked. Split out so the diff can produce a signature from the
- * images it has just decoded rather than paying for a second decode — the two
- * must not drift apart, so there is only ever one implementation.
- */
 export function signatureOfDecoded(
   baselineImage: RawImage,
   checkpointImage: RawImage,
@@ -110,7 +48,7 @@ export function signatureOfDecoded(
   }
 
   const bucketSize = 256 / COLOR_BUCKETS_PER_CHANNEL;
-  const histogram = new Array(COLOR_BUCKETS_PER_CHANNEL ** 3).fill(0);
+  const histogram = new Array(SIGNATURE_LENGTH).fill(0);
   for (let i = 0; i < width * height; i++) {
     if (mask.data[i * 4 + 3] === 0) {
       continue;

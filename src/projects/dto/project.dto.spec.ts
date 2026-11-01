@@ -39,11 +39,19 @@ describe('ProjectDto', () => {
     ['imageComparisonConfig', { imageComparisonConfig: '{not json' }, 'isJson'],
     ['autoApproveFeature', { autoApproveFeature: 'yes' }, 'isBoolean'],
     ['bulkApproveGroupBy', { bulkApproveGroupBy: 1 }, 'isString'],
+    ['maxBuildAllowed', { maxBuildAllowed: 1.5 }, 'isInt'],
+    ['maxBranchLifetime', { maxBranchLifetime: 0.5 }, 'isInt'],
   ])('rejects an invalid %s', async (property, override, constraint) => {
     const errors = await validate(plainToInstance(ProjectDto, { ...plainProject, ...override }));
 
     expect(errors).toHaveLength(1);
     expect(errors[0].property).toBe(property);
     expect(Object.keys(errors[0].constraints!)).toEqual([constraint]);
+  });
+
+  it.each([0, -1, 1, 100])('still accepts the integer %p for both counters', async (value) => {
+    const dto = plainToInstance(ProjectDto, { ...plainProject, maxBuildAllowed: value, maxBranchLifetime: value });
+
+    await expect(validate(dto)).resolves.toEqual([]);
   });
 });

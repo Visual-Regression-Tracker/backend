@@ -10,15 +10,17 @@ export class MixedGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    let jwtAuth = false;
     try {
-      jwtAuth = (await this.authGuard.canActivate(context)) as boolean;
-    } catch {}
-
-    let apiAuth = false;
+      if (await this.authGuard.canActivate(context)) {
+        return true;
+      }
+    } catch {
+      // not a valid JWT: the api key is tried next
+    }
     try {
-      apiAuth = await this.apiGuard.canActivate(context);
-    } catch {}
-    return jwtAuth || apiAuth;
+      return await this.apiGuard.canActivate(context);
+    } catch {
+      return false;
+    }
   }
 }

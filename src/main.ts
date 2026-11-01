@@ -1,60 +1,40 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { join } from 'path';
-import * as bodyParser from 'body-parser';
 import compression from 'compression';
-import { readFileSync, existsSync } from 'fs';
-import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { HDD_IMAGE_PATH } from './static/hdd/constants';
 import { RedisIoAdapter } from './redis-io.adapter';
-
-function getHttpsOptions(): HttpsOptions | null {
-  const keyPath = './secrets/ssl.key';
-  const certPath = './secrets/ssl.cert';
-  if (!existsSync(keyPath) || !existsSync(certPath)) {
-    Logger.log('HTTPS config not found. Fall back to HTTP');
-    return null;
-  }
-  return {
-    key: readFileSync(keyPath),
-    cert: readFileSync(certPath),
-  };
-}
+import { getHttpsOptions, parseLogLevels } from './main.helpers';
+import { GlobalValidationPipe } from './shared/validation';
 
 async function bootstrap() {
+  const logger = parseLogLevels(process.env.LOG_LEVEL);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     cors: true,
-    // null leaves HTTPS off, as undefined would
-    httpsOptions: getHttpsOptions() as HttpsOptions | undefined,
+    httpsOptions: getHttpsOptions(),
+    abortOnError: false,
+    ...(logger && { logger }),
   });
-  app.useGlobalPipes(new ValidationPipe());
-  // On SIGTERM, close the server and run the providers' teardown (diff
-  // workers, database pool) so a rolling deploy does not cut requests short
+  app.useGlobalPipes(new GlobalValidationPipe());
   app.enableShutdownHooks();
 
-  // Large builds return multi-megabyte test-run lists; gzip shrinks them ~10x.
-  // Images are already-compressed PNGs — recompressing them wastes CPU.
-  // Must be registered before any routes (incl. swagger) to cover them.
   app.use(
     compression({ filter: (req, res) => compression.filter(req, res) && res.getHeader('Content-Type') !== 'image/png' })
   );
 
   setupSwagger(app);
 
-  // Fan out socket.io events across API instances when running multiple
-  // replicas. Without REDIS_URL the default in-memory adapter is used.
   await RedisIoAdapter.use(app, process.env.REDIS_URL);
 
   if (process.env.BODY_PARSER_JSON_LIMIT) {
-    app.use(bodyParser.json({ limit: process.env.BODY_PARSER_JSON_LIMIT }));
+    app.useBodyParser('json', { limit: process.env.BODY_PARSER_JSON_LIMIT });
   }
 
   app.useStaticAssets(join(process.cwd(), HDD_IMAGE_PATH), {
     maxAge: 31536000,
-    // allow cors
     setHeaders: (res) => {
       res.set('Access-Control-Allow-Origin', '*');
     },
@@ -62,4 +42,10 @@ async function bootstrap() {
 
   await app.listen(process.env.APP_PORT || 3000);
 }
-bootstrap();
+bootstrap().catch((error: unknown) => {
+  Logger.error(
+    `Failed to start: ${error instanceof Error ? error.message : String(error)}`,
+    error instanceof Error ? error.stack : undefined
+  );
+  process.exit(1);
+});

@@ -1,11 +1,10 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Prisma, Project } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TestVariationsService } from '../../test-variations/test-variations.service';
 import type { WrapperType } from '../wrapper-type';
 
-// Advisory lock key of the cleanup, shared by every instance against the same
-// database: "VRT" and 1, a value nothing else in the database locks on
 export const CLEANUP_LOCK_KEY = 0x56525401;
 
 @Injectable()
@@ -18,27 +17,10 @@ export class TasksService {
     private testVariationService: WrapperType<TestVariationsService>
   ) {}
 
-  /**
-   * Every API instance schedules this for the same midnight. One of them runs
-   * it and the others skip, or they would race to delete the same variations
-   * and baseline images.
-   *
-   * The lock is a transaction-level advisory lock, taken on a connection of
-   * its own and held in an otherwise idle transaction until the cleanup is
-   * done. Taking it only to claim the run and committing before the work would
-   * let an instance whose timer fires a moment later run alongside; a
-   * session-level lock behind a PgBouncer in transaction mode would stay on
-   * whichever server connection took it. This one goes with the transaction,
-   * which ends with the connection, also when the instance dies. The
-   * transaction holds no rows and, between statements, no snapshot, so it does
-   * not hold up vacuum; the deletions go through Prisma's pool as usual. An
-   * instance that comes after the run has finished finds nothing left to remove.
-   */
+  // Transaction-level lock on a dedicated connection: a session-level one would stick to a PgBouncer connection
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async cleanOldTestVariations() {
     const client = this.prismaService.dedicatedClient();
-    // an idle pg client emits a lost connection as an event, which would
-    // otherwise crash the process; the lock goes with it, the cleanup goes on
     client.on('error', (error) => this.logger.warn(`Lost the cleanup lock connection: ${error.message}`));
     await client.connect();
     try {
@@ -52,40 +34,64 @@ export class TasksService {
       }
       await this.removeOldTestVariations();
     } finally {
-      // closing the connection rolls the transaction back and releases the lock
       await client.end();
     }
   }
 
-  /**
-   * Feature-branch variations nobody has used within the project's
-   * maxBranchLifetime. Use is an approval or edit of the variation (its
-   * updatedAt) or a test run compared against it: a run that matches its
-   * baseline leaves the variation untouched, yet the branch is plainly alive,
-   * and dropping its baseline would turn its next run into "new".
-   */
   private async removeOldTestVariations() {
     const projects = await this.prismaService.project.findMany();
 
     for (const project of projects) {
-      const dateRemoveAfter: Date = new Date();
-      dateRemoveAfter.setDate(dateRemoveAfter.getDate() - project.maxBranchLifetime);
-
-      const testVariations = await this.prismaService.testVariation.findMany({
-        where: {
-          projectId: project.id,
-          updatedAt: { lte: dateRemoveAfter },
-          testRuns: { none: { createdAt: { gt: dateRemoveAfter } } },
-          branchName: { not: project.mainBranchName },
-        },
-      });
-      this.logger.debug(
-        `Removing ${testVariations.length} TestVariations for ${project.name} unused since ${dateRemoveAfter}`
-      );
-
-      for (const testVariation of testVariations) {
-        await this.testVariationService.delete(testVariation.id);
+      try {
+        await this.removeOldTestVariationsOf(project);
+      } catch (e) {
+        this.logger.warn(`Cannot clean up TestVariations of ${project.name}: ${e}`);
       }
     }
+  }
+
+  private async removeOldTestVariationsOf(project: Project) {
+    const dateRemoveAfter: Date = new Date();
+    dateRemoveAfter.setDate(dateRemoveAfter.getDate() - project.maxBranchLifetime);
+
+    const testVariations = await this.prismaService.testVariation.findMany({
+      where: this.staleVariationsWhere(project, dateRemoveAfter),
+    });
+    this.logger.debug(
+      `Removing ${testVariations.length} TestVariations for ${project.name} unused since ${dateRemoveAfter}`
+    );
+
+    let removed = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const testVariation of testVariations) {
+      try {
+        const stillStale = await this.prismaService.testVariation.findFirst({
+          where: { id: testVariation.id, ...this.staleVariationsWhere(project, dateRemoveAfter) },
+          select: { id: true },
+        });
+        if (!stillStale) {
+          skipped++;
+          continue;
+        }
+        await this.testVariationService.delete(testVariation.id);
+        removed++;
+      } catch (e) {
+        failed++;
+        this.logger.warn(`Cannot remove TestVariation ${testVariation.id}: ${e}`);
+      }
+    }
+    this.logger.log(
+      `Removed ${removed} of ${testVariations.length} TestVariations of ${project.name}, ${skipped} in use again, ${failed} failed`
+    );
+  }
+
+  private staleVariationsWhere(project: Project, removeAfter: Date): Prisma.TestVariationWhereInput {
+    return {
+      projectId: project.id,
+      updatedAt: { lte: removeAfter },
+      testRuns: { none: { createdAt: { gt: removeAfter } } },
+      branchName: { not: project.mainBranchName },
+    };
   }
 }

@@ -1,13 +1,11 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Project, Role } from '@prisma/client';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
-import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
-import { TEST_PROJECT } from '../src/_data_';
+import { createE2eApp, haveProject as createProject } from './api-helpers';
 import { haveUserLogged, requestWithAuth, LoggedUser } from './preconditions';
 
 describe('Project favourites (e2e)', () => {
@@ -25,7 +23,7 @@ describe('Project favourites (e2e)', () => {
   };
 
   const haveProject = async (): Promise<Project> => {
-    const project = await projectsService.create({ ...TEST_PROJECT, name: `Favourite ${randomUUID()}` });
+    const project = await createProject(projectsService, 'Favourite');
     projectIds.push(project.id);
     return project;
   };
@@ -34,20 +32,14 @@ describe('Project favourites (e2e)', () => {
     (await requestWithAuth(app, 'get', '/projects/favorites', user.token).expect(200)).body;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe());
-    usersService = moduleFixture.get(UsersService);
-    projectsService = moduleFixture.get(ProjectsService);
-    prismaService = moduleFixture.get(PrismaService);
-    await app.init();
+    const created = await createE2eApp();
+    app = created.app;
+    usersService = created.get(UsersService);
+    projectsService = created.get(ProjectsService);
+    prismaService = created.get(PrismaService);
   });
 
   afterEach(async () => {
-    // some tests delete their project or user already
     await prismaService.project.deleteMany({ where: { id: { in: projectIds.splice(0) } } });
     await prismaService.user.deleteMany({ where: { id: { in: userIds.splice(0) } } });
   });

@@ -73,6 +73,35 @@ const prismaService = {
   user: { findUnique, create, update },
 } as unknown as PrismaService;
 
+const configWith = (overrides: Record<string, string> = {}): ConfigService =>
+  ({
+    get: jest.fn((key: string, defaultValue?: string) =>
+      key in overrides ? overrides[key] : configService.get(key, defaultValue)
+    ),
+    getOrThrow: configService.getOrThrow,
+  }) as unknown as ConfigService;
+
+const serviceWith = (overrides: Record<string, string> = {}) =>
+  new OidcUsersService(configWith(overrides), prismaService, authService);
+
+const idpReturns = (claims: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+  mockCallback.mockResolvedValue({ claims: () => claims, ...extra });
+
+const noUser = () => {
+  findUnique.mockResolvedValue(null);
+  create.mockImplementation(({ data }) => ({ ...user, ...data }));
+};
+
+const checks = { state: 'mock-state', codeVerifier: 'mock-verifier' };
+const login = (svc: OidcUsersService, params: Record<string, string> = { code: 'code', state: 'mock-state' }) =>
+  svc.handleCallback(params, checks);
+const expectLoginFailed = (svc: OidcUsersService, params?: Record<string, string>) =>
+  expect(login(svc, params)).rejects.toThrow('OIDC login failed.');
+const expectCreatedWith = (data: object) =>
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining(data) }));
+const expectRoleUpdate = (role: Role) =>
+  expect(update).toHaveBeenCalledWith({ where: { id: user.id }, data: { role } });
+
 describe('OidcUsersService', () => {
   let service: OidcUsersService;
 
@@ -86,7 +115,7 @@ describe('OidcUsersService', () => {
       },
     });
     mockAuthorizationUrl.mockReturnValue('https://idp.example.com/authorize');
-    service = new OidcUsersService(configService, prismaService, authService);
+    service = serviceWith();
   });
 
   describe('getAuthorizationUrl', () => {
@@ -124,15 +153,7 @@ describe('OidcUsersService', () => {
     });
 
     it('applies the insecure TLS agent only to the issuer origin', async () => {
-      const tlsConfigService = {
-        get: jest.fn((key: string, defaultValue?: string) =>
-          key === 'OIDC_TLS_NO_VERIFY' ? 'true' : configService.get(key, defaultValue)
-        ),
-        getOrThrow: configService.getOrThrow,
-      } as unknown as ConfigService;
-      const tlsService = new OidcUsersService(tlsConfigService, prismaService, authService);
-
-      await tlsService.getAuthorizationUrl();
+      await serviceWith({ OIDC_TLS_NO_VERIFY: 'true' }).getAuthorizationUrl();
 
       const provider = (Issuer as unknown as Record<string, (url: URL, options: object) => Record<string, unknown>>)[
         custom.http_options as unknown as string
@@ -148,15 +169,8 @@ describe('OidcUsersService', () => {
         },
       };
       mockDiscover.mockResolvedValue(issuer);
-      const tlsConfigService = {
-        get: jest.fn((key: string, defaultValue?: string) =>
-          key === 'OIDC_TLS_NO_VERIFY' ? 'true' : configService.get(key, defaultValue)
-        ),
-        getOrThrow: configService.getOrThrow,
-      } as unknown as ConfigService;
-      const tlsService = new OidcUsersService(tlsConfigService, prismaService, authService);
 
-      await tlsService.getAuthorizationUrl();
+      await serviceWith({ OIDC_TLS_NO_VERIFY: 'true' }).getAuthorizationUrl();
 
       const provider = issuer[custom.http_options as unknown as string] as (
         url: URL,
@@ -179,160 +193,121 @@ describe('OidcUsersService', () => {
   });
 
   describe('handleCallback', () => {
-    const checks = { state: 'mock-state', codeVerifier: 'mock-verifier' };
-
     it('creates a new user and derives the admin role from the claims', async () => {
-      mockCallback.mockResolvedValue({
-        access_token: 'access-token',
-        claims: () => ({
+      idpReturns(
+        {
           email: 'new.user@example.com',
           email_verified: true,
           given_name: 'New',
           family_name: 'User',
           groups: ['vrt-admin'],
-        }),
-      });
-      findUnique.mockResolvedValue(null);
-      create.mockImplementation(({ data }) => ({ ...user, ...data }));
-
-      const result = await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
-
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            email: 'new.user@example.com',
-            firstName: 'New',
-            lastName: 'User',
-            role: Role.admin,
-          }),
-        })
+        },
+        { access_token: 'access-token' }
       );
+      noUser();
+
+      const result = await login(service);
+
+      expectCreatedWith({ email: 'new.user@example.com', firstName: 'New', lastName: 'User', role: Role.admin });
       expect(result.token).toBe('vrt-jwt');
     });
 
     it('falls back to the editor role when no admin claim matches', async () => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({
-          email: 'plain@example.com',
-          email_verified: true,
-          given_name: 'Plain',
-          family_name: 'User',
-          groups: ['other'],
-        }),
+      idpReturns({
+        email: 'plain@example.com',
+        email_verified: true,
+        given_name: 'Plain',
+        family_name: 'User',
+        groups: ['other'],
       });
-      findUnique.mockResolvedValue(null);
-      create.mockImplementation(({ data }) => ({ ...user, ...data }));
+      noUser();
 
-      await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+      await login(service);
 
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ role: Role.editor }) })
-      );
+      expectCreatedWith({ role: Role.editor });
     });
 
     it('updates the role of an existing user from the claims', async () => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'test@example.com', email_verified: true, groups: ['admin'] }),
-      });
+      idpReturns({ email: 'test@example.com', email_verified: true, groups: ['admin'] });
       findUnique.mockResolvedValue(user);
       update.mockResolvedValue({ ...user, role: Role.admin });
 
-      const result = await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+      const result = await login(service);
 
-      expect(update).toHaveBeenCalledWith({ where: { id: user.id }, data: { role: Role.admin } });
+      expectRoleUpdate(Role.admin);
       expect(result.token).toBe('vrt-jwt');
     });
 
     it('throws when the email claim is missing', async () => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({ given_name: 'No', family_name: 'Mail' }),
-      });
+      idpReturns({ given_name: 'No', family_name: 'Mail' });
 
-      await expect(service.handleCallback({ code: 'code', state: 'mock-state' }, checks)).rejects.toThrow(
-        'OIDC login failed.'
-      );
+      await expectLoginFailed(service);
     });
 
     it('throws when the callback validation fails', async () => {
       mockCallback.mockRejectedValue(new Error('state mismatch'));
 
-      await expect(service.handleCallback({ code: 'code', state: 'wrong' }, checks)).rejects.toThrow(
-        'OIDC login failed.'
-      );
+      await expectLoginFailed(service, { code: 'code', state: 'wrong' });
     });
 
     it('falls back to the userinfo endpoint when the email claim is missing', async () => {
-      mockCallback.mockResolvedValue({ access_token: 'access-token', claims: () => ({ sub: 'user-1' }) });
+      idpReturns({ sub: 'user-1' }, { access_token: 'access-token' });
       mockUserinfo.mockResolvedValue({
         email: 'from.userinfo@example.com',
         email_verified: true,
         given_name: 'Info',
         family_name: 'User',
       });
-      findUnique.mockResolvedValue(null);
-      create.mockImplementation(({ data }) => ({ ...user, ...data }));
+      noUser();
 
-      await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+      await login(service);
 
       expect(mockUserinfo).toHaveBeenCalledWith(expect.objectContaining({ access_token: 'access-token' }));
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ email: 'from.userinfo@example.com' }) })
-      );
+      expectCreatedWith({ email: 'from.userinfo@example.com' });
     });
 
     it('still fails when the userinfo request fails and no email is present', async () => {
-      mockCallback.mockResolvedValue({ access_token: 'access-token', claims: () => ({ sub: 'user-1' }) });
+      idpReturns({ sub: 'user-1' }, { access_token: 'access-token' });
       mockUserinfo.mockRejectedValue(new Error('userinfo down'));
 
-      await expect(service.handleCallback({ code: 'code', state: 'mock-state' }, checks)).rejects.toThrow(
-        'OIDC login failed.'
-      );
+      await expectLoginFailed(service);
     });
 
     it('rejects an email the provider marks as unverified', async () => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'unverified@example.com', email_verified: false }),
-      });
+      idpReturns({ email: 'unverified@example.com', email_verified: false });
 
-      await expect(service.handleCallback({ code: 'code', state: 'mock-state' }, checks)).rejects.toThrow(
-        'OIDC login failed.'
-      );
+      await expectLoginFailed(service);
       expect(findUnique).not.toHaveBeenCalled();
     });
 
     it('accepts an unverified email when the check is disabled', async () => {
-      const relaxedConfigService = {
-        get: jest.fn((key: string, defaultValue?: string) =>
-          key === 'OIDC_REQUIRE_VERIFIED_EMAIL' ? 'false' : configService.get(key, defaultValue)
-        ),
-        getOrThrow: configService.getOrThrow,
-      } as unknown as ConfigService;
-      const relaxedService = new OidcUsersService(relaxedConfigService, prismaService, authService);
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'unverified@example.com', email_verified: false }),
-      });
+      idpReturns({ email: 'unverified@example.com', email_verified: false });
       findUnique.mockResolvedValue(user);
 
-      const result = await relaxedService.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+      const result = await login(serviceWith({ OIDC_REQUIRE_VERIFIED_EMAIL: 'false' }));
 
       expect(result.token).toBe('vrt-jwt');
     });
 
-    it('rejects an empty email claim array', async () => {
-      mockCallback.mockResolvedValue({ claims: () => ({ email: [] as string[] }) });
+    it('rejects a missing email even when unverified emails are allowed', async () => {
+      idpReturns({ sub: 'user-1' });
 
-      await expect(service.handleCallback({ code: 'code', state: 'mock-state' }, checks)).rejects.toThrow(
-        'OIDC login failed.'
-      );
+      await expectLoginFailed(serviceWith({ OIDC_REQUIRE_VERIFIED_EMAIL: 'false' }));
+
+      expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty email claim array', async () => {
+      idpReturns({ email: [] as string[] });
+
+      await expectLoginFailed(service);
     });
 
     it('accepts an email_verified claim serialized as a string', async () => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'test@example.com', email_verified: 'true', groups: ['editor'] }),
-      });
+      idpReturns({ email: 'test@example.com', email_verified: 'true', groups: ['editor'] });
       findUnique.mockResolvedValue(user);
 
-      const result = await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+      const result = await login(service);
 
       expect(result.token).toBe('vrt-jwt');
     });
@@ -345,183 +320,61 @@ describe('OidcUsersService', () => {
         { 'https://vrt.example.com/roles': ['vrt-admin'] },
       ],
     ])('reads the role claim via %s', async (_label, roleClaim, roleClaims) => {
-      const claimConfigService = {
-        get: jest.fn((key: string, defaultValue?: string) =>
-          key === 'OIDC_ROLE_CLAIM' ? roleClaim : configService.get(key, defaultValue)
-        ),
-        getOrThrow: configService.getOrThrow,
-      } as unknown as ConfigService;
-      const claimService = new OidcUsersService(claimConfigService, prismaService, authService);
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'test@example.com', email_verified: true, ...roleClaims }),
-      });
+      idpReturns({ email: 'test@example.com', email_verified: true, ...roleClaims });
       findUnique.mockResolvedValue(user);
       update.mockResolvedValue({ ...user, role: Role.admin });
 
-      await claimService.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+      await login(serviceWith({ OIDC_ROLE_CLAIM: roleClaim }));
 
-      expect(update).toHaveBeenCalledWith({ where: { id: user.id }, data: { role: Role.admin } });
+      expectRoleUpdate(Role.admin);
     });
 
     it('uses the user a concurrent first login created', async () => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'race@example.com', email_verified: true }),
-      });
+      idpReturns({ email: 'race@example.com', email_verified: true });
       findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ ...user, email: 'race@example.com' });
       create.mockRejectedValue(new PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: '5' }));
 
-      const result = await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+      const result = await login(service);
 
       expect(findUnique).toHaveBeenCalledTimes(2);
       expect(result.token).toBe('vrt-jwt');
     });
 
     it('rethrows a unique violation that is not a concurrent login', async () => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'race@example.com', email_verified: true }),
-      });
+      idpReturns({ email: 'race@example.com', email_verified: true });
       findUnique.mockResolvedValue(null);
       const error = new PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: '5' });
       create.mockRejectedValue(error);
 
-      await expect(service.handleCallback({ code: 'code', state: 'mock-state' }, checks)).rejects.toBe(error);
+      await expect(login(service)).rejects.toBe(error);
     });
 
     it('keeps the role of an existing user when the role claim is missing', async () => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'test@example.com', email_verified: true }),
-      });
+      idpReturns({ email: 'test@example.com', email_verified: true });
       findUnique.mockResolvedValue({ ...user, role: Role.admin });
 
-      const result = await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+      const result = await login(service);
 
       expect(update).not.toHaveBeenCalled();
       expect(result.token).toBe('vrt-jwt');
     });
 
     it('leaves an existing user unchanged when the role already matches', async () => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'test@example.com', email_verified: true, groups: ['editor'] }),
-      });
+      idpReturns({ email: 'test@example.com', email_verified: true, groups: ['editor'] });
       findUnique.mockResolvedValue(user);
 
-      const result = await service.handleCallback({ code: 'code', state: 'mock-state' }, checks);
+      const result = await login(service);
 
       expect(update).not.toHaveBeenCalled();
       expect(result.token).toBe('vrt-jwt');
     });
-  });
-
-  describe('configuration', () => {
-    const configWith = (overrides: Record<string, string>): ConfigService =>
-      ({
-        get: jest.fn((key: string, defaultValue?: string) =>
-          key in overrides ? overrides[key] : configService.get(key, defaultValue)
-        ),
-        getOrThrow: configService.getOrThrow,
-      }) as unknown as ConfigService;
-    const checks = { state: 'mock-state', codeVerifier: 'mock-verifier' };
-
-    it.each([
-      ['a single admin value', { groups: 'admin' }, Role.admin],
-      ['values separated by spaces', { groups: 'viewer vrt-admin' }, Role.admin],
-      ['values separated by commas', { groups: 'viewer,admin' }, Role.admin],
-      ['admin values in another case', { groups: ['VRT-Admin'] }, Role.admin],
-      ['values that are only separators', { groups: ' , ' }, Role.editor],
-      ['object values, which are ignored', { groups: [{ name: 'admin' }] }, Role.editor],
-    ])('derives the role from %s', async (_case, roleClaims, expected) => {
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'new@example.com', email_verified: true, ...roleClaims }),
-      });
-      findUnique.mockResolvedValue(null);
-      create.mockImplementation(({ data }) => ({ ...user, ...data }));
-
-      await service.handleCallback({ code: 'code' }, checks);
-
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ role: expected }) })
-      );
-    });
-
-    it('trims and lower-cases the configured admin values', async () => {
-      const custom = new OidcUsersService(
-        configWith({ OIDC_ADMIN_VALUES: ' Ops-Team , ,42' }),
-        prismaService,
-        authService
-      );
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'new@example.com', email_verified: true, groups: ['ops-team'] }),
-      });
-      findUnique.mockResolvedValue(null);
-      create.mockImplementation(({ data }) => ({ ...user, ...data }));
-
-      await custom.handleCallback({ code: 'code' }, checks);
-
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ role: Role.admin }) })
-      );
-    });
-
-    it.each([
-      ['a number', 42],
-      ['a boolean', true],
-    ])('compares a role claim holding %s as a string', async (_case, value) => {
-      const custom = new OidcUsersService(configWith({ OIDC_ADMIN_VALUES: String(value) }), prismaService, authService);
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'new@example.com', email_verified: true, groups: [value] }),
-      });
-      findUnique.mockResolvedValue(null);
-      create.mockImplementation(({ data }) => ({ ...user, ...data }));
-
-      await custom.handleCallback({ code: 'code' }, checks);
-
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ role: Role.admin }) })
-      );
-    });
-
-    it('gives new users without an admin claim the configured default role', async () => {
-      const custom = new OidcUsersService(configWith({ OIDC_DEFAULT_ROLE: 'Admin' }), prismaService, authService);
-      mockCallback.mockResolvedValue({ claims: () => ({ email: 'new@example.com', email_verified: true }) });
-      findUnique.mockResolvedValue(null);
-      create.mockImplementation(({ data }) => ({ ...user, ...data }));
-
-      await custom.handleCallback({ code: 'code' }, checks);
-
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ role: Role.admin }) })
-      );
-    });
-  });
-
-  describe('handleCallback claim sources', () => {
-    const checks = { state: 'mock-state', codeVerifier: 'mock-verifier' };
-    const relaxed = () =>
-      new OidcUsersService(
-        {
-          get: jest.fn((key: string, defaultValue?: string) =>
-            key === 'OIDC_REQUIRE_VERIFIED_EMAIL' ? 'false' : configService.get(key, defaultValue)
-          ),
-          getOrThrow: configService.getOrThrow,
-        } as unknown as ConfigService,
-        prismaService,
-        authService
-      );
-
-    it('rejects a missing email even when unverified emails are allowed', async () => {
-      mockCallback.mockResolvedValue({ claims: () => ({ sub: 'user-1' }) });
-
-      await expect(relaxed().handleCallback({ code: 'code' }, checks)).rejects.toThrow('OIDC login failed.');
-
-      expect(findUnique).not.toHaveBeenCalled();
-    });
 
     it('warns and keeps the role of an existing user when the role claim is missing', async () => {
-      mockCallback.mockResolvedValue({ claims: () => ({ email: 'test@example.com', email_verified: true }) });
+      idpReturns({ email: 'test@example.com', email_verified: true });
       findUnique.mockResolvedValue({ ...user, role: Role.admin });
       const warn = jest.spyOn(service['logger'], 'warn').mockImplementation(() => undefined);
 
-      await service.handleCallback({ code: 'code' }, checks);
+      await login(service);
 
       expect(warn).toHaveBeenCalledWith("Claim 'groups' not found for 'test@example.com'. Keeping role 'admin'.");
       expect(update).not.toHaveBeenCalled();
@@ -532,22 +385,10 @@ describe('OidcUsersService', () => {
       ['a null parent claim', { realm_access: null }],
       ['a parent claim that is not an object', { realm_access: 'admin' }],
     ])('treats a dotted role claim with %s as missing', async (_case, parent) => {
-      const nested = new OidcUsersService(
-        {
-          get: jest.fn((key: string, defaultValue?: string) =>
-            key === 'OIDC_ROLE_CLAIM' ? 'realm_access.length' : configService.get(key, defaultValue)
-          ),
-          getOrThrow: configService.getOrThrow,
-        } as unknown as ConfigService,
-        prismaService,
-        authService
-      );
-      mockCallback.mockResolvedValue({
-        claims: () => ({ email: 'test@example.com', email_verified: true, ...parent }),
-      });
+      idpReturns({ email: 'test@example.com', email_verified: true, ...parent });
       findUnique.mockResolvedValue({ ...user, role: Role.admin });
 
-      await nested.handleCallback({ code: 'code' }, checks);
+      await login(serviceWith({ OIDC_ROLE_CLAIM: 'realm_access.length' }));
 
       expect(update).not.toHaveBeenCalled();
     });
@@ -556,16 +397,57 @@ describe('OidcUsersService', () => {
       ['another prisma error', new PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: '5' })],
       ['a non-prisma error', new Error('db down')],
     ])('rethrows %s from creating the user without looking it up again', async (_case, error) => {
-      mockCallback.mockResolvedValue({ claims: () => ({ email: 'race@example.com', email_verified: true }) });
-      // a lookup after the failed insert would find the user
+      idpReturns({ email: 'race@example.com', email_verified: true });
       findUnique
         .mockReset()
         .mockResolvedValueOnce(null)
         .mockResolvedValue({ ...user, email: 'race@example.com' });
       create.mockRejectedValue(error);
 
-      await expect(service.handleCallback({ code: 'code' }, checks)).rejects.toBe(error);
+      await expect(login(service)).rejects.toBe(error);
       expect(findUnique).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('configuration', () => {
+    const newUserWithClaims = (svc: OidcUsersService, roleClaims: Record<string, unknown>) => {
+      idpReturns({ email: 'new@example.com', email_verified: true, ...roleClaims });
+      noUser();
+      return login(svc);
+    };
+
+    it.each([
+      ['a single admin value', { groups: 'admin' }, Role.admin],
+      ['values separated by spaces', { groups: 'viewer vrt-admin' }, Role.admin],
+      ['values separated by commas', { groups: 'viewer,admin' }, Role.admin],
+      ['admin values in another case', { groups: ['VRT-Admin'] }, Role.admin],
+      ['values that are only separators', { groups: ' , ' }, Role.editor],
+      ['object values, which are ignored', { groups: [{ name: 'admin' }] }, Role.editor],
+    ])('derives the role from %s', async (_case, roleClaims, expected) => {
+      await newUserWithClaims(service, roleClaims);
+
+      expectCreatedWith({ role: expected });
+    });
+
+    it('trims and lower-cases the configured admin values', async () => {
+      await newUserWithClaims(serviceWith({ OIDC_ADMIN_VALUES: ' Ops-Team , ,42' }), { groups: ['ops-team'] });
+
+      expectCreatedWith({ role: Role.admin });
+    });
+
+    it.each([
+      ['a number', 42],
+      ['a boolean', true],
+    ])('compares a role claim holding %s as a string', async (_case, value) => {
+      await newUserWithClaims(serviceWith({ OIDC_ADMIN_VALUES: String(value) }), { groups: [value] });
+
+      expectCreatedWith({ role: Role.admin });
+    });
+
+    it('gives new users without an admin claim the configured default role', async () => {
+      await newUserWithClaims(serviceWith({ OIDC_DEFAULT_ROLE: 'Admin' }), {});
+
+      expectCreatedWith({ role: Role.admin });
     });
   });
 
@@ -588,6 +470,7 @@ describe('OidcUsersService', () => {
         'Password changes are disabled. Use SSO to change your password.'
       );
     });
+
     it('rejects password login', async () => {
       await expect(service.login({ email: 'a@b.com', password: 'x' })).rejects.toThrow('Password login is disabled.');
     });

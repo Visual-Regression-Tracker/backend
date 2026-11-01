@@ -1,12 +1,9 @@
 generator client {
   provider = "prisma-client-js"
-  // Pinned beside the schema rather than "the nearest @prisma/client": with
-  // prisma/node_modules installed that would be the migration package's copy.
-  // Every @prisma/client below this directory finds it by walking up.
+  // Pinned beside the schema: the nearest @prisma/client would be the migration package's copy
   output   = "../node_modules/.prisma/client"
 }
 
-// the connection URL lives in prisma.config.ts
 datasource db {
   provider = "postgresql"
 }
@@ -44,7 +41,7 @@ model Project {
   bulkApproveVariations Boolean         @default(false)
   bulkApproveGroupBy    String          @default("customTags")
   builds                Build[]
-  TestRun               TestRun[]
+  testRuns              TestRun[]
   testVariations        TestVariation[]
   favoritedBy           User[]          @relation("UserFavoriteProjects")
 }
@@ -57,6 +54,7 @@ model TestRun {
   diffTollerancePercent Float          @default(0)
   pixelMisMatchCount    Int?
   status                TestStatus
+  statusBeforeDecision  TestStatus?
   buildId               String
   testVariationId       String?
   projectId             String?
@@ -76,18 +74,7 @@ model TestRun {
   ignoreAreas           String         @default("[]")
   tempIgnoreAreas       String         @default("[]")
   vlmDescription        String?
-  // Position-independent colour signature of this run's change, as JSON, so the
-  // variations dialog can group a screen's locales without fetching and
-  // decoding every sibling's screenshots at review time. Written once, next to
-  // the diff that already decoded them. Null on runs that predate this, that
-  // have no diff, or that were compared by something other than pixelmatch —
-  // those fall back to computing it on demand.
   changeSignature       String?
-  // Small copies of the checkpoint and of the diff, made at ingest from the
-  // pixels the comparison had already decoded. The card grids draw pictures a
-  // hundred-odd pixels wide, and pulling the full-size files for that cost
-  // megabytes per screen. Null on runs ingested before this, which fall back to
-  // the full-size file.
   imageThumbnailName    String?
   diffThumbnailName     String?
   baseline              Baseline?
@@ -96,6 +83,8 @@ model TestRun {
   testVariation         TestVariation? @relation(fields: [testVariationId], references: [id])
 
   @@index([buildId, branchName, name])
+  @@index([testVariationId])
+  @@index([name, baselineName])
 }
 
 model TestVariation {
@@ -131,6 +120,8 @@ model Baseline {
   testRun         TestRun?      @relation(fields: [testRunId], references: [id])
   testVariation   TestVariation @relation(fields: [testVariationId], references: [id])
   user            User?         @relation(fields: [userId], references: [id])
+
+  @@index([testVariationId, createdAt])
 }
 
 model User {

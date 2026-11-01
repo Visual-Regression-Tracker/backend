@@ -40,3 +40,7 @@ lerna-debug.log*
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Claude Code
+.claude/settings.local.json
+.claude/worktrees/

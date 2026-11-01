@@ -1,6 +1,7 @@
-import { ExtractJwt, Strategy, VerifiedCallback } from 'passport-jwt';
+import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { User } from '@prisma/client';
 import { JwtPayload } from './jwt-payload.model';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,15 +19,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload, done: VerifiedCallback) {
-    const user = await this.prismaService.user.findUnique({
-      where: { email: payload.email },
-    });
-
+  // @nestjs/passport calls `done` with whatever this returns, so it must not call `done` itself
+  async validate(payload: JwtPayload): Promise<User> {
+    const user = await this.findUser(payload);
     if (!user) {
-      return done(new HttpException({}, HttpStatus.UNAUTHORIZED), false);
+      throw new UnauthorizedException();
     }
+    return user;
+  }
 
-    return done(null, user, payload.expire);
+  private findUser(payload: JwtPayload): Promise<User | null> {
+    if (typeof payload.sub === 'string' && payload.sub) {
+      return this.prismaService.user.findUnique({ where: { id: payload.sub } });
+    }
+    // tokens issued before `sub` existed carry only the email
+    if (typeof payload.email === 'string' && payload.email) {
+      return this.prismaService.user.findUnique({ where: { email: payload.email } });
+    }
+    return Promise.resolve(null);
   }
 }

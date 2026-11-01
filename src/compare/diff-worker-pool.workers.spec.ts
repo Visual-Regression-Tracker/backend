@@ -4,13 +4,17 @@ import { Logger } from '@nestjs/common';
 import { Worker } from 'worker_threads';
 import { availableParallelism } from 'os';
 import { existsSync } from 'fs';
-import { DiffWorkerPool } from './diff-worker-pool';
+import {
+  DiffWorkerPool,
+  ImageDiffJobTimeoutError,
+  ImageDiffPoolStoppedException,
+  ImageDiffQueueFullException,
+} from './diff-worker-pool';
+import { PNG } from 'pngjs';
+import { ImageTooLargeException } from '../static/utils';
 import { runWorkerJob } from './libs/pixelmatch/worker-job';
 import { PixelmatchJobInput } from './libs/pixelmatch/pixelmatch.core';
 
-// The pool only talks to real worker threads once the compiled worker file
-// exists (dist). These tests stand in for both: the file "exists", and every
-// Worker is an in-process fake the test drives by emitting its events.
 class FakeWorker extends EventEmitter {
   postMessage = jest.fn();
   terminate = jest.fn().mockResolvedValue(0);
@@ -67,7 +71,8 @@ const output = (pixelMisMatchCount: number) => ({
   diffPercent: pixelMisMatchCount,
 });
 
-// settles a promise into a value the test can inspect without an unhandled rejection
+const ready = (worker: FakeWorker) => worker.emit('message', { ready: true });
+
 const settle = <T>(promise: Promise<T>) =>
   promise.then(
     (value) => ({ value, error: undefined as Error | undefined }),
@@ -80,12 +85,19 @@ describe('DiffWorkerPool with worker threads', () => {
   let loggerErrorSpy: jest.SpyInstance;
   let loggerLogSpy: jest.SpyInstance;
 
-  const createPool = ({ workers = '1', queueLimit }: { workers?: string; queueLimit?: string } = {}) => {
-    process.env.DIFF_WORKERS_COUNT = workers;
-    if (queueLimit === undefined) {
-      delete process.env.DIFF_QUEUE_LIMIT;
-    } else {
-      process.env.DIFF_QUEUE_LIMIT = queueLimit;
+  const createPool = ({
+    workers = '1',
+    queueLimit,
+    maxHeap,
+  }: { workers?: string; queueLimit?: string; maxHeap?: string } = {}) => {
+    const env = {
+      DIFF_WORKER_MAX_HEAP_MB: maxHeap,
+      DIFF_WORKERS_COUNT: workers,
+      DIFF_QUEUE_LIMIT: queueLimit,
+    };
+    for (const [name, value] of Object.entries(env)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
     pool = new DiffWorkerPool();
     return pool;
@@ -103,7 +115,6 @@ describe('DiffWorkerPool with worker threads', () => {
 
   afterEach(async () => {
     await pool?.onApplicationShutdown();
-    // each test makes its own pool; the shutdown above skips a test that made none
     pool = undefined as unknown as DiffWorkerPool;
     process.env = { ...originalEnv };
     jest.restoreAllMocks();
@@ -114,15 +125,14 @@ describe('DiffWorkerPool with worker threads', () => {
       ['DIFF_WORKERS_COUNT when set', '3', 4, 3],
       ['DIFF_WORKERS_COUNT capped at 8', '20', 4, 8],
       ['cores - 1 when DIFF_WORKERS_COUNT is not a number', 'abc', 4, 3],
-      // NOTE: current behavior — an explicit "0" is falsy and treated as unset
-      ['cores - 1 when DIFF_WORKERS_COUNT is 0', '0', 6, 5],
+      ['cores - 1 when DIFF_WORKERS_COUNT is 0 (no workers is not an option)', '0', 6, 5],
       ['cores - 1 capped at 8', '', 32, 8],
       ['at least one worker on a single core', '', 1, 1],
     ])('uses %s', async (_, workers, cores, expected) => {
       availableParallelismMock.mockReturnValue(cores);
       createPool({ workers });
 
-      settle(pool.run(job(1)));
+      void settle(pool.run(job(1)));
 
       expect(WorkerMock).toHaveBeenCalledTimes(expected);
     });
@@ -132,12 +142,28 @@ describe('DiffWorkerPool with worker threads', () => {
 
       expect(WorkerMock).not.toHaveBeenCalled();
 
-      settle(pool.run(job(1)));
-      settle(pool.run(job(2)));
+      void settle(pool.run(job(1)));
+      void settle(pool.run(job(2)));
 
       expect(WorkerMock).toHaveBeenCalledTimes(2);
-      expect(WorkerMock).toHaveBeenCalledWith(join(__dirname, 'libs', 'pixelmatch', 'pixelmatch.worker.js'));
+      expect(WorkerMock).toHaveBeenCalledWith(join(__dirname, 'libs', 'pixelmatch', 'pixelmatch.worker.js'), {
+        resourceLimits: { maxOldGenerationSizeMb: 512 },
+      });
       expect(loggerLogSpy).toHaveBeenCalledWith('Started 2 image diff workers');
+    });
+  });
+
+  describe('worker heap limit', () => {
+    it.each([
+      ['takes the limit from DIFF_WORKER_MAX_HEAP_MB', '256', { resourceLimits: { maxOldGenerationSizeMb: 256 } }],
+      ['drops the limit for 0', '0', {}],
+      ['falls back to 512 for garbage', 'lots', { resourceLimits: { maxOldGenerationSizeMb: 512 } }],
+    ])('%s', async (_, maxHeap, options) => {
+      createPool({ maxHeap });
+
+      void settle(pool.run(job(1)));
+
+      expect(WorkerMock).toHaveBeenCalledWith(expect.any(String), options);
     });
   });
 
@@ -170,8 +196,8 @@ describe('DiffWorkerPool with worker threads', () => {
     it('hands the first job to the most recently spawned idle worker', async () => {
       createPool({ workers: '2' });
 
-      settle(pool.run(job(1)));
-      settle(pool.run(job(2)));
+      void settle(pool.run(job(1)));
+      void settle(pool.run(job(2)));
 
       expect(mockWorkers[1].postMessage).toHaveBeenCalledWith(job(1));
       expect(mockWorkers[0].postMessage).toHaveBeenCalledWith(job(2));
@@ -215,19 +241,34 @@ describe('DiffWorkerPool with worker threads', () => {
   });
 
   describe('queue limit', () => {
-    it('rejects a job once the waiting queue holds DIFF_QUEUE_LIMIT jobs, not counting the ones in flight', async () => {
+    it('rejects a job once the waiting queue holds DIFF_QUEUE_LIMIT jobs, not counting the ones in flight, with 503 and a retry hint', async () => {
       createPool({ queueLimit: '1' });
 
       const inFlight = settle(pool.run(job(1)));
       const queued = settle(pool.run(job(2)));
 
-      await expect(pool.run(job(3))).rejects.toThrow('Image diff queue is full (1 jobs)');
+      const { error } = await settle(pool.run(job(3)));
+      expect(error).toBeInstanceOf(ImageDiffQueueFullException);
+      expect((error as ImageDiffQueueFullException).getStatus()).toBe(503);
+      expect((error as ImageDiffQueueFullException).retryAfterSeconds).toBe(5);
+      expect(error?.message).toBe('Image diff queue is full (1 jobs)');
       expect(mockWorkers[0].postMessage).toHaveBeenCalledTimes(1);
 
       mockWorkers[0].emit('message', output(1));
       mockWorkers[0].emit('message', output(2));
       expect((await inFlight).value).toEqual(output(1));
       expect((await queued).value).toEqual(output(2));
+    });
+
+    it('does not queue an oversized job', async () => {
+      process.env.MAX_IMAGE_PIXELS = '50';
+      createPool();
+      const big = PNG.sync.write(new PNG({ width: 10, height: 10 }));
+
+      await expect(pool.run({ ...job(1), baseline: big, image: big })).rejects.toBeInstanceOf(ImageTooLargeException);
+
+      expect(WorkerMock).not.toHaveBeenCalled();
+      expect(runWorkerJobMock).not.toHaveBeenCalled();
     });
 
     it('defaults to a queue of 256 waiting jobs', async () => {
@@ -282,50 +323,107 @@ describe('DiffWorkerPool with worker threads', () => {
       await expect(result).resolves.toEqual(output(1));
     });
 
-    it('keeps a worker that exited with code 0 in the pool', async () => {
+    it('replaces a worker that exited with code 0', async () => {
       createPool();
 
-      pool.run(job(1));
+      const first = pool.run(job(1));
+      ready(mockWorkers[0]);
       mockWorkers[0].emit('message', output(1));
+      await expect(first).resolves.toEqual(output(1));
       mockWorkers[0].emit('exit', 0);
-      const pending = settle(pool.run(job(2)));
+      const second = pool.run(job(2));
 
-      // NOTE: current behavior — a clean exit is ignored, so the exited worker
-      // stays idle and is handed the next job, which would never be answered.
-      expect(mockWorkers).toHaveLength(1);
-      expect(mockWorkers[0].postMessage).toHaveBeenLastCalledWith(job(2));
-
-      await pool.onApplicationShutdown();
-      expect((await pending).error).toEqual(new Error('Image diff worker pool is shutting down'));
+      expect(mockWorkers).toHaveLength(2);
+      expect(mockWorkers[1].postMessage).toHaveBeenCalledWith(job(2));
+      expect(mockWorkers[0].postMessage).toHaveBeenCalledTimes(1);
+      mockWorkers[1].emit('message', output(2));
+      await expect(second).resolves.toEqual(output(2));
     });
 
-    it('gives a job up with the error of the last worker after it was handed out three times', async () => {
+    it('runs a job at most twice on loaded workers', async () => {
       createPool({ workers: '2' });
 
       const target = settle(pool.run(job(1)));
       const other = pool.run(job(2));
-      const [, first] = mockWorkers;
+      const [first0, first] = mockWorkers;
+      ready(first0);
+      ready(first);
       expect(first.postMessage).toHaveBeenCalledWith(job(1));
 
       first.emit('error', new Error('first'));
       const second = mockWorkers[2];
+      ready(second);
       expect(second.postMessage).toHaveBeenCalledWith(job(1));
 
-      // a healthy answer in between resets the consecutive failure count
-      mockWorkers[0].emit('message', output(2));
+      first0.emit('message', output(2));
       await expect(other).resolves.toEqual(output(2));
 
       second.emit('error', new Error('second'));
-      const third = mockWorkers[3];
-      expect(third.postMessage).toHaveBeenCalledWith(job(1));
 
-      third.emit('error', new Error('third'));
+      expect((await target).error).toEqual(new Error('second'));
+      expect(mockWorkers).toHaveLength(4);
+      expect(mockWorkers[3].postMessage).not.toHaveBeenCalled();
+    });
 
-      // NOTE: current behavior — MAX_JOB_ATTEMPTS = 2 reads as "handed to a worker
-      // at most twice", but the job runs on three workers before it is rejected.
-      expect((await target).error).toEqual(new Error('third'));
-      expect(mockWorkers).toHaveLength(5);
-      expect(mockWorkers[4].postMessage).not.toHaveBeenCalled();
+    it('does not switch to inline mode when a job keeps crashing loaded workers', async () => {
+      createPool();
+
+      const poison = settle(pool.run(job(1)));
+      ready(mockWorkers[0]);
+      mockWorkers[0].emit('error', new Error('oom 1'));
+      ready(mockWorkers[1]);
+      mockWorkers[1].emit('error', new Error('oom 2'));
+
+      expect((await poison).error).toEqual(new Error('oom 2'));
+
+      const next = settle(pool.run(job(2)));
+      expect(runWorkerJobMock).not.toHaveBeenCalled();
+      expect(mockWorkers[2].postMessage).toHaveBeenCalledWith(job(2));
+      ready(mockWorkers[2]);
+      mockWorkers[2].emit('message', output(2));
+      expect((await next).value).toEqual(output(2));
+    });
+
+    it('does not count a load failure against the job', async () => {
+      createPool();
+
+      const result = pool.run(job(1));
+      mockWorkers[0].emit('error', new Error('cannot load'));
+
+      expect(mockWorkers[1].postMessage).toHaveBeenCalledWith(job(1));
+      ready(mockWorkers[1]);
+      mockWorkers[1].emit('message', output(1));
+      await expect(result).resolves.toEqual(output(1));
+    });
+
+    it('resets the load-failure count once a worker has loaded', async () => {
+      createPool();
+
+      void settle(pool.run(job(1)));
+      mockWorkers[0].emit('error', new Error('load 1'));
+      mockWorkers[1].emit('error', new Error('load 2'));
+      ready(mockWorkers[2]);
+      mockWorkers[2].emit('message', output(1));
+      mockWorkers[2].emit('error', new Error('idle crash'));
+      mockWorkers[3].emit('error', new Error('load 3'));
+      mockWorkers[4].emit('error', new Error('load 4'));
+
+      expect(runWorkerJobMock).not.toHaveBeenCalled();
+      expect(loggerErrorSpy).not.toHaveBeenCalledWith(expect.stringContaining('comparing on the main thread'));
+    });
+
+    it('ignores a ready message from a dropped worker', async () => {
+      createPool();
+
+      void settle(pool.run(job(1)));
+      const dropped = mockWorkers[0];
+      dropped.emit('error', new Error('load 1'));
+      dropped.emit('message', { ready: true });
+      mockWorkers[1].emit('error', new Error('load 2'));
+      dropped.emit('message', { ready: true });
+      mockWorkers[2].emit('error', new Error('load 3'));
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining('comparing on the main thread'));
     });
 
     it('rejects with the exit code when the last failure was a non-zero exit', async () => {
@@ -333,28 +431,33 @@ describe('DiffWorkerPool with worker threads', () => {
 
       const target = settle(pool.run(job(1)));
       const other = pool.run(job(2));
+      ready(mockWorkers[0]);
+      ready(mockWorkers[1]);
       mockWorkers[1].emit('exit', 2);
       mockWorkers[0].emit('message', output(2));
       await other;
+      ready(mockWorkers[2]);
       mockWorkers[2].emit('exit', 3);
-      mockWorkers[3].emit('exit', 4);
 
-      expect((await target).error).toEqual(new Error('Image diff worker exited with code 4'));
+      expect((await target).error).toEqual(new Error('Image diff worker exited with code 3'));
+      expect(mockWorkers[3].postMessage).not.toHaveBeenCalled();
     });
 
-    it('falls back to inline after three consecutive failures and answers the queued jobs on this thread', async () => {
+    it('falls back to inline after three workers fail to load and answers every job on this thread', async () => {
       createPool();
       runWorkerJobMock
+        .mockReturnValueOnce(output(1))
         .mockReturnValueOnce(output(2))
         .mockImplementationOnce(() => {
           throw new Error('inline failed');
         })
         .mockImplementationOnce(() => {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- pool must survive non-Error throws
           throw 'not an error';
         })
         .mockReturnValueOnce(output(5));
 
-      const inFlight = settle(pool.run(job(1)));
+      const inFlight = pool.run(job(1));
       const queued2 = pool.run(job(2));
       const queued3 = settle(pool.run(job(3)));
       const queued4 = settle(pool.run(job(4)));
@@ -365,20 +468,38 @@ describe('DiffWorkerPool with worker threads', () => {
       mockWorkers[2].emit('error', new Error('load failed 3'));
 
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        'Image diff workers failed to run 3 times, comparing on the main thread from now on'
+        'Image diff workers failed to load 3 times, comparing on the main thread from now on'
       );
-      // the job that was on the failing worker is rejected, the waiting ones run inline
-      expect((await inFlight).error).toEqual(new Error('load failed 3'));
+      await expect(inFlight).resolves.toEqual(output(1));
       await expect(queued2).resolves.toEqual(output(2));
       expect((await queued3).error).toEqual(new Error('inline failed'));
       expect((await queued4).error).toEqual(new Error('not an error'));
-      expect(runWorkerJobMock.mock.calls).toEqual([[job(2)], [job(3)], [job(4)]]);
+      expect(runWorkerJobMock.mock.calls).toEqual([[job(1)], [job(2)], [job(3)], [job(4)]]);
       expect(mockWorkers).toHaveLength(3);
 
-      // and every later job runs inline without spawning anything
       await expect(pool.run(job(5))).resolves.toEqual(output(5));
       expect(runWorkerJobMock).toHaveBeenLastCalledWith(job(5));
       expect(mockWorkers).toHaveLength(3);
+    });
+
+    it('answers jobs that finish asynchronously once it runs inline', async () => {
+      createPool();
+      runWorkerJobMock
+        .mockReturnValueOnce(Promise.reject(new Error('async failed')))
+        .mockReturnValueOnce(Promise.resolve(output(9)))
+        .mockReturnValueOnce(Promise.reject('not an error'));
+
+      const failing = settle(pool.run(job(1)));
+      const succeeding = pool.run(job(2));
+      const rejectingNonError = settle(pool.run(job(3)));
+
+      mockWorkers[0].emit('error', new Error('load failed 1'));
+      mockWorkers[1].emit('error', new Error('load failed 2'));
+      mockWorkers[2].emit('error', new Error('load failed 3'));
+
+      expect((await failing).error).toEqual(new Error('async failed'));
+      await expect(succeeding).resolves.toEqual(output(9));
+      expect((await rejectingNonError).error).toEqual(new Error('not an error'));
     });
 
     it('does not run a job again when the worker that already answered it crashes later', async () => {
@@ -397,19 +518,18 @@ describe('DiffWorkerPool with worker threads', () => {
     it('takes only the crashed worker out of the idle ones', async () => {
       createPool({ workers: '3' });
 
-      settle(pool.run(job(1)));
+      void settle(pool.run(job(1)));
       const [crashed, idle, busy] = mockWorkers;
       expect(busy.postMessage).toHaveBeenCalledWith(job(1));
 
       crashed.emit('error', new Error('boom'));
       const replacement = mockWorkers[3];
-      settle(pool.run(job(2)));
-      settle(pool.run(job(3)));
-      settle(pool.run(job(4)));
+      void settle(pool.run(job(2)));
+      void settle(pool.run(job(3)));
+      void settle(pool.run(job(4)));
 
       expect(replacement.postMessage).toHaveBeenCalledWith(job(2));
       expect(idle.postMessage).toHaveBeenCalledWith(job(3));
-      // job 4 waits: the crashed worker is never handed anything
       expect(crashed.postMessage).not.toHaveBeenCalled();
     });
 
@@ -424,7 +544,6 @@ describe('DiffWorkerPool with worker threads', () => {
       dropped.emit('message', output(99));
       const next = pool.run(job(2));
 
-      // the late answer neither settles the retried job nor brings the worker back
       expect(dropped.postMessage).toHaveBeenCalledTimes(1);
       expect(replacement.postMessage).toHaveBeenCalledTimes(1);
 
@@ -434,6 +553,85 @@ describe('DiffWorkerPool with worker threads', () => {
       replacement.emit('message', output(2));
       await expect(next).resolves.toEqual(output(2));
       expect(dropped.postMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('job timeout', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('rejects a job that runs longer than 120 s and replaces its worker', async () => {
+      createPool();
+
+      const hung = settle(pool.run(job(1)));
+      ready(mockWorkers[0]);
+      jest.advanceTimersByTime(120_000);
+
+      expect((await hung).error).toBeInstanceOf(ImageDiffJobTimeoutError);
+      expect((await hung).error?.message).toBe('Image diff job timed out after 120000 ms');
+      expect(mockWorkers[0].terminate).toHaveBeenCalledTimes(1);
+      expect(mockWorkers).toHaveLength(2);
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Image diff job ran over 120000 ms, replacing its worker');
+
+      void settle(pool.run(job(2)));
+      expect(mockWorkers[1].postMessage).toHaveBeenCalledWith(job(2));
+    });
+
+    it('does not time out a job answered in time', async () => {
+      createPool();
+
+      const result = pool.run(job(1));
+      ready(mockWorkers[0]);
+      jest.advanceTimersByTime(119_999);
+      mockWorkers[0].emit('message', output(1));
+      jest.advanceTimersByTime(5000);
+
+      await expect(result).resolves.toEqual(output(1));
+      expect(mockWorkers[0].terminate).not.toHaveBeenCalled();
+      expect(mockWorkers).toHaveLength(1);
+    });
+
+    it('ignores the exit of the worker it terminated', async () => {
+      createPool();
+
+      const hung = settle(pool.run(job(1)));
+      jest.advanceTimersByTime(120_000);
+      await hung;
+      mockWorkers[0].emit('exit', 1);
+      mockWorkers[0].emit('error', new Error('terminated'));
+
+      expect(mockWorkers).toHaveLength(2);
+    });
+
+    it('does not retry the timed-out job and does not count it as a load failure', async () => {
+      createPool();
+
+      for (const id of [1, 2, 3]) {
+        const hung = settle(pool.run(job(id)));
+        jest.advanceTimersByTime(120_000);
+        expect((await hung).error).toBeInstanceOf(ImageDiffJobTimeoutError);
+      }
+
+      expect(runWorkerJobMock).not.toHaveBeenCalled();
+      expect(mockWorkers).toHaveLength(4);
+      expect(mockWorkers.map((worker) => worker.postMessage.mock.calls.length)).toEqual([1, 1, 1, 0]);
+    });
+
+    it('does not spawn a replacement for a pool that is shut down while the job runs', async () => {
+      createPool();
+
+      const pending = settle(pool.run(job(1)));
+      await pool.onApplicationShutdown();
+      jest.advanceTimersByTime(5000);
+
+      expect((await pending).error).toBeInstanceOf(ImageDiffPoolStoppedException);
+      expect(mockWorkers).toHaveLength(1);
+      expect(mockWorkers[0].terminate).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -455,13 +653,20 @@ describe('DiffWorkerPool with worker threads', () => {
       expect(mockWorkers.map((worker) => worker.terminate.mock.calls.length)).toEqual([1, 1]);
     });
 
-    it('refuses new jobs once shut down', async () => {
+    it('rejects with 503 once shut down', async () => {
       createPool();
-      settle(pool.run(job(1)));
+      const queued = [1, 2].map((id) => settle(pool.run(job(id))));
 
       await pool.onApplicationShutdown();
 
-      await expect(pool.run(job(2))).rejects.toThrow('Image diff worker pool is shut down');
+      for (const { error } of await Promise.all(queued)) {
+        expect(error).toBeInstanceOf(ImageDiffPoolStoppedException);
+      }
+      const { error } = await settle(pool.run(job(3)));
+      expect(error).toBeInstanceOf(ImageDiffPoolStoppedException);
+      expect(error?.message).toBe('Image diff worker pool is shut down');
+      expect((error as ImageDiffPoolStoppedException).getStatus()).toBe(503);
+      expect((error as ImageDiffPoolStoppedException).retryAfterSeconds).toBe(5);
       expect(mockWorkers).toHaveLength(1);
     });
 

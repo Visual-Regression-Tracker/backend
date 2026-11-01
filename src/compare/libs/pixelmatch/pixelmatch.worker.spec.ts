@@ -27,10 +27,11 @@ const input: SignatureJobInput = {
 };
 
 describe('pixelmatch.worker', () => {
+  let postedOnLoad: unknown[][];
+
   beforeAll(() => {
-    // a plain require: under `module: nodenext` an import() stays a real ESM import
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('./pixelmatch.worker');
+    postedOnLoad = [...port.postMessage.mock.calls];
   });
 
   beforeEach(() => {
@@ -38,36 +39,65 @@ describe('pixelmatch.worker', () => {
     runWorkerJobMock.mockReset();
   });
 
+  it('announces that it has loaded', () => {
+    expect(postedOnLoad).toEqual([[{ ready: true }]]);
+  });
+
   it('listens for jobs on the parent port', () => {
     expect(port.listenerCount('message')).toBe(1);
   });
 
-  it('runs the job it receives and posts the result back', () => {
+  const flush = () => new Promise(setImmediate);
+
+  it('runs the job it receives and posts the result back', async () => {
     runWorkerJobMock.mockReturnValue({ signature: [1] });
 
     port.emit('message', input);
+    await flush();
 
     expect(runWorkerJobMock).toHaveBeenCalledWith(input);
     expect(port.postMessage).toHaveBeenCalledWith({ signature: [1] });
   });
 
-  it('posts the error message back when the job throws an Error', () => {
+  it('posts the error message back when the job throws an Error', async () => {
     runWorkerJobMock.mockImplementation(() => {
       throw new Error('Invalid PNG');
     });
 
     port.emit('message', input);
+    await flush();
 
     expect(port.postMessage).toHaveBeenCalledWith({ error: 'Invalid PNG' });
   });
 
   it('posts the stringified value back when the job throws something that is not an Error', () => {
     runWorkerJobMock.mockImplementation(() => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- worker must stringify non-Error throws
       throw 42;
     });
 
     port.emit('message', input);
 
     expect(port.postMessage).toHaveBeenCalledWith({ error: '42' });
+  });
+
+  it('awaits an async job before posting its result', async () => {
+    runWorkerJobMock.mockResolvedValue({ outcome: 'equal' });
+
+    port.emit('message', input);
+    await flush();
+
+    expect(port.postMessage).toHaveBeenCalledTimes(1);
+    expect(port.postMessage).toHaveBeenCalledWith({ outcome: 'equal' });
+  });
+
+  it('posts the message of an async job that rejects', async () => {
+    runWorkerJobMock.mockRejectedValue(new Error('boom'));
+
+    port.emit('message', input);
+    await flush();
+
+    expect(port.postMessage).toHaveBeenCalledTimes(1);
+    expect(port.postMessage).toHaveBeenCalledWith({ error: 'boom' });
   });
 });

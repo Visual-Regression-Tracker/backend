@@ -1,30 +1,45 @@
-import { forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BeforeApplicationShutdown,
+  ConflictException,
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Build, Prisma, TestStatus } from '@prisma/client';
+import { isPrismaError } from '../prisma/prisma-errors';
+import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { getBuildsStats } from './build-stats';
+import { testRunImageNames } from '../utils';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
 import type { WrapperType } from '../shared/wrapper-type';
+import { StaticService } from '../static/static.service';
 
-// Newest first, with the id to break a tie: without a total order two builds
-// made in the same instant have no fixed place, so an offset page could show
-// one of them twice or not at all, and the page a build sits on would be a
-// matter of chance.
+const TEST_RUN_CHUNK = 500;
+const MAX_REMOVE_ATTEMPTS = 3;
 const BUILD_ORDER: Prisma.BuildOrderByWithRelationInput[] = [{ createdAt: 'desc' }, { id: 'desc' }];
 
+const RETENTION_GRACE_MS = 60 * 60_000;
+
+class BuildAlreadyNumbered extends Error {}
+
 @Injectable()
-export class BuildsService {
+export class BuildsService implements BeforeApplicationShutdown {
   private readonly logger: Logger = new Logger(BuildsService.name);
   private readonly ongoingDeletions = new Map<string, Promise<void>>();
+  private shuttingDown = false;
 
   constructor(
     private prismaService: PrismaService,
     private eventsGateway: EventsGateway,
     @Inject(forwardRef(() => TestRunsService))
-    private testRunsService: WrapperType<TestRunsService>
+    private testRunsService: WrapperType<TestRunsService>,
+    private staticService: StaticService
   ) {}
 
   async findOne(id: string): Promise<BuildDto> {
@@ -42,8 +57,7 @@ export class BuildsService {
 
   async findMany(
     projectId: string,
-    // undefined reads every build, which is how deleteOldBuilds finds the ones past the limit
-    take: number | undefined,
+    take: number,
     skip: number,
     ciBuildId?: string,
     aroundBuildId?: string
@@ -55,10 +69,7 @@ export class BuildsService {
       }),
     };
 
-    // A link carries a build, not a page, so the page has to be worked out from
-    // the build before anything is read.
-    // the controller always sends take with aroundBuildId; deleteOldBuilds sends neither
-    const pageSkip = aroundBuildId ? ((await this.skipToPageWith(where, take!, aroundBuildId)) ?? skip) : skip;
+    const pageSkip = aroundBuildId ? ((await this.skipToPageWith(where, take, aroundBuildId)) ?? skip) : skip;
 
     const [total, buildList] = await Promise.all([
       this.prismaService.build.count({ where }),
@@ -70,21 +81,18 @@ export class BuildsService {
       }),
     ]);
 
+    const stats = await getBuildsStats(
+      this.prismaService,
+      buildList.map((build) => build.id)
+    );
     return {
-      data: await Promise.all(buildList.map((build) => this.findOne(build.id))),
+      data: buildList.map((build) => new BuildDto(build, stats.get(build.id))),
       total,
-      // only deleteOldBuilds leaves take unset, and it reads just the data
-      take: take!,
+      take,
       skip: pageSkip,
     };
   }
 
-  /**
-   * Where the page holding this build starts, or null when there is no such
-   * page: the build has been deleted, belongs elsewhere, or the search in force
-   * leaves it out. A stale link should then open the list it asked for rather
-   * than fail.
-   */
   private async skipToPageWith(where: Prisma.BuildWhereInput, take: number, buildId: string): Promise<number | null> {
     if (take < 1) {
       return null;
@@ -98,9 +106,6 @@ export class BuildsService {
       return null;
     }
 
-    // BUILD_ORDER puts a build ahead of this one when it is newer, or was made
-    // in the same instant and carries the larger id. Counting those gives the
-    // build's place in the list, and the page follows from the page size.
     const ahead = await this.prismaService.build.count({
       where: {
         ...where,
@@ -114,95 +119,147 @@ export class BuildsService {
   async update(id: string, modifyBuildDto: ModifyBuildDto): Promise<BuildDto> {
     await this.prismaService.build.update({
       where: { id },
-      // named one by one so nothing else a caller passes can reach the row
       data: { ciBuildId: modifyBuildDto.ciBuildId, isRunning: modifyBuildDto.isRunning },
     });
     this.eventsGateway.buildUpdated(id);
     return this.findOne(id);
   }
 
-  async remove(id: string): Promise<Build | undefined> {
+  async remove(
+    id: string,
+    { onlyIfIdleSince }: { onlyIfIdleSince?: Date } = {}
+  ): Promise<(Build & { testRuns: TestRun[] }) | undefined> {
     if (!id) {
       this.logger.warn(`Attempted to remove build with undefined ID.`);
       return;
     }
     this.logger.debug(`Going to remove Build ${id}`);
 
-    const build = await this.prismaService.build.findUnique({
-      where: { id },
-      include: {
-        testRuns: true,
-      },
-    });
-
+    const build = await this.prismaService.build.findUnique({ where: { id } });
     if (!build) {
       this.logger.warn(`Build not found ${id}`);
       return;
     }
 
-    await Promise.all(build.testRuns.map((testRun) => this.testRunsService.delete(testRun.id)));
-
-    try {
-      await this.prismaService.build.delete({ where: { id } });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+    const testRuns: TestRun[] = [];
+    for (let attempt = 1; ; attempt++) {
+      const removedRuns = await this.removeTestRuns(id, onlyIfIdleSince);
+      if (!removedRuns || (onlyIfIdleSince && !(await this.isIdle(id, onlyIfIdleSince)))) {
+        this.logger.log(`Keeping build ${id}: it is in use`);
+        return;
+      }
+      testRuns.push(...removedRuns);
+      try {
+        await this.prismaService.build.delete({ where: { id } });
+        break;
+      } catch (e) {
         // workaround https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/435
-        if (e.code === 'P2025') {
+        if (isPrismaError(e, 'P2025')) {
           this.logger.warn(`Build already deleted ${id}`);
           return;
+        }
+        if (!isPrismaError(e, 'P2003')) {
+          throw e;
+        }
+        if (onlyIfIdleSince) {
+          this.logger.log(`Keeping build ${id}: it received new test runs`);
+          return;
+        }
+        if (attempt === MAX_REMOVE_ATTEMPTS) {
+          throw new ConflictException(`Build ${id} keeps receiving test runs, try again later`);
         }
       }
     }
 
     this.logger.log(`Build deleted ${id}`);
-    this.eventsGateway.buildDeleted(new BuildDto({ ...build }));
-    return build;
+    const removed = { ...build, testRuns };
+    this.eventsGateway.buildDeleted(new BuildDto(removed));
+    return removed;
   }
 
-  /**
-   * Makes room for the build about to be started: keeps the newest
-   * `keepBuilds - 1` builds, so that with it the project holds `keepBuilds`.
-   * The build that a POST with `ciBuildId` is about to reuse (parallel CI jobs
-   * share one) is never pruned, and does not count among the ones kept.
-   */
-  async deleteOldBuilds(projectId: string, keepBuilds: number, ciBuildId?: string): Promise<void> {
-    if (this.ongoingDeletions.has(projectId)) {
-      this.logger.debug(`Deletion for project ${projectId} is already in progress. Returning existing promise.`);
-      return this.ongoingDeletions.get(projectId);
+  private async isIdle(buildId: string, since: Date): Promise<boolean> {
+    const idle = await this.prismaService.build.findFirst({
+      where: { id: buildId, updatedAt: { lt: since }, testRuns: { none: { createdAt: { gte: since } } } },
+      select: { id: true },
+    });
+    return idle !== null;
+  }
+
+  // rows before files: a failure leaks bytes instead of leaving runs that point at deleted images
+  private async removeTestRuns(buildId: string, onlyIfIdleSince?: Date): Promise<TestRun[] | null> {
+    const removed: TestRun[] = [];
+    for (;;) {
+      if (onlyIfIdleSince && !(await this.isIdle(buildId, onlyIfIdleSince))) {
+        return null;
+      }
+      const chunk = await this.prismaService.testRun.findMany({ where: { buildId }, take: TEST_RUN_CHUNK });
+      if (chunk.length === 0) {
+        return removed;
+      }
+      await this.prismaService.testRun.deleteMany({ where: { id: { in: chunk.map((testRun) => testRun.id) } } });
+      await this.staticService.deleteImages(chunk.flatMap(testRunImageNames));
+      chunk.forEach((testRun) => this.eventsGateway.testRunDeleted(testRun));
+      removed.push(...chunk);
+    }
+  }
+
+  async deleteOldBuilds(projectId: string, keepBuilds: number, keepBuildId: string): Promise<void> {
+    const key = `${projectId}|${keepBuildId}`;
+    const ongoing = this.ongoingDeletions.get(key);
+    if (ongoing) {
+      this.logger.debug(`Deletion for ${key} is already in progress. Returning existing promise.`);
+      return ongoing;
     }
 
     const deletionPromise = (async () => {
       this.logger.debug(`Starting to delete old builds for project ${projectId}, keeping ${keepBuilds} builds.`);
+      const onlyIfIdleSince = new Date(Date.now() - RETENTION_GRACE_MS);
       const oldBuilds = await this.prismaService.build.findMany({
-        where: {
-          projectId,
-          // spelled out with the null case: NOT { ciBuildId } alone would also
-          // leave out every build without a CI build id
-          ...(ciBuildId && { OR: [{ ciBuildId: null }, { ciBuildId: { not: ciBuildId } }] }),
-        },
+        where: { projectId, id: { not: keepBuildId } },
         orderBy: BUILD_ORDER,
         skip: Math.max(keepBuilds - 1, 0),
         select: { id: true },
       });
-      for (const eachBuild of oldBuilds) {
-        await this.remove(eachBuild.id);
+      for (const { id } of oldBuilds) {
+        if (this.shuttingDown) {
+          break;
+        }
+        try {
+          await this.remove(id, { onlyIfIdleSince });
+        } catch (e) {
+          this.logger.warn(`Cannot remove old build ${id}: ${e}`);
+        }
       }
       this.logger.debug(`Finished deleting old builds for project ${projectId}.`);
     })();
 
-    this.ongoingDeletions.set(projectId, deletionPromise);
+    this.ongoingDeletions.set(key, deletionPromise);
 
     deletionPromise
       .finally(() => {
-        this.ongoingDeletions.delete(projectId);
-        this.logger.debug(`Deletion promise for project ${projectId} resolved/rejected and removed from map.`);
+        this.ongoingDeletions.delete(key);
+        this.logger.debug(`Deletion promise for ${key} resolved/rejected and removed from map.`);
       })
-      // finally() hands on the rejection in a promise nobody awaits: unhandled,
-      // it would take the whole process down. The caller gets the error from
-      // deletionPromise itself.
+      // finally() would pass the rejection to a promise nobody awaits and crash the process
       .catch((): void => undefined);
 
     return deletionPromise;
+  }
+
+  scheduleRetention(projectId: string, keepBuilds: number, keepBuildId: string): void {
+    this.deleteOldBuilds(projectId, keepBuilds, keepBuildId).catch((e) =>
+      this.logger.warn(`Cannot remove old builds of project ${projectId}: ${e}`)
+    );
+  }
+
+  async whenRetentionIdle(): Promise<void> {
+    await Promise.allSettled([...this.ongoingDeletions.values()]);
+  }
+
+  // Runs before Prisma disconnects in onApplicationShutdown
+  async beforeApplicationShutdown(): Promise<void> {
+    this.shuttingDown = true;
+    await this.whenRetentionIdle();
   }
 
   async approve(id: string, merge: boolean, userId?: string): Promise<void> {
@@ -215,6 +272,7 @@ export class BuildsService {
               in: [TestStatus.new, TestStatus.unresolved],
             },
           },
+          select: { id: true },
         },
       },
     });
@@ -224,7 +282,6 @@ export class BuildsService {
     }
 
     for (const testRun of build.testRuns) {
-      // recorded on each new baseline, as POST /test-runs/approve does
       await this.testRunsService.approve(testRun.id, merge, false, userId);
     }
   }
@@ -247,8 +304,7 @@ export class BuildsService {
         }
       : { id: projectId };
 
-    // left unset when the upsert fails with anything but P2002, and then reading it throws
-    let build!: Build;
+    let build: Build;
     try {
       build = await this.prismaService.build.upsert({
         where,
@@ -267,42 +323,52 @@ export class BuildsService {
         },
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError) {
-        if (e.code === 'P2002') {
-          // cuncurent upsert workaround https://www.prisma.io/docs/reference/api-reference/prisma-client-reference#unique-key-constraint-errors-on-upserts
-          build = await this.prismaService.build.update({
-            where,
-            data: {
-              isRunning: true,
-            },
-          });
-        }
+      if (!isPrismaError(e, 'P2002')) {
+        throw e;
       }
+      // concurrent upsert workaround https://www.prisma.io/docs/reference/api-reference/prisma-client-reference#unique-key-constraint-errors-on-upserts
+      build = await this.prismaService.build.update({
+        where,
+        data: {
+          isRunning: true,
+        },
+      });
     }
 
-    // assigne build number
-    if (!build.number) {
-      build = await this.incrementBuildNumber(build.id, projectId);
-      this.eventsGateway.buildCreated(new BuildDto(build));
+    if (build.number === null) {
+      const numbered = await this.assignNumber(build.id, projectId);
+      if (numbered) {
+        this.eventsGateway.buildCreated(new BuildDto(numbered));
+        return numbered;
+      }
+      return this.prismaService.build.findUniqueOrThrow({ where: { id: build.id } });
     }
 
     return build;
   }
 
-  async incrementBuildNumber(buildId: string, projectId: string): Promise<Build> {
-    const project = await this.prismaService.project.update({
-      where: {
-        id: projectId,
-      },
-      data: {
-        buildsCounter: {
-          increment: 1,
-        },
-      },
-    });
-    return this.prismaService.build.update({
-      where: { id: buildId },
-      data: { number: project.buildsCounter },
-    });
+  private async assignNumber(buildId: string, projectId: string): Promise<Build | null> {
+    try {
+      return await this.prismaService.$transaction(async (tx) => {
+        const { buildsCounter } = await tx.project.update({
+          where: { id: projectId },
+          data: { buildsCounter: { increment: 1 } },
+          select: { buildsCounter: true },
+        });
+        const [numbered] = await tx.build.updateManyAndReturn({
+          where: { id: buildId, number: null },
+          data: { number: buildsCounter },
+        });
+        if (!numbered) {
+          throw new BuildAlreadyNumbered();
+        }
+        return numbered;
+      });
+    } catch (e) {
+      if (e instanceof BuildAlreadyNumbered) {
+        return null;
+      }
+      throw e;
+    }
   }
 }

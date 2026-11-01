@@ -27,4 +27,10 @@ describe('Ldap', () => {
       expect(error.response.data.message).toContain('Invalid email or password.');
     });
   });
+
+  test('Rejects an empty password', async () => {
+    await expect(axios.post('/users/login', { email: loginData.email, password: '' })).rejects.toMatchObject({
+      response: { status: 400, data: { message: expect.stringContaining('Invalid email or password.') } },
+    });
+  });
 });

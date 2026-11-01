@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompareService } from './compare.service';
@@ -12,79 +12,61 @@ import { GeminiService } from './libs/vlm/providers/gemini/gemini.service';
 import { StaticModule } from '../static/static.module';
 import { StaticService } from '../static/static.service';
 import { Dinov2Service } from './libs/dinov2/dinov2.service';
-import { ImageComparison, TestStatus } from '@prisma/client';
+import { ImageComparison, Project, TestStatus } from '@prisma/client';
 import { isHddStaticServiceConfigured } from '../static/utils';
 import { ImageCompareInput } from './libs/ImageCompareInput';
-import { BlurredDifference, DEFAULT_BLUR_SIGMA, MAX_SOLID_SHARE } from './libs/pixelmatch/blur-amplitude.core';
+import { BlurredDifference, MAX_SOLID_SHARE } from './libs/pixelmatch/blur-amplitude.core';
 
-// a mock function in place of the export rather than a spy on it: SWC's
-// CommonJS exports are getters, which jest.spyOn cannot replace
 jest.mock('../static/utils', () => {
   const actual = jest.requireActual('../static/utils');
   return { ...actual, isHddStaticServiceConfigured: jest.fn(actual.isHddStaticServiceConfigured) };
 });
 
-jest.mock('zod/v3', () => {
-  const actualZod = jest.requireActual('zod');
-  return actualZod;
-});
-
 describe('CompareService', () => {
-  let service: CompareService;
-  let pixelmatchService: PixelmatchService;
-  let lookSameService: LookSameService;
-  let odiffService: OdiffService;
-  let vlmService: VlmService;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        CompareService,
-        DiffWorkerPool,
-        Dinov2Service,
-        OdiffService,
-        PixelmatchService,
-        LookSameService,
-        VlmService,
-        OllamaService,
-        GeminiService,
-        PrismaService,
-        {
-          provide: ConfigService,
-          useValue: {
-            getOrThrow: jest.fn(),
-          },
-        },
-      ],
-      imports: [StaticModule],
-    }).compile();
-
-    service = module.get<CompareService>(CompareService);
-    pixelmatchService = module.get<PixelmatchService>(PixelmatchService);
-    lookSameService = module.get<LookSameService>(LookSameService);
-    odiffService = module.get<OdiffService>(OdiffService);
-    vlmService = module.get<VlmService>(VlmService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   describe('getComparator', () => {
-    it('should return pixelmatchService', () => {
-      const result = service.getComparator(ImageComparison.pixelmatch);
-      expect(result).toBe(pixelmatchService);
+    let service: CompareService;
+    let comparators: Record<string, unknown>;
+
+    beforeEach(async () => {
+      const module = await Test.createTestingModule({
+        providers: [
+          CompareService,
+          DiffWorkerPool,
+          Dinov2Service,
+          OdiffService,
+          PixelmatchService,
+          LookSameService,
+          VlmService,
+          OllamaService,
+          GeminiService,
+          PrismaService,
+          { provide: ConfigService, useValue: { getOrThrow: jest.fn() } },
+        ],
+        imports: [StaticModule],
+      }).compile();
+
+      service = module.get(CompareService);
+      comparators = {
+        pixelmatch: module.get(PixelmatchService),
+        lookSame: module.get(LookSameService),
+        odiff: module.get(OdiffService),
+        vlm: module.get(VlmService),
+      };
     });
 
-    it('should return lookSameService', () => {
-      const result = service.getComparator(ImageComparison.lookSame);
-      expect(result).toBe(lookSameService);
+    it.each([
+      [ImageComparison.pixelmatch, 'pixelmatch'],
+      [ImageComparison.lookSame, 'lookSame'],
+      [ImageComparison.vlm, 'vlm'],
+      ['unknown' as ImageComparison, 'pixelmatch'],
+    ])('should return the comparator for %s', (imageComparison, name) => {
+      expect(service.getComparator(imageComparison)).toBe(comparators[name]);
     });
 
     it('should return odiffService', () => {
       jest.mocked(isHddStaticServiceConfigured).mockReturnValue(true);
 
-      expect(service.getComparator(ImageComparison.odiff)).toBe(odiffService);
+      expect(service.getComparator(ImageComparison.odiff)).toBe(comparators.odiff);
     });
 
     it('should throw if not HDD for Odiff', () => {
@@ -94,52 +76,86 @@ describe('CompareService', () => {
         'Odiff can only be used with HDD static service. Please use another image comparison lib in project settings or switch STATIC_SERVICE envitonmental variable to HDD.'
       );
     });
-
-    it('should return vlmService', () => {
-      expect(service.getComparator(ImageComparison.vlm)).toBe(vlmService);
-    });
-
-    it('should return pixelmatchService for unknown value', () => {
-      const result = service.getComparator('unknown' as ImageComparison);
-      expect(result).toBe(pixelmatchService);
-    });
   });
 });
 
 describe('CompareService with mocked collaborators', () => {
-  // pixelmatch applies the rendering-noise filter in its own worker pass, and
-  // VLM through the pixelmatch it runs first; the others leave it to the service
-  const comparator = (name: string, appliesBlurAmplitudeFilter = false) => ({
-    parseConfig: jest.fn().mockReturnValue({ parsedBy: name }),
-    getDiff: jest.fn().mockResolvedValue({ comparedBy: name }),
+  const comparator = (appliesBlurAmplitudeFilter = false) => ({
+    parseConfig: jest.fn().mockImplementation((json: string) => JSON.parse(json)),
+    getDiff: jest.fn(),
     appliesBlurAmplitudeFilter,
   });
 
-  const initService = async ({
-    projectFindUniqueMock = jest.fn(),
-    diffWorkerPoolRunMock = jest.fn(),
-    staticServiceMock = { getImageBuffer: jest.fn(), deleteImage: jest.fn() },
-    confirmsNoiseMock = jest.fn(),
-  }) => {
-    const pixelmatch = comparator('pixelmatch', true);
-    const lookSame = comparator('lookSame');
-    const odiff = comparator('odiff');
-    const vlm = comparator('vlm', true);
-    const module: TestingModule = await Test.createTestingModule({
+  const unresolved = {
+    status: TestStatus.unresolved,
+    diffName: 'diff.png',
+    pixelMisMatchCount: 10,
+    diffPercent: 5,
+    isSameDimension: true,
+  };
+
+  interface Options {
+    imageComparison?: ImageComparison;
+    config?: Record<string, unknown>;
+    project?: Project | null;
+    result?: object;
+    measure?: BlurredDifference | null;
+    gate?: object;
+    run?: jest.Mock;
+    confirmsNoiseForGate?: jest.Mock;
+  }
+
+  const setup = async ({
+    imageComparison = ImageComparison.lookSame,
+    config = {},
+    project,
+    result = unresolved,
+    measure = { amplitude: 40, solidPixels: 0, solidShare: 0 },
+    gate,
+    run = jest.fn().mockResolvedValue({ measure, gate }),
+    confirmsNoiseForGate = jest.fn(),
+  }: Options = {}) => {
+    const staticService = {
+      getImageBuffer: jest.fn().mockImplementation(async (name: string) => Buffer.from(name)),
+      deleteImage: jest.fn(),
+    };
+    const findUnique = jest
+      .fn()
+      .mockResolvedValue(
+        project === undefined
+          ? { id: 'projectId', imageComparison, imageComparisonConfig: JSON.stringify(config) }
+          : project
+      );
+    const pixelmatch = comparator(true);
+    const lookSame = comparator();
+    const odiff = comparator();
+    const vlm = comparator(true);
+    [pixelmatch, lookSame, odiff, vlm].forEach((c) => c.getDiff.mockResolvedValue(result));
+    const module = await Test.createTestingModule({
       providers: [
         CompareService,
         { provide: PixelmatchService, useValue: pixelmatch },
         { provide: LookSameService, useValue: lookSame },
         { provide: OdiffService, useValue: odiff },
         { provide: VlmService, useValue: vlm },
-        { provide: PrismaService, useValue: { project: { findUnique: projectFindUniqueMock } } },
-        { provide: DiffWorkerPool, useValue: { run: diffWorkerPoolRunMock } },
-        { provide: StaticService, useValue: staticServiceMock },
-        { provide: Dinov2Service, useValue: { confirmsNoise: confirmsNoiseMock } },
+        { provide: PrismaService, useValue: { project: { findUnique } } },
+        { provide: DiffWorkerPool, useValue: { run } },
+        { provide: StaticService, useValue: staticService },
+        { provide: Dinov2Service, useValue: { confirmsNoiseForGate } },
       ],
     }).compile();
 
-    return { service: module.get<CompareService>(CompareService), pixelmatch, lookSame, odiff, vlm };
+    return {
+      service: module.get(CompareService),
+      pixelmatch,
+      lookSame,
+      odiff,
+      vlm,
+      run,
+      staticService,
+      findUnique,
+      confirmsNoiseForGate,
+    };
   };
 
   const data: ImageCompareInput = {
@@ -150,18 +166,30 @@ describe('CompareService with mocked collaborators', () => {
     saveDiffAsFile: true,
   };
 
+  const diffProject = (service: CompareService, input: ImageCompareInput = data) =>
+    service.getDiff({ projectId: 'projectId', data: input });
+
   describe('getDiff', () => {
-    it("diffs with the project's comparator and the config it parses", async () => {
-      const projectFindUniqueMock = jest.fn().mockResolvedValue({
+    it.each([
+      ['reads the project and', false],
+      ['uses the project it is given without reading it again, and', true],
+    ])("%s diffs with the project's comparator and the config it parses", async (_, given) => {
+      const { service, lookSame, pixelmatch, findUnique } = await setup({ config: { strict: true } });
+      lookSame.parseConfig.mockReturnValue({ parsedBy: 'lookSame' });
+      lookSame.getDiff.mockResolvedValue({ comparedBy: 'lookSame' });
+      const project = {
         id: 'projectId',
         imageComparison: ImageComparison.lookSame,
         imageComparisonConfig: '{"strict":true}',
-      });
-      const { service, lookSame, pixelmatch } = await initService({ projectFindUniqueMock });
+      } as Project;
 
-      const result = await service.getDiff({ projectId: 'projectId', data });
+      const result = await service.getDiff({ projectId: 'projectId', ...(given ? { project } : {}), data });
 
-      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: 'projectId' } });
+      if (given) {
+        expect(findUnique).not.toHaveBeenCalled();
+      } else {
+        expect(findUnique).toHaveBeenCalledWith({ where: { id: 'projectId' } });
+      }
       expect(lookSame.parseConfig).toHaveBeenCalledWith('{"strict":true}');
       expect(lookSame.getDiff).toHaveBeenCalledWith(data, { parsedBy: 'lookSame' });
       expect(pixelmatch.getDiff).not.toHaveBeenCalled();
@@ -169,310 +197,249 @@ describe('CompareService with mocked collaborators', () => {
     });
 
     it('throws a TypeError when the project does not exist', async () => {
-      const projectFindUniqueMock = jest.fn().mockResolvedValue(null);
-      const { service } = await initService({ projectFindUniqueMock });
+      const { service } = await setup({ project: null });
 
-      // NOTE: current behavior — no not-found handling, the null project is dereferenced
       await expect(service.getDiff({ projectId: 'missing', data })).rejects.toThrow(TypeError);
     });
   });
 
   describe('rendering-noise filter', () => {
-    const unresolved = {
-      status: TestStatus.unresolved,
-      diffName: 'diff.png',
-      pixelMisMatchCount: 10,
-      diffPercent: 5,
-      isSameDimension: true,
-    };
-
-    // the filter's settings ride in the library's config, which CompareService
-    // reads and strips before the comparator sees it
     const filterOn = { blurAmplitudeFilter: true, blurAmplitudeThreshold: 80 };
-
-    const setup = async ({
-      imageComparison = ImageComparison.lookSame as ImageComparison,
-      config = filterOn as Record<string, unknown>,
-      result = unresolved as object,
-      measure = { amplitude: 40, solidPixels: 0, solidShare: 0 } as BlurredDifference | null,
-      run = jest.fn().mockResolvedValue({ measure }),
-      confirmsNoiseMock = jest.fn(),
-    } = {}) => {
-      const staticServiceMock = {
-        getImageBuffer: jest.fn().mockImplementation(async (name: string) => Buffer.from(name)),
-        deleteImage: jest.fn(),
-      };
-      const projectFindUniqueMock = jest.fn().mockResolvedValue({
-        id: 'projectId',
-        imageComparison,
-        imageComparisonConfig: JSON.stringify({ libraryOption: 1, ...config }),
-      });
-      const context = await initService({
-        projectFindUniqueMock,
-        diffWorkerPoolRunMock: run,
-        staticServiceMock,
-        confirmsNoiseMock,
-      });
-      [context.pixelmatch, context.lookSame, context.odiff, context.vlm].forEach((c) => {
-        c.parseConfig.mockImplementation((json: string) => JSON.parse(json));
-        c.getDiff.mockResolvedValue(result);
-      });
-      return { ...context, run, staticServiceMock, confirmsNoiseMock };
-    };
-
-    const filter = { sigma: DEFAULT_BLUR_SIGMA, threshold: 80 };
+    const filtered = (options: Options = {}) =>
+      setup({ ...options, config: { libraryOption: 1, ...(options.config ?? filterOn) } });
 
     it('leaves a config that does not turn it on alone', async () => {
-      const { service, lookSame, run } = await setup({ config: {} });
+      const { service, lookSame, run } = await filtered({ config: {} });
 
-      const result = await service.getDiff({ projectId: 'projectId', data });
+      const result = await diffProject(service);
 
       expect(lookSame.getDiff).toHaveBeenCalledWith(data, { libraryOption: 1 });
       expect(run).not.toHaveBeenCalled();
       expect(result).toEqual(unresolved);
     });
 
-    // decoded already inside its own worker pass, where a run that is about to
-    // pass also never writes a diff
-    it('hands it to pixelmatch rather than measuring a second time', async () => {
-      const { service, pixelmatch, run } = await setup({ imageComparison: ImageComparison.pixelmatch });
+    it.each([
+      ['pixelmatch rather than measuring a second time', ImageComparison.pixelmatch, 'pixelmatch'],
+      ['VLM as a prefilter', ImageComparison.vlm, 'vlm'],
+    ] as const)('hands it to %s', async (_, imageComparison, key) => {
+      const context = await filtered({ imageComparison });
 
-      await service.getDiff({ projectId: 'projectId', data });
+      await diffProject(context.service);
 
-      expect(pixelmatch.getDiff).toHaveBeenCalledWith({ ...data, blurAmplitude: filter }, { libraryOption: 1 });
-      expect(run).not.toHaveBeenCalled();
-    });
-
-    // VLM runs pixelmatch first and stops when it passes, so noise is settled
-    // before a model is ever asked about it
-    it('hands it to VLM as a prefilter', async () => {
-      const { service, vlm, run } = await setup({ imageComparison: ImageComparison.vlm });
-
-      await service.getDiff({ projectId: 'projectId', data });
-
-      expect(vlm.getDiff).toHaveBeenCalledWith({ ...data, blurAmplitude: filter }, { libraryOption: 1 });
-      expect(run).not.toHaveBeenCalled();
+      expect(context[key].getDiff).toHaveBeenCalledWith(
+        { ...data, blurAmplitude: { threshold: 80 } },
+        { libraryOption: 1 }
+      );
+      expect(context.run).not.toHaveBeenCalled();
     });
 
     it('passes a looks-same failure that is only rendering noise', async () => {
-      const { service, lookSame, run, staticServiceMock } = await setup();
+      const { service, lookSame, run, staticService } = await filtered();
 
-      const result = await service.getDiff({ projectId: 'projectId', data });
+      const result = await diffProject(service);
 
-      // looks-same gets its own options, not the filter's
       expect(lookSame.getDiff).toHaveBeenCalledWith(data, { libraryOption: 1 });
-
       expect(run).toHaveBeenCalledWith({
         kind: 'blur-amplitude',
         baseline: Buffer.from('baseline.png'),
         image: Buffer.from('image.png'),
         ignoreAreas: data.ignoreAreas,
-        sigma: DEFAULT_BLUR_SIGMA,
       });
-      // the measured mismatch stays, only the verdict changes
       expect(result).toEqual({ ...unresolved, status: TestStatus.ok, diffName: null });
-      // nothing will ever point at the diff of a run that passed
-      expect(staticServiceMock.deleteImage).toHaveBeenCalledWith('diff.png');
+      expect(staticService.deleteImage).toHaveBeenCalledWith('diff.png');
+    });
+
+    it('measures with the image it is given', async () => {
+      const { service, run, staticService } = await filtered();
+      const imageBuffer = Buffer.from('already read');
+
+      await diffProject(service, { ...data, imageBuffer });
+
+      expect(staticService.getImageBuffer).toHaveBeenCalledTimes(1);
+      expect(staticService.getImageBuffer).toHaveBeenCalledWith('baseline.png');
+      expect(run).toHaveBeenCalledWith(expect.objectContaining({ kind: 'blur-amplitude', image: imageBuffer }));
+      expect(run.mock.calls[0][0].image).toBe(imageBuffer);
     });
 
     it('passes an odiff failure that is only rendering noise', async () => {
       jest.mocked(isHddStaticServiceConfigured).mockReturnValue(true);
-      const { service } = await setup({ imageComparison: ImageComparison.odiff });
+      const { service } = await filtered({ imageComparison: ImageComparison.odiff });
 
-      const result = await service.getDiff({ projectId: 'projectId', data });
-
-      expect(result.status).toBe(TestStatus.ok);
+      expect((await diffProject(service)).status).toBe(TestStatus.ok);
     });
 
     it('keeps a change stronger than rendering noise unresolved', async () => {
-      const { service, staticServiceMock } = await setup({
+      const { service, staticService } = await filtered({
         measure: { amplitude: 200, solidPixels: 0, solidShare: 0 },
       });
 
-      const result = await service.getDiff({ projectId: 'projectId', data });
-
-      expect(result).toEqual(unresolved);
-      expect(staticServiceMock.deleteImage).not.toHaveBeenCalled();
+      expect(await diffProject(service)).toEqual(unresolved);
+      expect(staticService.deleteImage).not.toHaveBeenCalled();
     });
 
-    // a panel turned light grey is faint, but too solid to be noise
     it('keeps a faint but solid change unresolved', async () => {
-      const { service } = await setup({
+      const { service } = await filtered({
         measure: { amplitude: 31, solidPixels: 9300, solidShare: MAX_SOLID_SHARE + 0.001 },
       });
 
-      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(unresolved);
+      expect(await diffProject(service)).toEqual(unresolved);
     });
 
     it("measures against the config's own threshold", async () => {
-      const { service } = await setup({ config: { ...filterOn, blurAmplitudeThreshold: 30 } });
+      const { service } = await filtered({ config: { ...filterOn, blurAmplitudeThreshold: 30 } });
 
-      expect((await service.getDiff({ projectId: 'projectId', data })).status).toBe(TestStatus.unresolved);
+      expect((await diffProject(service)).status).toBe(TestStatus.unresolved);
     });
 
     it('does not second-guess a run that already passed', async () => {
       const ok = { ...unresolved, status: TestStatus.ok, diffName: null as string | null };
-      const { service, run } = await setup({ result: ok });
+      const { service, run } = await filtered({ result: ok });
 
-      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(ok);
+      expect(await diffProject(service)).toEqual(ok);
       expect(run).not.toHaveBeenCalled();
     });
 
-    // nothing to line up, and the size change is a finding of its own
     it('leaves screenshots of different sizes to the comparator', async () => {
       const resized = { ...unresolved, isSameDimension: false };
-      const { service, run } = await setup({ result: resized });
+      const { service, run } = await filtered({ result: resized });
 
-      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(resized);
+      expect(await diffProject(service)).toEqual(resized);
       expect(run).not.toHaveBeenCalled();
     });
 
     it('keeps the verdict when the change cannot be measured', async () => {
-      const { service } = await setup({ measure: null });
+      const { service } = await filtered({ measure: null });
 
-      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(unresolved);
+      expect(await diffProject(service)).toEqual(unresolved);
     });
 
-    // a filter that can only ever pass runs must never be the reason one fails
-    it('keeps the verdict when measuring fails', async () => {
-      const run = jest.fn().mockRejectedValue(new Error('Image diff queue is full (256 jobs)'));
-      const { service } = await setup({ run });
+    it.each([
+      ['an Error', new Error('Image diff queue is full (256 jobs)')],
+      ['something that is not an Error', 'worker gone'],
+    ])('keeps the verdict when measuring fails with %s', async (_, failure) => {
+      const { service } = await filtered({ run: jest.fn().mockRejectedValue(failure) });
 
-      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(unresolved);
-    });
-
-    it('keeps the verdict when measuring fails with something that is not an Error', async () => {
-      const { service } = await setup({ run: jest.fn().mockRejectedValue('worker gone') });
-
-      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(unresolved);
+      expect(await diffProject(service)).toEqual(unresolved);
     });
 
     it('keeps the verdict when a screenshot cannot be read', async () => {
-      const { service, staticServiceMock, run } = await setup();
-      staticServiceMock.getImageBuffer.mockResolvedValueOnce(undefined);
+      const { service, staticService, run } = await filtered();
+      staticService.getImageBuffer.mockResolvedValueOnce(undefined);
 
-      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(unresolved);
+      expect(await diffProject(service)).toEqual(unresolved);
       expect(run).not.toHaveBeenCalled();
     });
 
     it('has no diff to delete when none was saved', async () => {
-      const { service, staticServiceMock } = await setup({ result: { ...unresolved, diffName: null } });
+      const { service, staticService } = await filtered({ result: { ...unresolved, diffName: null } });
 
-      expect((await service.getDiff({ projectId: 'projectId', data })).status).toBe(TestStatus.ok);
-      expect(staticServiceMock.deleteImage).not.toHaveBeenCalled();
+      expect((await diffProject(service)).status).toBe(TestStatus.ok);
+      expect(staticService.deleteImage).not.toHaveBeenCalled();
     });
   });
 
   describe('rendering-noise filter with the DINOv2 check', () => {
-    const unresolved = {
-      status: TestStatus.unresolved,
-      diffName: 'diff.png',
-      pixelMisMatchCount: 10,
-      diffPercent: 5,
-      isSameDimension: true,
-    };
-    const checked = { blurAmplitudeFilter: true, dinov2Check: true };
-
-    const setup = async (imageComparison: ImageComparison, confirmsNoiseMock = jest.fn()) => {
-      const staticServiceMock = {
-        getImageBuffer: jest.fn().mockImplementation(async (name: string) => Buffer.from(name)),
-        deleteImage: jest.fn(),
-      };
-      const context = await initService({
-        projectFindUniqueMock: jest.fn().mockResolvedValue({
-          id: 'projectId',
-          imageComparison,
-          imageComparisonConfig: JSON.stringify(checked),
-        }),
-        diffWorkerPoolRunMock: jest
-          .fn()
-          .mockResolvedValue({ measure: { amplitude: 40, solidPixels: 0, solidShare: 0 } }),
-        staticServiceMock,
-        confirmsNoiseMock,
-      });
-      [context.pixelmatch, context.lookSame, context.odiff, context.vlm].forEach((c) => {
-        c.parseConfig.mockImplementation((json: string) => JSON.parse(json));
-        c.getDiff.mockResolvedValue(unresolved);
-      });
-      return { ...context, staticServiceMock };
-    };
-
+    const gate = { width: 5, height: 3, cells: [7] };
+    const checked = (options: Options = {}) =>
+      setup({ gate, config: { blurAmplitudeFilter: true, dinov2Check: true }, ...options });
     const dinov2 = { threshold: 0.15 };
 
-    it('passes a looks-same failure DINOv2 confirms is only noise', async () => {
-      const confirmsNoise = jest.fn().mockResolvedValue({ noise: true, score: 0.04 });
-      const { service, staticServiceMock } = await setup(ImageComparison.lookSame, confirmsNoise);
+    it('passes a looks-same failure DINOv2 confirms is only noise, with the gate the blur job returned', async () => {
+      const confirmsNoiseForGate = jest.fn().mockResolvedValue({ noise: true, score: 0.04 });
+      const { service, staticService, run } = await checked({ confirmsNoiseForGate });
 
-      const result = await service.getDiff({ projectId: 'projectId', data });
+      const result = await diffProject(service);
 
-      expect(confirmsNoise).toHaveBeenCalledWith(
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith({
+        kind: 'blur-amplitude',
+        baseline: Buffer.from('baseline.png'),
+        image: Buffer.from('image.png'),
+        ignoreAreas: data.ignoreAreas,
+        gateIfNoise: { threshold: 80 },
+      });
+      expect(confirmsNoiseForGate).toHaveBeenCalledWith(
+        gate,
         Buffer.from('baseline.png'),
         Buffer.from('image.png'),
-        data.ignoreAreas,
         0.15
       );
       expect(result.status).toBe(TestStatus.ok);
-      expect(staticServiceMock.deleteImage).toHaveBeenCalledWith('diff.png');
+      expect(staticService.deleteImage).toHaveBeenCalledWith('diff.png');
     });
 
     it('keeps a looks-same failure in which DINOv2 sees a change of content', async () => {
-      const confirmsNoise = jest.fn().mockResolvedValue({ noise: false, score: 0.56 });
-      const { service, staticServiceMock } = await setup(ImageComparison.lookSame, confirmsNoise);
+      const { service, staticService } = await checked({
+        confirmsNoiseForGate: jest.fn().mockResolvedValue({ noise: false, score: 0.56 }),
+      });
 
-      expect(await service.getDiff({ projectId: 'projectId', data })).toEqual(unresolved);
-      expect(staticServiceMock.deleteImage).not.toHaveBeenCalled();
+      expect(await diffProject(service)).toEqual(unresolved);
+      expect(staticService.deleteImage).not.toHaveBeenCalled();
     });
 
-    // pixelmatch — and VLM through it — ask DINOv2 themselves, inside their
-    // own pass, where the diff is still at hand
+    it('keeps the failure and does not ask DINOv2 when the blur job returned no gate', async () => {
+      const confirmsNoiseForGate = jest.fn();
+      const { service, staticService } = await checked({
+        gate: undefined,
+        confirmsNoiseForGate,
+      });
+
+      expect(await diffProject(service)).toEqual(unresolved);
+      expect(confirmsNoiseForGate).not.toHaveBeenCalled();
+      expect(staticService.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'a change the blur already fails',
+        { run: jest.fn().mockResolvedValue({ measure: { amplitude: 200, solidPixels: 0, solidShare: 0 } }) },
+      ],
+      ['a pair when the blur job fails', { run: jest.fn().mockRejectedValue(new Error('worker crashed')) }],
+    ])('does not ask DINOv2 about %s', async (_, options) => {
+      const confirmsNoiseForGate = jest.fn();
+      const { service } = await checked({ ...options, confirmsNoiseForGate });
+
+      expect(await diffProject(service)).toEqual(unresolved);
+      expect(confirmsNoiseForGate).not.toHaveBeenCalled();
+    });
+
     it.each([
       [ImageComparison.pixelmatch, 'pixelmatch'],
       [ImageComparison.vlm, 'vlm'],
     ] as const)('hands the check to %s', async (imageComparison, key) => {
-      const confirmsNoise = jest.fn();
-      const context = await setup(imageComparison, confirmsNoise);
+      const context = await checked({ imageComparison });
 
-      await context.service.getDiff({ projectId: 'projectId', data });
+      await diffProject(context.service);
 
-      expect(context[key].getDiff).toHaveBeenCalledWith(
-        { ...data, blurAmplitude: { sigma: DEFAULT_BLUR_SIGMA, threshold: 80, dinov2 } },
-        {}
-      );
-      expect(confirmsNoise).not.toHaveBeenCalled();
+      expect(context[key].getDiff).toHaveBeenCalledWith({ ...data, blurAmplitude: { threshold: 80, dinov2 } }, {});
+      expect(context.confirmsNoiseForGate).not.toHaveBeenCalled();
     });
   });
 
   describe('getChangeSignature', () => {
+    const input = {
+      baseline: Buffer.from('a'),
+      image: Buffer.from('b'),
+      ignoreAreas: [{ x: 1, y: 2, width: 3, height: 4 }],
+      threshold: 0.2,
+      includeAA: true,
+    };
+
     it('runs a signature job on the diff worker pool and returns its answer', async () => {
-      const diffWorkerPoolRunMock = jest.fn().mockResolvedValue({ signature: [0.5, 0.5] });
-      const { service } = await initService({ diffWorkerPoolRunMock });
-      const input = {
-        baseline: Buffer.from('a'),
-        image: Buffer.from('b'),
-        ignoreAreas: [{ x: 1, y: 2, width: 3, height: 4 }],
-        threshold: 0.2,
-        includeAA: true,
-      };
+      const { service, run } = await setup({ run: jest.fn().mockResolvedValue({ signature: [0.5, 0.5] }) });
 
       const result = await service.getChangeSignature(input);
 
-      expect(diffWorkerPoolRunMock).toHaveBeenCalledWith({ kind: 'signature', ...input });
+      expect(run).toHaveBeenCalledWith({ kind: 'signature', ...input });
       expect(result).toEqual({ signature: [0.5, 0.5] });
     });
 
     it('passes a pool rejection through', async () => {
-      const diffWorkerPoolRunMock = jest.fn().mockRejectedValue(new Error('Image diff queue is full (256 jobs)'));
-      const { service } = await initService({ diffWorkerPoolRunMock });
+      const { service } = await setup({
+        run: jest.fn().mockRejectedValue(new Error('Image diff queue is full (256 jobs)')),
+      });
 
-      await expect(
-        service.getChangeSignature({
-          baseline: Buffer.from('a'),
-          image: Buffer.from('b'),
-          ignoreAreas: [],
-          threshold: 0.1,
-          includeAA: false,
-        })
-      ).rejects.toThrow('Image diff queue is full (256 jobs)');
+      await expect(service.getChangeSignature(input)).rejects.toThrow('Image diff queue is full (256 jobs)');
     });
   });
 });

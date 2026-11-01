@@ -64,7 +64,6 @@ describe('TestVariations API (e2e)', () => {
     });
   };
 
-  /** Posts and approves (as the logged-in user), so the variation of that branch gets a baseline. */
   const haveBaseline = async (branchName: string, image: Buffer, name = 'Screen') => {
     const run = await postRun(branchName, image, name);
     await requestWithAuth(app, 'post', '/test-runs/approve?merge=false', user.token).send([run.id]).expect(201);
@@ -131,7 +130,6 @@ describe('TestVariations API (e2e)', () => {
       expect(res.body.baselineName).toBe(res.body.baselines[0].baselineName);
       expect(res.body.baselines[0].testRun.id).toBe(second.id);
       expect(res.body.baselines[0].user.id).toBe(user.id);
-      // who approved, but never their credentials: any signed-in user can read this
       expect(res.body.baselines[0].user).toMatchObject({
         email: user.email,
         firstName: user.firstName,
@@ -169,7 +167,6 @@ describe('TestVariations API (e2e)', () => {
       await haveBaseline(project.mainBranchName, WHITE, 'Same');
       await haveBaseline('feature', WHITE, 'Same');
       await haveBaseline('feature', CHANGED, 'Only on feature');
-      // a feature variation that never got a baseline is not merged
       await postRun('feature', WHITE, 'No baseline');
 
       const res = await merge('feature', project.mainBranchName).expect(200);
@@ -189,12 +186,10 @@ describe('TestVariations API (e2e)', () => {
       expect(byName['Changed']).toMatchObject({ status: TestStatus.unresolved, merge: true, branchName: 'master' });
       expect(byName['Same'].status).toBe(TestStatus.ok);
       expect(byName['Only on feature'].status).toBe(TestStatus.new);
-      // a master variation was created for the screen that only existed on feature
       const created = await prisma.testVariation.findUnique({
         where: { id: byName['Only on feature'].testVariationId! },
       });
       expect(created).toMatchObject({ branchName: 'master', baselineName: null });
-      // the merged screenshot is a stored copy of the feature baseline
       expect(imageExists(byName['Changed'].imageName)).toBe(true);
     });
 
@@ -212,7 +207,6 @@ describe('TestVariations API (e2e)', () => {
 
       const res = await merge('feature', 'release').expect(200);
 
-      // compared against release's own baseline, not main's newer one
       expect(res.body).toMatchObject({ branchName: 'release', isRunning: false, merge: true, unresolvedCount: 1 });
       const [release] = await prisma.testVariation.findMany({
         where: { projectId: project.id, branchName: 'release' },
@@ -261,7 +255,6 @@ describe('TestVariations API (e2e)', () => {
       expect(await prisma.testVariation.findUnique({ where: { id: first.testVariationId! } })).toBeNull();
       expect(await prisma.baseline.count({ where: { testVariationId: first.testVariationId! } })).toBe(0);
       await waitFor(() => baselines.every((baseline) => !imageExists(baseline.baselineName)));
-      // the runs stay, without a variation, and keep their own screenshots
       const runs = await prisma.testRun.findMany({ where: { id: { in: [first.id, second.id] } } });
       expect(runs.map((run) => run.testVariationId)).toEqual([null, null]);
       expect(runs.every((run) => imageExists(run.imageName))).toBe(true);

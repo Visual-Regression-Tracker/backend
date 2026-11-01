@@ -10,6 +10,16 @@ const contextWith = (request: object) =>
 
 const handler = (): CallHandler & { handle: jest.Mock } => ({ handle: jest.fn().mockReturnValue(of('handled')) });
 
+const expectUntouched = (interceptor: { intercept: FilesToBodyInterceptor['intercept'] }, request: object) => {
+  const before = JSON.parse(JSON.stringify(request));
+  const next = handler();
+
+  interceptor.intercept(contextWith(request), next);
+
+  expect(JSON.parse(JSON.stringify(request))).toEqual(before);
+  expect(next.handle).toHaveBeenCalledTimes(1);
+};
+
 describe('FilesToBodyInterceptor', () => {
   const interceptor = new FilesToBodyInterceptor();
 
@@ -35,8 +45,6 @@ describe('FilesToBodyInterceptor', () => {
     expect(request.body.a).toEqual([existing, added]);
   });
 
-  // NOTE: current behavior — a non-array body value under the same field name
-  // has `.push` called on it, so a plain string value makes the interceptor throw.
   it('throws when the body already has a non-array value for the field', () => {
     const request = { body: { a: 'text' }, files: [file('a')] };
 
@@ -49,13 +57,7 @@ describe('FilesToBodyInterceptor', () => {
     ['an empty files array', { body: {}, files: [] }],
     ['files given as a field map', { body: {}, files: { a: [file('a')] } }],
   ])('leaves the request untouched with %s', (_label, request) => {
-    const before = JSON.parse(JSON.stringify(request));
-    const next = handler();
-
-    interceptor.intercept(contextWith(request), next);
-
-    expect(JSON.parse(JSON.stringify(request))).toEqual(before);
-    expect(next.handle).toHaveBeenCalledTimes(1);
+    expectUntouched(interceptor, request);
   });
 });
 
@@ -86,12 +88,6 @@ describe('FileToBodyInterceptor', () => {
     ['no file', { body: {} }],
     ['a file without a field name', { body: {}, file: { originalname: 'x.png' } }],
   ])('leaves the request untouched with %s', (_label, request) => {
-    const before = JSON.parse(JSON.stringify(request));
-    const next = handler();
-
-    interceptor.intercept(contextWith(request), next);
-
-    expect(JSON.parse(JSON.stringify(request))).toEqual(before);
-    expect(next.handle).toHaveBeenCalledTimes(1);
+    expectUntouched(interceptor, request);
   });
 });

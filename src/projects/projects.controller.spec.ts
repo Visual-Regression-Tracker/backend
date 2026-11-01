@@ -37,10 +37,6 @@ describe('Projects Controller', () => {
     controller = module.get<ProjectsController>(ProjectsController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
-
   it('lists all projects', async () => {
     projectsService.findAll.mockResolvedValue([TEST_PROJECT]);
 
@@ -96,8 +92,6 @@ describe('Projects Controller', () => {
     let app: INestApplication;
 
     beforeEach(async () => {
-      // the guard is stubbed to sign in a guest: favourites are personal, so
-      // no role guard may stand in front of them
       const module: TestingModule = await Test.createTestingModule({
         controllers: [ProjectsController],
         providers: [

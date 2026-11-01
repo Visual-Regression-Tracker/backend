@@ -3,14 +3,12 @@ import { Project, TestStatus } from '@prisma/client';
 import { readFileSync } from 'fs';
 import { PNG } from 'pngjs';
 import request from 'supertest';
-import { randomUUID } from 'crypto';
-import { TEST_PROJECT } from '../src/_data_';
 import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { StaticService } from '../src/static/static.service';
 import { TestRunsService } from '../src/test-runs/test-runs.service';
-import { createE2eApp, pngBuffer, RED, storedImagePath } from './api-helpers';
+import { CHANGED, createE2eApp, haveProject, pngBuffer, postRunDirect, storedImagePath } from './api-helpers';
 
 describe('Images (e2e)', () => {
   let app: INestApplication;
@@ -21,12 +19,9 @@ describe('Images (e2e)', () => {
   let prisma: PrismaService;
   let project: Project;
 
-  // supertest does not follow redirects, so the redirect itself is what is asserted
   const get = (path: string) => request(app.getHttpServer()).get(path);
 
-  /** Binary response bodies as a Buffer. */
   const asBuffer = (res: request.Response, callback: (err: Error | null, body: Buffer) => void) => {
-    // in Node the parser is handed the raw response stream, which superagent's types do not model
     const stream = res as unknown as NodeJS.ReadableStream;
     const chunks: Buffer[] = [];
     stream.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -36,19 +31,15 @@ describe('Images (e2e)', () => {
   beforeAll(async () => {
     const created = await createE2eApp();
     app = created.app;
-    projectsService = created.moduleFixture.get(ProjectsService);
-    buildsService = created.moduleFixture.get(BuildsService);
-    testRunsService = created.moduleFixture.get(TestRunsService);
-    staticService = created.moduleFixture.get(StaticService);
-    prisma = created.moduleFixture.get(PrismaService);
+    projectsService = created.get(ProjectsService);
+    buildsService = created.get(BuildsService);
+    testRunsService = created.get(TestRunsService);
+    staticService = created.get(StaticService);
+    prisma = created.get(PrismaService);
   });
 
   beforeEach(async () => {
-    project = await projectsService.create({
-      ...TEST_PROJECT,
-      autoApproveFeature: false,
-      name: `Images E2E ${randomUUID()}`,
-    });
+    project = await haveProject(projectsService, 'Images E2E', { autoApproveFeature: false });
   });
 
   afterEach(async () => {
@@ -60,13 +51,12 @@ describe('Images (e2e)', () => {
     await app.close();
   });
 
-  const postRun = async (image: Buffer) => {
-    const build = await buildsService.findOrCreate({ projectId: project.id, branchName: 'master' });
-    return testRunsService.postTestRun({
-      createTestRequestDto: { projectId: project.id, buildId: build.id, branchName: 'master', name: 'Screen' },
-      imageBuffer: image,
-    });
-  };
+  const postRun = async (image: Buffer) =>
+    postRunDirect(
+      testRunsService,
+      await buildsService.findOrCreate({ projectId: project.id, branchName: 'master' }),
+      image
+    );
 
   describe('GET /images/:fileName', () => {
     it('redirects to the stored file, cacheable privately, without authentication', async () => {
@@ -78,16 +68,13 @@ describe('Images (e2e)', () => {
       expect(res.headers['cache-control']).toBe('private, max-age=3000');
     });
 
-    it('a name that is not stored is still redirected', async () => {
-      // NOTE: current behavior — the HDD backend does not check the file, the static handler 404s after the redirect
+    it('redirects a well-formed name without checking that it is stored', async () => {
       const res = await get('/images/missing.screenshot.png').expect(302);
 
       expect(res.headers.location).toBe('/missing.screenshot.png');
     });
 
-    // a leading slash used to come back as a protocol-relative Location
-    // ('//example.com'): an open redirect to another host
-    it.each(['%2Fexample.com', '%2F%2Fexample.com', 'nested%2Fimage.png', '..'])(
+    it.each(['%2Fexample.com', '%2F%2Fexample.com', 'nested%2Fimage.png', '..', '%5Cevil.com'])(
       'refuses %s as an image name instead of redirecting',
       async (name) => {
         const res = await get(`/images/${name}`).expect(400);
@@ -100,7 +87,7 @@ describe('Images (e2e)', () => {
     it('500 when storage cannot produce a URL', async () => {
       jest.spyOn(staticService, 'getImageUrl').mockRejectedValueOnce(new Error('storage down'));
 
-      const res = await get('/images/any.png').expect(500);
+      const res = await get('/images/any.screenshot.png').expect(500);
 
       expect(res.text).toBe('Error occurred while getting the file.');
       expect(res.headers['cache-control']).toBeUndefined();
@@ -115,13 +102,14 @@ describe('Images (e2e)', () => {
 
       expect(res.headers['content-type']).toBe('image/png');
       expect(res.headers['content-disposition']).toBe(`attachment; filename="${run.imageName}"`);
+      expect(res.headers['cache-control']).toBe('private, max-age=31536000, immutable');
       expect(Buffer.compare(res.body, readFileSync(storedImagePath(run.imageName)))).toBe(0);
     });
 
     it('serves the diff and thumbnails of an unresolved run', async () => {
       const first = await postRun(pngBuffer());
       await testRunsService.approve(first.id);
-      const run = await postRun(pngBuffer([{ x: 5, y: 5, w: 10, h: 10, color: RED }]));
+      const run = await postRun(CHANGED);
       expect(run.status).toBe(TestStatus.unresolved);
       const stored = (await prisma.testRun.findUnique({ where: { id: run.id } }))!;
 
@@ -138,8 +126,8 @@ describe('Images (e2e)', () => {
       expect(res.body.message).toBe('Image not found: missing.screenshot.png');
     });
 
-    it('a name that merely starts with dots stays inside the image directory', async () => {
-      await get('/images/..missing.png/download').expect(404);
+    it('400 for a name that merely starts with dots, it is not a generated name', async () => {
+      await get('/images/..missing.png/download').expect(400);
     });
 
     it.each([

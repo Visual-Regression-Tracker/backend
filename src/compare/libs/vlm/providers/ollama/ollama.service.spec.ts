@@ -1,12 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { Ollama } from 'ollama';
 import { OllamaService } from './ollama.service';
 import { OllamaVlmConfig } from '../../vlm.types';
-
-jest.mock('zod/v3', () => {
-  const actualZod = jest.requireActual('zod');
-  return actualZod;
-});
 
 const mockChat = jest.fn();
 const mockList = jest.fn();
@@ -25,11 +21,13 @@ describe('OllamaService', () => {
   let service: OllamaService;
   const mockConfigService = {
     getOrThrow: jest.fn().mockReturnValue('http://localhost:11434'),
+    get: jest.fn(),
   };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     mockConfigService.getOrThrow.mockReturnValue('http://localhost:11434');
+    mockConfigService.get.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -85,7 +83,13 @@ describe('OllamaService', () => {
           },
         ],
         stream: false,
-        format: expect.any(Object),
+        format: {
+          $schema: 'http://json-schema.org/draft-07/schema#',
+          type: 'object',
+          properties: { identical: { type: 'boolean' }, description: { type: 'string' } },
+          required: ['identical', 'description'],
+          additionalProperties: false,
+        },
         options: {
           temperature: config.temperature,
         },
@@ -150,53 +154,108 @@ describe('OllamaService', () => {
     });
   });
 
+  describe('request timeout', () => {
+    type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
+    const realFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = realFetch;
+    });
+
+    const sdkFetch = async (): Promise<Fetch> => {
+      mockChat.mockResolvedValue(createMockResponse('{}'));
+      const fresh = new OllamaService(mockConfigService as any);
+      await fresh.generate(createConfig(), []);
+      const [options] = (Ollama as unknown as jest.Mock).mock.calls.at(-1)!;
+      expect(options.host).toBe('http://localhost:11434');
+      return options.fetch;
+    };
+
+    const stalledFetch = () =>
+      jest.fn().mockImplementation(
+        (_url: string, init: RequestInit) =>
+          new Promise((_, reject) => {
+            init.signal!.addEventListener('abort', () => reject(init.signal!.reason));
+          })
+      );
+
+    it('gives the SDK its own fetch and signals every request', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true });
+      global.fetch = fetchMock;
+      const fetchForSdk = await sdkFetch();
+
+      await fetchForSdk('http://localhost:11434/api/chat', { method: 'POST' });
+
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe('http://localhost:11434/api/chat');
+      expect(init.method).toBe('POST');
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+      expect(init.signal.aborted).toBe(false);
+    });
+
+    it('aborts a request that outlasts its timeout', async () => {
+      const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+      const timeout = jest.spyOn(AbortSignal, 'timeout').mockImplementation(() => realTimeout(1));
+      global.fetch = stalledFetch();
+      const fetchForSdk = await sdkFetch();
+
+      await expect(fetchForSdk('http://localhost:11434/api/chat')).rejects.toMatchObject({ name: 'TimeoutError' });
+      timeout.mockRestore();
+    });
+
+    it('defaults to five minutes', async () => {
+      const timeout = jest.spyOn(AbortSignal, 'timeout');
+      global.fetch = jest.fn().mockResolvedValue({});
+      const fetchForSdk = await sdkFetch();
+
+      await fetchForSdk('http://localhost:11434/api/chat');
+
+      expect(timeout).toHaveBeenCalledWith(300_000);
+      timeout.mockRestore();
+    });
+
+    it('still honours the signal of the caller', async () => {
+      global.fetch = stalledFetch();
+      const fetchForSdk = await sdkFetch();
+      const controller = new AbortController();
+
+      const request = fetchForSdk('http://localhost:11434/api/chat', { signal: controller.signal });
+      controller.abort();
+
+      await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+    });
+  });
+
   describe('listModels', () => {
     it('should return list of models', async () => {
-      const mockDate = new Date('2024-01-01');
-      const mockResponse = {
-        models: [
-          {
-            name: 'llava:7b',
-            model: 'llava:7b',
-            size: 1000,
-            digest: 'abc123',
-            modified_at: mockDate,
-            expires_at: mockDate,
-            size_vram: 500,
-            details: {
-              parent_model: '',
-              format: 'gguf',
-              family: 'llama',
-              families: ['llama'],
-              parameter_size: '7B',
-              quantization_level: 'Q4_0',
-            },
-          },
-          {
-            name: 'moondream',
-            model: 'moondream',
-            size: 2000,
-            digest: 'def456',
-            modified_at: mockDate,
-            expires_at: mockDate,
-            size_vram: 1000,
-            details: {
-              parent_model: '',
-              format: 'gguf',
-              family: 'moondream',
-              families: ['moondream'],
-              parameter_size: '1.6B',
-              quantization_level: 'Q4_0',
-            },
-          },
-        ],
-      };
-      mockList.mockResolvedValue(mockResponse);
+      const date = new Date('2024-01-01');
+      const modelEntry = (name: string, size: number, digest: string, family: string, parameterSize: string) => ({
+        name,
+        model: name,
+        size,
+        digest,
+        modified_at: date,
+        expires_at: date,
+        size_vram: size / 2,
+        details: {
+          parent_model: '',
+          format: 'gguf',
+          family,
+          families: [family],
+          parameter_size: parameterSize,
+          quantization_level: 'Q4_0',
+        },
+      });
+      const models = [
+        modelEntry('llava:7b', 1000, 'abc123', 'llama', '7B'),
+        modelEntry('moondream', 2000, 'def456', 'moondream', '1.6B'),
+      ];
+      mockList.mockResolvedValue({ models });
 
       const result = await service.listModels();
 
       expect(mockList).toHaveBeenCalled();
-      expect(result).toEqual(mockResponse.models);
+      expect(result).toEqual(models);
     });
 
     it('should throw error when API fails', async () => {

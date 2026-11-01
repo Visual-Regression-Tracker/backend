@@ -1,8 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { GUARDS_METADATA, INTERCEPTORS_METADATA, PIPES_METADATA } from '@nestjs/common/constants';
-import { NotFoundException, ValidationPipe } from '@nestjs/common';
-import { Role, TestStatus, User } from '@prisma/client';
-import { TestRunsController } from './test-runs.controller';
+import {
+  GUARDS_METADATA,
+  HTTP_CODE_METADATA,
+  INTERCEPTORS_METADATA,
+  PATH_METADATA,
+  PIPES_METADATA,
+  ROUTE_ARGS_METADATA,
+} from '@nestjs/common/constants';
+import { BadRequestException, NotFoundException, ParseArrayPipe } from '@nestjs/common';
+import { PNG } from 'pngjs';
+import { Role, User } from '@prisma/client';
+import { TestRunsController, multipartLimits, parseIds, parseUuidIds } from './test-runs.controller';
 import { TestRunsService } from './test-runs.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +22,9 @@ import { generateTestRun } from '../_data_';
 import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto';
 import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipart.dto';
 import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
+
+const png = PNG.sync.write(new PNG({ width: 1, height: 1 }));
+const request = { buildId: 'build', projectId: 'project', name: 'name', branchName: 'develop' };
 
 const initController = async (testRunsService: Partial<Record<keyof TestRunsService, jest.Mock>> = {}) => {
   const module: TestingModule = await Test.createTestingModule({
@@ -28,45 +39,41 @@ const initController = async (testRunsService: Partial<Record<keyof TestRunsServ
   return module.get<TestRunsController>(TestRunsController);
 };
 
+const stub = async (method: keyof TestRunsService, result?: unknown) => {
+  const mock = jest.fn().mockResolvedValue(result);
+  return { controller: await initController({ [method]: mock }), mock };
+};
+
 describe('TestRuns Controller', () => {
-  let controller: TestRunsController;
   const user = { id: 'user id' } as User;
   const ignoreAreas = [{ x: 1, y: 2, width: 3, height: 4 }];
 
-  beforeEach(async () => {
-    controller = await initController();
-  });
-
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('should be defined', async () => {
+    expect(await initController()).toBeDefined();
   });
 
   it('lists the test runs of a build', async () => {
     const list = [{ id: 'a' }, { id: 'b' }];
-    const findMany = jest.fn().mockResolvedValueOnce(list);
-    controller = await initController({ findMany });
+    const { controller, mock } = await stub('findMany', list);
 
     const result = await controller.get('build id');
 
-    expect(findMany).toHaveBeenCalledWith('build id');
+    expect(mock).toHaveBeenCalledWith('build id');
     expect(result).toBe(list);
   });
 
-  it('returns the details of one test run as the service gives them', async () => {
+  it('returns the run as stored, with its variation (kept for existing clients)', async () => {
     const testRun = generateTestRun();
-    const findOne = jest.fn().mockResolvedValueOnce(testRun);
-    controller = await initController({ findOne });
+    const { controller, mock } = await stub('findOne', testRun);
 
     const result = await controller.getDetails(testRun.id);
 
-    expect(findOne).toHaveBeenCalledWith(testRun.id);
-    // NOTE: current behavior — returned raw (no TestRunDto mapping), so it also carries testVariation etc.
+    expect(mock).toHaveBeenCalledWith(testRun.id);
     expect(result).toBe(testRun);
   });
 
   it('throws NotFoundException for an unknown test run', async () => {
-    const findOne = jest.fn().mockResolvedValueOnce(null);
-    controller = await initController({ findOne });
+    const { controller } = await stub('findOne', null);
 
     await expect(controller.getDetails('missing')).rejects.toThrow(
       new NotFoundException('Test run not found: missing')
@@ -76,97 +83,78 @@ describe('TestRuns Controller', () => {
   describe('approveTestRun', () => {
     it('approves every id one after another with merge flag, no auto-approve and the current user', async () => {
       const order: string[] = [];
-      const approve = jest.fn().mockImplementation(async (id: string) => {
+      const { controller, mock } = await stub('approve');
+      mock.mockImplementation(async (id: string) => {
         order.push(`start ${id}`);
         await new Promise((resolve) => setTimeout(resolve, 0));
         order.push(`end ${id}`);
       });
-      controller = await initController({ approve });
 
       const result = await controller.approveTestRun(user, ['1', '2'], true);
 
-      expect(approve).toHaveBeenNthCalledWith(1, '1', true, false, user.id);
-      expect(approve).toHaveBeenNthCalledWith(2, '2', true, false, user.id);
+      expect(mock).toHaveBeenNthCalledWith(1, '1', true, false, user.id);
+      expect(mock).toHaveBeenNthCalledWith(2, '2', true, false, user.id);
       expect(order).toEqual(['start 1', 'end 1', 'start 2', 'end 2']);
       expect(result).toBeUndefined();
     });
 
     it('stops at the first failing id', async () => {
-      const approve = jest.fn().mockRejectedValueOnce(new Error('boom'));
-      controller = await initController({ approve });
+      const { controller, mock } = await stub('approve');
+      mock.mockRejectedValueOnce(new Error('boom'));
 
       await expect(controller.approveTestRun(user, ['1', '2'], false)).rejects.toThrow('boom');
 
-      expect(approve).toHaveBeenCalledTimes(1);
-      expect(approve).toHaveBeenCalledWith('1', false, false, user.id);
+      expect(mock).toHaveBeenCalledTimes(1);
+      expect(mock).toHaveBeenCalledWith('1', false, false, user.id);
     });
 
     it('does nothing for an empty list', async () => {
-      const approve = jest.fn();
-      controller = await initController({ approve });
+      const { controller, mock } = await stub('approve');
 
       await controller.approveTestRun(user, [], false);
 
-      expect(approve).not.toHaveBeenCalled();
+      expect(mock).not.toHaveBeenCalled();
     });
   });
 
   it('returns the matching variations of a test run', async () => {
     const group = { variations: [{ id: 'a' }], skipped: [] as unknown[] };
-    const getMatchingVariations = jest.fn().mockResolvedValueOnce(group);
-    controller = await initController({ getMatchingVariations });
+    const { controller, mock } = await stub('getMatchingVariations', group);
 
     const result = await controller.getMatchingSiblings('a');
 
-    expect(getMatchingVariations).toHaveBeenCalledWith('a');
+    expect(mock).toHaveBeenCalledWith('a');
     expect(result).toBe(group);
   });
 
-  it('rejects every id by setting its status to failed', async () => {
-    const setStatus = jest.fn().mockResolvedValue(undefined);
-    controller = await initController({ setStatus });
+  it.each(['reject', 'delete'] as const)('%s goes through every id one by one', async (method) => {
+    const { controller, mock } = await stub(method);
 
-    const result = await controller.reject(['1', '2']);
+    const result = await controller[method](['1', '2']);
 
-    expect(setStatus.mock.calls).toEqual([
-      ['1', TestStatus.failed],
-      ['2', TestStatus.failed],
-    ]);
+    expect(mock.mock.calls).toEqual([['1'], ['2']]);
     expect(result).toBeUndefined();
   });
 
-  it('deletes every id', async () => {
-    const deleteMock = jest.fn().mockResolvedValue(undefined);
-    controller = await initController({ delete: deleteMock });
+  it('revert passes the ids to the service as one request and answers 204', async () => {
+    const { controller, mock } = await stub('revert');
 
-    const result = await controller.delete(['1', '2']);
+    const result = await controller.revert(['1', '2']);
 
-    expect(deleteMock.mock.calls).toEqual([['1'], ['2']]);
+    expect(mock).toHaveBeenCalledTimes(1);
+    expect(mock).toHaveBeenCalledWith(['1', '2']);
     expect(result).toBeUndefined();
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, TestRunsController.prototype.revert)).toBe(204);
+    expect(Reflect.getMetadata(PATH_METADATA, TestRunsController.prototype.revert)).toBe('revert');
   });
 
-  it('replaces the ignore areas of every id with the same areas', async () => {
-    const updateIgnoreAreas = jest.fn().mockResolvedValue(undefined);
-    controller = await initController({ updateIgnoreAreas });
+  it.each(['updateIgnoreAreas', 'addIgnoreAreas'] as const)('%s hands the same areas to every id', async (method) => {
+    const { controller, mock } = await stub(method);
     const data: UpdateIgnoreAreasDto = { ids: ['1', '2'], ignoreAreas };
 
-    const result = await controller.updateIgnoreAreas(data);
+    const result = await controller[method](data);
 
-    expect(updateIgnoreAreas.mock.calls).toEqual([
-      ['1', ignoreAreas],
-      ['2', ignoreAreas],
-    ]);
-    expect(result).toBeUndefined();
-  });
-
-  it('adds the same ignore areas to every id', async () => {
-    const addIgnoreAreas = jest.fn().mockResolvedValue(undefined);
-    controller = await initController({ addIgnoreAreas });
-    const data: UpdateIgnoreAreasDto = { ids: ['1', '2'], ignoreAreas };
-
-    const result = await controller.addIgnoreAreas(data);
-
-    expect(addIgnoreAreas.mock.calls).toEqual([
+    expect(mock.mock.calls).toEqual([
       ['1', ignoreAreas],
       ['2', ignoreAreas],
     ]);
@@ -175,52 +163,124 @@ describe('TestRuns Controller', () => {
 
   it('updates the comment of a test run and returns what the service returns', async () => {
     const testRun = generateTestRun({ comment: 'new' });
-    const update = jest.fn().mockResolvedValueOnce(testRun);
-    controller = await initController({ update });
+    const { controller, mock } = await stub('update', testRun);
 
     const result = await controller.update(testRun.id, { comment: 'new' });
 
-    expect(update).toHaveBeenCalledWith(testRun.id, { comment: 'new' });
+    expect(mock).toHaveBeenCalledWith(testRun.id, { comment: 'new' });
     expect(result).toBe(testRun);
   });
 
-  it('decodes the base64 image and posts the test run', async () => {
+  it('passes the request and the decoded image to the service', async () => {
     const response = { id: 'result' };
-    const postTestRun = jest.fn().mockResolvedValueOnce(response);
-    controller = await initController({ postTestRun });
-    const createTestRequestDto = {
-      buildId: 'build',
-      projectId: 'project',
-      name: 'name',
-      branchName: 'develop',
-      imageBase64: Buffer.from('png bytes').toString('base64'),
-    } as CreateTestRequestBase64Dto;
+    const { controller, mock } = await stub('postTestRun', response);
+    const createTestRequestDto = { ...request, imageBase64: png.toString('base64') } as CreateTestRequestBase64Dto;
 
     const result = await controller.postTestRun(createTestRequestDto);
 
-    expect(postTestRun).toHaveBeenCalledWith({ createTestRequestDto, imageBuffer: Buffer.from('png bytes') });
-    // NOTE: current behavior — the whole dto, imageBase64 included, is passed on to the service
-    expect(postTestRun.mock.calls[0][0].createTestRequestDto.imageBase64).toBe(createTestRequestDto.imageBase64);
+    expect(mock).toHaveBeenCalledWith({ createTestRequestDto, imageBuffer: png });
+    expect(mock.mock.calls[0][0].createTestRequestDto.imageBase64).toBe(createTestRequestDto.imageBase64);
     expect(result).toBe(response);
   });
 
   it('posts a multipart test run with the uploaded file buffer', async () => {
     const response = { id: 'result' };
-    const postTestRun = jest.fn().mockResolvedValueOnce(response);
-    controller = await initController({ postTestRun });
-    const buffer = Buffer.from('png bytes');
+    const { controller, mock } = await stub('postTestRun', response);
     const createTestRequestDto = {
-      buildId: 'build',
-      projectId: 'project',
-      name: 'name',
-      branchName: 'develop',
-      image: { buffer } as Express.Multer.File,
+      ...request,
+      image: { buffer: png } as Express.Multer.File,
     } as CreateTestRequestMultipartDto;
 
     const result = await controller.postTestRunMultipart(createTestRequestDto);
 
-    expect(postTestRun).toHaveBeenCalledWith({ createTestRequestDto, imageBuffer: buffer });
+    expect(mock).toHaveBeenCalledWith({ createTestRequestDto, imageBuffer: png });
     expect(result).toBe(response);
+  });
+
+  it.each([
+    [
+      'a base64 image that is not a PNG',
+      (controller: TestRunsController) =>
+        controller.postTestRun({ imageBase64: Buffer.from('GIF89a').toString('base64') } as CreateTestRequestBase64Dto),
+    ],
+    [
+      'a multipart image without a buffer',
+      (controller: TestRunsController) =>
+        controller.postTestRunMultipart({ image: {} as Express.Multer.File } as CreateTestRequestMultipartDto),
+    ],
+  ])('rejects %s and posts nothing', async (_case, post) => {
+    const { controller, mock } = await stub('postTestRun');
+
+    await expect(post(controller)).rejects.toThrow(BadRequestException);
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it.each(['approveTestRun', 'reject', 'delete', 'revert'] as const)(
+    'validates the bulk ids of %s as an array',
+    (method) => {
+      const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, TestRunsController, method) as Record<
+        string,
+        { data?: unknown; pipes: unknown[] }
+      >;
+
+      const pipes = Object.values(args).flatMap((arg) => arg.pipes);
+
+      expect(pipes.some((pipe) => pipe instanceof ParseArrayPipe)).toBe(true);
+    }
+  );
+
+  it('parseIds rejects a body that is not an array and passes an array through', async () => {
+    const pipe = parseIds();
+
+    await expect(pipe.transform({ ids: [] }, { type: 'body' })).rejects.toThrow(BadRequestException);
+    await expect(pipe.transform(['a', 'b'], { type: 'body' })).resolves.toEqual(['a', 'b']);
+  });
+
+  it('parseUuidIds rejects ids that are not uuids and passes uuids through', () => {
+    const pipe = parseUuidIds();
+    const id = '10fb5e02-64e0-4cf5-9f17-c00ab3c96658';
+
+    expect(pipe.transform([id], { type: 'body' })).toEqual([id]);
+    expect(() => pipe.transform([id, 'abc', '1'], { type: 'body' })).toThrow(
+      new BadRequestException('Not a uuid: abc, 1')
+    );
+  });
+
+  it('revert validates the ids as uuids', () => {
+    const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, TestRunsController, 'revert') as Record<
+      string,
+      { pipes: unknown[] }
+    >;
+
+    expect(Object.values(args).flatMap((arg) => arg.pipes)).toHaveLength(2);
+  });
+
+  describe('multipartLimits', () => {
+    afterEach(() => {
+      delete process.env.MULTIPART_FILE_SIZE_LIMIT;
+    });
+
+    it('defaults to 100 MiB', () => {
+      expect(multipartLimits()).toEqual({ fileSize: 104857600 });
+    });
+
+    it('reads the limit from the environment on every call', () => {
+      process.env.MULTIPART_FILE_SIZE_LIMIT = '1000';
+
+      expect(multipartLimits()).toEqual({ fileSize: 1000 });
+    });
+
+    it('falls back to the default for a value that is not a number', () => {
+      process.env.MULTIPART_FILE_SIZE_LIMIT = 'abc';
+
+      expect(multipartLimits()).toEqual({ fileSize: 104857600 });
+    });
+
+    it('falls back to the default for a negative value', () => {
+      process.env.MULTIPART_FILE_SIZE_LIMIT = '-1';
+
+      expect(multipartLimits()).toEqual({ fileSize: 104857600 });
+    });
   });
 
   describe('route protection', () => {
@@ -237,7 +297,7 @@ describe('TestRuns Controller', () => {
       }
     );
 
-    it.each(['approveTestRun', 'reject', 'delete', 'updateIgnoreAreas', 'addIgnoreAreas', 'update'] as const)(
+    it.each(['approveTestRun', 'reject', 'revert', 'delete', 'updateIgnoreAreas', 'addIgnoreAreas', 'update'] as const)(
       '%s needs a logged in admin or editor',
       (method) => {
         expect(guardsOf(method)).toEqual([JwtAuthGuard, RoleGuard]);
@@ -250,19 +310,13 @@ describe('TestRuns Controller', () => {
       expect(rolesOf(method)).toEqual([Role.admin, Role.editor]);
     });
 
-    it('moves the uploaded image into the body and validates the multipart request', () => {
+    it('moves the uploaded image into the body; the DTO carries its own validation options', () => {
       const method = TestRunsController.prototype.postTestRunMultipart;
       const interceptors = Reflect.getMetadata(INTERCEPTORS_METADATA, method);
-      const pipes = Reflect.getMetadata(PIPES_METADATA, method);
 
       expect(interceptors).toHaveLength(2);
       expect(interceptors[1]).toBe(FileToBodyInterceptor);
-      expect(pipes).toHaveLength(1);
-      expect(pipes[0]).toBeInstanceOf(ValidationPipe);
-      expect(pipes[0]).toMatchObject({
-        isTransformEnabled: true,
-        validatorOptions: expect.objectContaining({ forbidUnknownValues: true }),
-      });
+      expect(Reflect.getMetadata(PIPES_METADATA, method)).toBeUndefined();
     });
   });
 });

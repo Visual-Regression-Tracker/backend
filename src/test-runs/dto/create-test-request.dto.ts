@@ -34,4 +34,9 @@ export class CreateTestRequestDto extends BaselineDataDto {
   @IsOptional()
   @IsString()
   comment?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sourceBranch?: string;
 }

@@ -1,4 +1,4 @@
-import { PNG } from 'pngjs';
+import { paintedPng, pngBytes, Rgb, solidPng, square } from '../../test-utils';
 import {
   computeChangeSignature,
   signaturesMatch,
@@ -10,32 +10,13 @@ import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 const WIDTH = 40;
 const HEIGHT = 40;
 
-const png = (paint: (set: (x: number, y: number, rgb: [number, number, number]) => void) => void): Buffer => {
-  const image = new PNG({ width: WIDTH, height: HEIGHT });
-  image.data.fill(255);
-  paint((x, y, [r, g, b]) => {
-    const index = (y * WIDTH + x) * 4;
-    image.data[index] = r;
-    image.data[index + 1] = g;
-    image.data[index + 2] = b;
-    image.data[index + 3] = 255;
-  });
-  return PNG.sync.write(image);
-};
+const block = (left: number, top: number, rgb: Rgb): Buffer =>
+  pngBytes(paintedPng(WIDTH, HEIGHT, square(left, top, 8, rgb)));
 
-const block = (left: number, top: number, rgb: [number, number, number]): Buffer =>
-  png((set) => {
-    for (let y = top; y < top + 8; y++) {
-      for (let x = left; x < left + 8; x++) {
-        set(x, y, rgb);
-      }
-    }
-  });
+const blank = pngBytes(solidPng(WIDTH, HEIGHT));
 
-const blank = png(() => undefined);
-
-const RED: [number, number, number] = [255, 0, 0];
-const BLUE: [number, number, number] = [0, 0, 255];
+const RED: Rgb = [255, 0, 0];
+const BLUE: Rgb = [0, 0, 255];
 
 const signatureOf = (baseline: Buffer, image: Buffer, ignoreAreas: IgnoreAreaDto[] = []): number[] | null =>
   computeChangeSignature({
@@ -48,34 +29,18 @@ const signatureOf = (baseline: Buffer, image: Buffer, ignoreAreas: IgnoreAreaDto
   }).signature;
 
 describe('computeChangeSignature', () => {
-  it('has no signature when the images have different dimensions', () => {
-    const taller = new PNG({ width: WIDTH, height: HEIGHT * 2 });
-    taller.data.fill(255);
-
-    expect(signatureOf(blank, PNG.sync.write(taller))).toBeNull();
-  });
-
-  it('has no signature for a checkpoint with the same pixel count but another shape', () => {
-    const wide = new PNG({ width: WIDTH * 2, height: HEIGHT / 2 });
-    wide.data.fill(0);
-
-    expect(signatureOf(blank, PNG.sync.write(wide))).toBeNull();
-  });
-
-  it('has no signature for a checkpoint of another width only', () => {
-    const wider = new PNG({ width: WIDTH * 2, height: HEIGHT });
-    wider.data.fill(0);
-
-    expect(signatureOf(blank, PNG.sync.write(wider))).toBeNull();
+  it.each([
+    ['different dimensions', WIDTH, HEIGHT * 2],
+    ['the same pixel count but another shape', WIDTH * 2, HEIGHT / 2],
+    ['another width only', WIDTH * 2, HEIGHT],
+  ])('has no signature for a checkpoint with %s', (_, width, height) => {
+    expect(signatureOf(blank, pngBytes(solidPng(width, height)))).toBeNull();
   });
 
   it('has no signature when nothing changed', () => {
     expect(signatureOf(blank, blank)).toBeNull();
   });
 
-  // One unreadable screenshot must not reject the whole matching request: the
-  // siblings are signed in a single fan-out, so a throw here would take the
-  // variations dialog down with it rather than skipping that one candidate.
   it('has no signature when the checkpoint cannot be decoded', () => {
     expect(signatureOf(blank, Buffer.from('not a png'))).toBeNull();
   });
@@ -88,7 +53,6 @@ describe('computeChangeSignature', () => {
     const signature = signatureOf(blank, block(0, 0, RED))!;
 
     const brightest = signature.indexOf(Math.max(...signature));
-    // 4 buckets per channel: pure red is the last red bucket, first green/blue
     expect(brightest).toBe(3 * 16);
     expect(signature.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1);
   });
@@ -109,7 +73,6 @@ describe('computeChangeSignature', () => {
 });
 
 describe('computeChangeSignature with structured-clone input', () => {
-  // postMessage hands the worker Uint8Array views, possibly over a larger buffer
   it('reads Uint8Array views the same as Buffers', () => {
     const changed = block(0, 0, RED);
     const padded = new Uint8Array(changed.length + 16);
@@ -147,9 +110,7 @@ describe('signaturesMatch', () => {
 
   it('matches at a cosine similarity of at least 0.9', () => {
     expect(SIGNATURE_SIMILARITY_THRESHOLD).toBe(0.9);
-    // cos = 0.95 / sqrt(0.95^2 + 0.3^2) ≈ 0.954
     expect(signaturesMatch([1, 0], [0.95, 0.3])).toBe(true);
-    // cos = 0.8 / sqrt(0.8^2 + 0.6^2) = 0.8
     expect(signaturesMatch([1, 0], [0.8, 0.6])).toBe(false);
   });
 
@@ -158,10 +119,8 @@ describe('signaturesMatch', () => {
     expect(signaturesMatch([1, 0], [0, 0])).toBe(false);
   });
 
-  it('compares only as many buckets as the first signature has', () => {
+  it('compares only the buckets of the first signature (signatures are always SIGNATURE_LENGTH long)', () => {
     expect(SIGNATURE_LENGTH).toBe(64);
-    // NOTE: current behavior — a shorter second signature yields NaN (no match),
-    // while extra buckets in the second one are silently ignored (a match).
     expect(signaturesMatch([1, 0], [1])).toBe(false);
     expect(signaturesMatch([1], [1, 5])).toBe(true);
   });

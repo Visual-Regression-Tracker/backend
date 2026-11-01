@@ -11,12 +11,6 @@ export interface BuildStats {
 const PASSED_STATUSES: TestStatus[] = [TestStatus.ok, TestStatus.approved, TestStatus.autoApproved];
 const UNRESOLVED_STATUSES: TestStatus[] = [TestStatus.unresolved, TestStatus.new];
 
-/**
- * Aggregates test-run statistics per build inside the database instead of
- * loading every test-run row into the API process: builds can hold thousands
- * of runs and these stats are recomputed on every build_updated event burst
- * during ingestion.
- */
 export async function getBuildsStats(prisma: PrismaService, buildIds: string[]): Promise<Map<string, BuildStats>> {
   const stats = new Map<string, BuildStats>(
     buildIds.map((id) => [id, { passedCount: 0, unresolvedCount: 0, failedCount: 0, merge: false }])
@@ -25,20 +19,13 @@ export async function getBuildsStats(prisma: PrismaService, buildIds: string[]):
     return stats;
   }
 
-  const [statusCounts, mergeBuilds] = await Promise.all([
-    prisma.testRun.groupBy({
-      by: ['buildId', 'status'],
-      where: { buildId: { in: buildIds } },
-      _count: { _all: true },
-    }),
-    prisma.testRun.groupBy({
-      by: ['buildId'],
-      where: { buildId: { in: buildIds }, merge: true },
-    }),
-  ]);
+  const rows = await prisma.testRun.groupBy({
+    by: ['buildId', 'status', 'merge'],
+    where: { buildId: { in: buildIds } },
+    _count: { _all: true },
+  });
 
-  for (const row of statusCounts) {
-    // every row belongs to one of buildIds, and the map holds an entry for each
+  for (const row of rows) {
     const buildStats = stats.get(row.buildId)!;
     const count = row._count._all;
     if (PASSED_STATUSES.includes(row.status)) {
@@ -48,9 +35,9 @@ export async function getBuildsStats(prisma: PrismaService, buildIds: string[]):
     } else if (row.status === TestStatus.failed) {
       buildStats.failedCount += count;
     }
-  }
-  for (const row of mergeBuilds) {
-    stats.get(row.buildId)!.merge = true;
+    if (row.merge) {
+      buildStats.merge = true;
+    }
   }
   return stats;
 }
