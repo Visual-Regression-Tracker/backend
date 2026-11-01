@@ -28,6 +28,7 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
 import { CurrentUser } from '../shared/current-user.decorator';
+import { maskProjectApiKey } from './api-key-mask';
 
 @Controller('projects')
 @ApiTags('projects')
@@ -38,8 +39,8 @@ export class ProjectsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOkResponse({ type: ProjectDto, isArray: true })
-  getAll(): Promise<Project[]> {
-    return this.projectsService.findAll();
+  async getAll(): Promise<Project[]> {
+    return (await this.projectsService.findAll()).map(maskProjectApiKey);
   }
 
   // No RoleGuard: favourites are personal. Declared before any `:id` route so "favorites" is not read as an id
@@ -77,8 +78,8 @@ export class ProjectsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
-  create(@Body() createProjectDto: CreateProjectDto): Promise<Project> {
-    return this.projectsService.create(createProjectDto);
+  async create(@Body() createProjectDto: CreateProjectDto): Promise<Project> {
+    return maskProjectApiKey(await this.projectsService.create(createProjectDto));
   }
 
   @Put()
@@ -86,8 +87,8 @@ export class ProjectsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
-  update(@Body() projectDto: UpdateProjectDto): Promise<Project> {
-    return this.projectsService.update(projectDto);
+  async update(@Body() projectDto: UpdateProjectDto): Promise<Project> {
+    return maskProjectApiKey(await this.projectsService.update(projectDto));
   }
 
   @Delete(':id')
@@ -96,7 +97,7 @@ export class ProjectsController {
   @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
   @ApiParam({ name: 'id', required: true })
-  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Project> {
-    return this.projectsService.remove(id);
+  async remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Project> {
+    return maskProjectApiKey(await this.projectsService.remove(id));
   }
 }

@@ -67,6 +67,33 @@ describe('Projects Controller', () => {
     expect(projectsService.remove).toHaveBeenCalledWith('a9385fc1-884d-4f9f-915e-40da0e7773d5');
   });
 
+  describe('a project with a Gemini key', () => {
+    const geminiProject = {
+      ...TEST_PROJECT,
+      imageComparisonConfig: JSON.stringify({ provider: 'gemini', apiKey: 'AIzaSy-secret-gemini-key-1234' }),
+    };
+    const masked = {
+      ...TEST_PROJECT,
+      imageComparisonConfig: JSON.stringify({ provider: 'gemini', apiKey: '••••1234' }),
+    };
+
+    it('lists it with the key masked', async () => {
+      projectsService.findAll.mockResolvedValue([geminiProject]);
+
+      await expect(controller.getAll()).resolves.toEqual([masked]);
+    });
+
+    it.each([
+      ['create', 'create', () => controller.create({} as CreateProjectDto)],
+      ['update', 'update', () => controller.update({} as UpdateProjectDto)],
+      ['remove', 'remove', () => controller.remove(projectId)],
+    ] as const)('%s answers with the key masked', async (_name, method, call) => {
+      projectsService[method].mockResolvedValue(geminiProject);
+
+      await expect(call()).resolves.toEqual(masked);
+    });
+  });
+
   it("lists the current user's favourite project ids", async () => {
     projectsService.findFavoriteIds.mockResolvedValue([projectId]);
 
