@@ -66,7 +66,7 @@ describe('TestVariations API (e2e)', () => {
 
   const haveBaseline = async (branchName: string, image: Buffer, name = 'Screen') => {
     const run = await postRun(branchName, image, name);
-    await requestWithAuth(app, 'post', '/test-runs/approve?merge=false', user.token).send([run.id]).expect(201);
+    await requestWithAuth(app, 'post', '/test-runs/approve?merge=false', user.token).send([run.id]).expect(200);
     return prisma.testRun.findUnique({ where: { id: run.id } });
   };
 
@@ -233,6 +233,48 @@ describe('TestVariations API (e2e)', () => {
       const guest = await haveUserLogged(usersService, 'guest');
       try {
         await merge('feature', project.mainBranchName, guest.token).expect(403);
+      } finally {
+        await usersService.delete(guest.id);
+      }
+    });
+  });
+
+  describe('POST /test-variations/merge', () => {
+    const merge = (body: object, token = user.token) =>
+      requestWithAuth(app, 'post', '/test-variations/merge', token).send(body);
+
+    it('merges the branches named in the body like GET does', async () => {
+      await haveBaseline(project.mainBranchName, WHITE);
+      await haveBaseline('feature', CHANGED);
+
+      const res = await merge({
+        projectId: project.id,
+        fromBranch: 'feature',
+        toBranch: project.mainBranchName,
+      }).expect(201);
+
+      expect(res.body).toMatchObject({
+        projectId: project.id,
+        branchName: project.mainBranchName,
+        isRunning: false,
+        merge: true,
+        unresolvedCount: 1,
+      });
+      expect(await prisma.testRun.count({ where: { buildId: res.body.id } })).toBe(1);
+    });
+
+    it('400 without the branches', async () => {
+      await merge({ projectId: project.id }).expect(400);
+    });
+
+    it('400 for a projectId that is not a uuid', async () => {
+      await merge({ projectId: 'x', fromBranch: 'a', toBranch: 'b' }).expect(400);
+    });
+
+    it('403 for a guest', async () => {
+      const guest = await haveUserLogged(usersService, 'guest');
+      try {
+        await merge({ projectId: project.id, fromBranch: 'feature', toBranch: 'master' }, guest.token).expect(403);
       } finally {
         await usersService.delete(guest.id);
       }

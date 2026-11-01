@@ -56,9 +56,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
   }
 
   getMessage(exception: Error): string {
-    const response = (exception as { getResponse?: () => unknown }).getResponse?.();
-    const details = typeof response === 'object' ? (response as { message?: unknown } | null)?.message : undefined;
-    return Array.isArray(details) ? details.join(', ') : exception.message;
+    return errorMessage(exception);
   }
 
   isUniqueConstraintException(exception: Error): boolean {
@@ -78,4 +76,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (message.includes('Forbidden resource')) return 'You do not have permission to perform this operation.';
     return message;
   }
+}
+
+export function errorMessage(exception: Error): string {
+  const response = (exception as { getResponse?: () => unknown }).getResponse?.();
+  const details = typeof response === 'object' ? (response as { message?: unknown } | null)?.message : undefined;
+  return Array.isArray(details) ? details.join(', ') : exception.message;
 }
