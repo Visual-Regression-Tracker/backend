@@ -1,10 +1,5 @@
 import { Logger } from '@nestjs/common';
-import {
-  DEFAULT_JWT_LIFE_TIME,
-  DEVELOPMENT_JWT_SECRET,
-  REFUSED_IN_PRODUCTION_JWT_SECRETS,
-  validateEnv,
-} from './env.validation';
+import { DEFAULT_JWT_LIFE_TIME, DEVELOPMENT_JWT_SECRET, validateEnv } from './env.validation';
 
 describe('validateEnv', () => {
   const GOOD = { JWT_SECRET: 'a-random-secret', JWT_LIFE_TIME: '12h', APP_FRONTEND_URL: 'http://localhost:8080' };
@@ -32,24 +27,14 @@ describe('validateEnv', () => {
       expect(() => validateEnv({ ...GOOD, JWT_SECRET: value }, logger)).toThrow('JWT_SECRET is not set');
     });
 
-    it('refuses the public sample value when NODE_ENV=production', () => {
-      expect(() => validateEnv({ ...GOOD, JWT_SECRET: 'jwtPrivateKey', NODE_ENV: 'production' }, logger)).toThrow(
-        'Refusing to start'
-      );
-    });
-
     it.each([
+      ['the public sample value when NODE_ENV=production', 'jwtPrivateKey', 'production'],
       ['the public sample value when NODE_ENV=development', 'jwtPrivateKey', 'development'],
       ['the public sample value when NODE_ENV is unset', 'jwtPrivateKey', undefined],
       ['the committed development secret in production', DEVELOPMENT_JWT_SECRET, 'production'],
     ])('only warns about %s', (_, secret, nodeEnv) => {
       expect(() => validateEnv({ ...GOOD, JWT_SECRET: secret, NODE_ENV: nodeEnv }, logger)).not.toThrow();
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('publicly known'));
-    });
-
-    it('lists the sample value among the refused ones', () => {
-      expect(REFUSED_IN_PRODUCTION_JWT_SECRETS).toContain('jwtPrivateKey');
-      expect(REFUSED_IN_PRODUCTION_JWT_SECRETS).not.toContain(DEVELOPMENT_JWT_SECRET);
     });
   });
 

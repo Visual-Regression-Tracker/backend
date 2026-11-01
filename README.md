@@ -48,7 +48,7 @@ lines in `.env` (section `# optional`) show the same variables.
 | `APP_PORT` | `3000` | Port the API listens on. |
 | `APP_FRONTEND_URL` | none | Frontend base URL, used to build links in test run results. |
 | `BODY_PARSER_JSON_LIMIT` | body-parser default | Maximum JSON request body size, e.g. `5mb`. |
-| `JWT_SECRET` | none, required | Key that signs login tokens; startup fails when it is unset. The public sample `jwtPrivateKey` is refused with `NODE_ENV=production`, and the sample in `.env` only logs a warning. Generate one with `openssl rand -hex 32`. |
+| `JWT_SECRET` | none, required | Key that signs login tokens; startup fails when it is unset. Public sample values (`jwtPrivateKey`, the one in `.env`) log a warning. Generate one with `openssl rand -hex 32`. |
 | `JWT_LIFE_TIME` | `1d` | Token lifetime as a timespan such as `1d`, `12h` or `3600s`. An invalid value falls back to `1d` with a warning. |
 | `JWT_LEGACY_EMAIL_TOKENS` | `true` | Accept tokens issued before the `sub` claim existed (they carry only the email). Set `false` once those tokens have expired. |
 | `SERVER_TIMEOUT` | Node.js default | HTTP `server.timeout`, in milliseconds. |
@@ -57,7 +57,6 @@ lines in `.env` (section `# optional`) show the same variables.
 | `BUILD_RETENTION_GRACE_MINUTES` | `60` | Automatic build pruning keeps builds active within this many minutes. `0` turns that protection off. |
 | `STRICT_BUILD_PROJECT_CHECK` | `false` | `true` (case-insensitive) makes `POST /test-runs` reject a build that belongs to another project with `400`. By default such a request is accepted with a warning, because older clients may send such pairs. |
 | `LOG_LEVEL` | all levels | Comma-separated Nest log levels to keep, e.g. `log,warn,error,fatal`. |
-| `NODE_ENV` | unset | `production` makes startup refuse the public sample `JWT_SECRET`. |
 | `HTTPS_KEY_PATH` | `./secrets/ssl.key` | TLS private key. HTTPS is used only when both files exist; otherwise the API serves HTTP. |
 | `HTTPS_CERT_PATH` | `./secrets/ssl.cert` | TLS certificate. |
 | `VRT_RUN_AS_ROOT` | `false` | Read by `docker-entrypoint.sh`, not by the app. The container drops to the `node` user when the image volume and TLS files allow it; `true` keeps root. |

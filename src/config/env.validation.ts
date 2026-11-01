@@ -1,8 +1,8 @@
 import { Logger } from '@nestjs/common';
 
 export const DEFAULT_JWT_LIFE_TIME = '1d';
-export const REFUSED_IN_PRODUCTION_JWT_SECRETS: readonly string[] = ['jwtPrivateKey'];
 export const DEVELOPMENT_JWT_SECRET = 'vrt-local-development-only-jwt-secret';
+const PUBLIC_JWT_SECRETS: readonly string[] = ['jwtPrivateKey', DEVELOPMENT_JWT_SECRET];
 
 const TIMESPAN =
   /^(-?(?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i;
@@ -21,13 +21,10 @@ export function validateEnv(
   if (!secret) {
     throw new Error('JWT_SECRET is not set. Generate one, e.g. `openssl rand -hex 32`.');
   }
-  if (REFUSED_IN_PRODUCTION_JWT_SECRETS.includes(secret) || secret === DEVELOPMENT_JWT_SECRET) {
-    const problem =
-      'JWT_SECRET is a publicly known sample value: anyone can sign tokens for any user. Set a random one, e.g. `openssl rand -hex 32`.';
-    if (text(env.NODE_ENV) === 'production' && REFUSED_IN_PRODUCTION_JWT_SECRETS.includes(secret)) {
-      throw new Error(`${problem} Refusing to start with NODE_ENV=production.`);
-    }
-    logger.warn(problem);
+  if (PUBLIC_JWT_SECRETS.includes(secret)) {
+    logger.warn(
+      'JWT_SECRET is a publicly known sample value: anyone can sign tokens for any user. Set a random one, e.g. `openssl rand -hex 32`.'
+    );
   }
 
   const lifeTime = text(env.JWT_LIFE_TIME);
