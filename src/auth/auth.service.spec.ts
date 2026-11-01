@@ -45,6 +45,14 @@ describe('AuthService', () => {
 
       await expect(service.compare('wrong', hashed)).resolves.toBe(false);
     });
+
+    it.each([
+      ['$2a$', '$2a$10$c300C6XmMm76tR259uiyd.fbWMdnHJdO9xeKHWodBvt7h8uyevn0q'],
+      ['$2b$', '$2b$10$c300C6XmMm76tR259uiyd.fbWMdnHJdO9xeKHWodBvt7h8uyevn0q'],
+    ])('accepts a stored %s hash made by bcryptjs 2', async (_prefix, stored) => {
+      await expect(service.compare('123456', stored)).resolves.toBe(true);
+      await expect(service.compare('1234567', stored)).resolves.toBe(false);
+    });
   });
 
   describe('generateApiKey', () => {
