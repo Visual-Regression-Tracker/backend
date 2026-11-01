@@ -122,6 +122,35 @@ describe('ProjectsService', () => {
     expect(result).toBe(TEST_PROJECT);
   });
 
+  it('update does not read the stored config when no masked key comes in', async () => {
+    const { service, prisma } = await setup();
+    prisma.project.update.mockResolvedValue(TEST_PROJECT);
+
+    await service.update({ ...TEST_PROJECT, imageComparisonConfig: JSON.stringify({ apiKey: 'AIzaSy-new-key-5678' }) });
+
+    expect(prisma.project.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('update keeps the stored Gemini key when the masked key comes back', async () => {
+    const { service, prisma } = await setup();
+    const key = 'AIzaSy-stored-gemini-key-1234';
+    prisma.project.findUnique.mockResolvedValue({ imageComparisonConfig: JSON.stringify({ apiKey: key }) });
+    prisma.project.update.mockResolvedValue(TEST_PROJECT);
+
+    await service.update({
+      ...TEST_PROJECT,
+      imageComparison: ImageComparison.vlm,
+      imageComparisonConfig: JSON.stringify({ apiKey: '••••1234', model: 'gemini-2.5-flash' }),
+    });
+
+    expect(prisma.project.findUnique).toHaveBeenCalledWith({
+      where: { id: TEST_PROJECT.id },
+      select: { imageComparisonConfig: true },
+    });
+    const { data } = prisma.project.update.mock.calls[0][0];
+    expect(JSON.parse(data.imageComparisonConfig)).toEqual({ apiKey: key, model: 'gemini-2.5-flash' });
+  });
+
   describe('odiff on S3 storage', () => {
     const originalStaticService = process.env.STATIC_SERVICE;
     const odiffDto = { ...TEST_PROJECT, id: projectId, imageComparison: ImageComparison.odiff } as UpdateProjectDto;

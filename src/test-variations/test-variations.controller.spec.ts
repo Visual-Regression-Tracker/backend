@@ -58,6 +58,16 @@ describe('TestVariations Controller', () => {
     expect(testVariationsService.merge).toHaveBeenCalledWith('projectId', 'develop', 'master');
   });
 
+  it('merges one branch into another from a POST body', async () => {
+    const build = { id: 'buildId' };
+    testVariationsService.merge.mockResolvedValue(build);
+
+    await expect(
+      controller.mergeFromBody({ projectId: 'projectId', fromBranch: 'develop', toBranch: 'master' })
+    ).resolves.toBe(build);
+    expect(testVariationsService.merge).toHaveBeenCalledWith('projectId', 'develop', 'master');
+  });
+
   it('deletes a variation', async () => {
     const variation = generateTestVariation();
     testVariationsService.delete.mockResolvedValue(variation);

@@ -115,6 +115,17 @@ describe('Projects Controller', () => {
       await app.close();
     });
 
+    it('answers GET /projects with the Gemini key masked', async () => {
+      const key = 'AIzaSy-secret-gemini-key-1234';
+      projectsService.findAll.mockResolvedValue([
+        { ...TEST_PROJECT, imageComparisonConfig: JSON.stringify({ provider: 'gemini', apiKey: key }) },
+      ]);
+
+      const res = await request(app.getHttpServer()).get('/projects').expect(200);
+
+      expect(JSON.parse(res.body[0].imageComparisonConfig)).toEqual({ provider: 'gemini', apiKey: '••••1234' });
+    });
+
     it('answers GET /projects/favorites with the id list rather than treating "favorites" as a project id', async () => {
       projectsService.findFavoriteIds.mockResolvedValue([projectId]);
 
