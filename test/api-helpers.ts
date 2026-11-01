@@ -91,7 +91,7 @@ export const withEnv = async <T>(vars: Record<string, string>, fn: () => Promise
 };
 
 export const approveRuns = (app: INestApplication, user: LoggedUser, ids: string[], merge = false) =>
-  requestWithAuth(app, 'post', `/test-runs/approve?merge=${merge}`, user.token).send(ids).expect(201);
+  requestWithAuth(app, 'post', `/test-runs/approve?merge=${merge}`, user.token).send(ids).expect(200);
 
 export interface Rect {
   x: number;

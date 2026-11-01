@@ -15,6 +15,7 @@ import {
   BadRequestException,
   ParseArrayPipe,
   HttpCode,
+  HttpException,
   PipeTransform,
 } from '@nestjs/common';
 import {
@@ -47,6 +48,9 @@ import { Roles } from '../shared/roles.decorator';
 import { isPngBuffer } from '../static/utils';
 import { positiveNumber } from '../utils/env';
 import { isUUID } from 'class-validator';
+import { BulkResultDto } from './dto/bulk-result.dto';
+import { isPrismaError } from '../prisma/prisma-errors';
+import { errorMessage } from '../http-exception.filter';
 
 const DEFAULT_MULTIPART_FILE_SIZE_LIMIT = 100 * 1024 * 1024;
 
@@ -102,20 +106,19 @@ export class TestRunsController {
   }
 
   @Post('approve')
+  @HttpCode(200)
   @ApiQuery({ name: 'merge', required: false })
-  @ApiOkResponse({ type: undefined })
+  @ApiOkResponse({ type: BulkResultDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  async approveTestRun(
+  approveTestRun(
     @CurrentUser() user: User,
     @Body(parseIds()) ids: string[],
     @Query('merge', new ParseBoolPipe()) merge: boolean
-  ): Promise<void> {
+  ): Promise<BulkResultDto> {
     this.logger.debug(`Going to approve TestRuns: ${ids}`);
-    for (const id of ids) {
-      await this.testRunsService.approve(id, merge, false, user.id);
-    }
+    return this.forEachId('approve', ids, (id) => this.testRunsService.approve(id, merge, false, user.id));
   }
 
   @Get('matchingSiblings/:id')
@@ -138,15 +141,14 @@ export class TestRunsController {
   }
 
   @Post('reject')
-  @ApiOkResponse({ type: undefined })
+  @HttpCode(200)
+  @ApiOkResponse({ type: BulkResultDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  async reject(@Body(parseIds()) ids: string[]): Promise<void> {
+  reject(@Body(parseIds()) ids: string[]): Promise<BulkResultDto> {
     this.logger.debug(`Going to reject TestRuns: ${ids}`);
-    for (const id of ids) {
-      await this.testRunsService.reject(id);
-    }
+    return this.forEachId('reject', ids, (id) => this.testRunsService.reject(id));
   }
 
   @Post('revert')
@@ -161,15 +163,14 @@ export class TestRunsController {
   }
 
   @Post('delete')
-  @ApiOkResponse({ type: undefined })
+  @HttpCode(200)
+  @ApiOkResponse({ type: BulkResultDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  async delete(@Body(parseIds()) ids: string[]): Promise<void> {
+  delete(@Body(parseIds()) ids: string[]): Promise<BulkResultDto> {
     this.logger.debug(`Going to delete TestRuns: ${ids}`);
-    for (const id of ids) {
-      await this.testRunsService.delete(id);
-    }
+    return this.forEachId('delete', ids, (id) => this.testRunsService.delete(id));
   }
 
   @Post('ignoreAreas/update')
@@ -231,5 +232,25 @@ export class TestRunsController {
   async postTestRunMultipart(@Body() createTestRequestDto: CreateTestRequestMultipartDto): Promise<TestRunResultDto> {
     const imageBuffer = pngOrBadRequest(createTestRequestDto.image.buffer);
     return this.testRunsService.postTestRun({ createTestRequestDto, imageBuffer });
+  }
+
+  private async forEachId(
+    action: string,
+    ids: string[],
+    run: (id: string) => Promise<unknown>
+  ): Promise<BulkResultDto> {
+    const result: BulkResultDto = { succeeded: [], failed: [] };
+    for (const id of ids) {
+      try {
+        await run(id);
+        result.succeeded.push(id);
+      } catch (error) {
+        if (!(error instanceof HttpException || isPrismaError(error, 'P2025'))) throw error;
+        const message = errorMessage(error);
+        this.logger.warn(`Cannot ${action} TestRun ${id}: ${message}`);
+        result.failed.push({ id, message });
+      }
+    }
+    return result;
   }
 }

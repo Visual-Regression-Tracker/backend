@@ -172,9 +172,9 @@ describe('Builds API (e2e)', () => {
       await postRun(build, CHANGED, 'Unresolved');
       await postRun(build, WHITE, 'New');
       const failed = await postRun(build, WHITE, 'Failed');
-      await requestWithAuth(app, 'post', '/test-runs/reject', user.token).send([failed.id]).expect(201);
+      await requestWithAuth(app, 'post', '/test-runs/reject', user.token).send([failed.id]).expect(200);
       const passed = await postRun(build, WHITE, 'Passed');
-      await requestWithAuth(app, 'post', '/test-runs/approve?merge=false', user.token).send([passed.id]).expect(201);
+      await requestWithAuth(app, 'post', '/test-runs/approve?merge=false', user.token).send([passed.id]).expect(200);
 
       const res = await requestWithAuth(app, 'get', `/builds/${build.id}`, user.token).expect(200);
 

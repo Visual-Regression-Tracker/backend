@@ -266,6 +266,47 @@ describe('Comparators (e2e)', () => {
     });
   });
 
+  describe('vlm with a Gemini key', () => {
+    const key = 'AIzaSy-e2e-gemini-key-1234';
+    const geminiConfig = (apiKey: string) =>
+      JSON.stringify({ provider: 'gemini', model: 'gemini-2.5-flash', apiKey, prompt: 'p', temperature: 0.1 });
+
+    const create = async () => {
+      const res = await requestWithAuth(app, 'post', '/projects', user.token)
+        .send(projectBody(ImageComparison.vlm, geminiConfig(key)))
+        .expect(201);
+      projectIds.push(res.body.id);
+      return res.body;
+    };
+    const storedKey = async (id: string) =>
+      JSON.parse((await prismaService.project.findUniqueOrThrow({ where: { id } })).imageComparisonConfig).apiKey;
+
+    it('the projects API answers with the key masked and stores it in full', async () => {
+      const created = await create();
+
+      const listed = await requestWithAuth(app, 'get', '/projects', user.token).expect(200);
+
+      expect(JSON.parse(created.imageComparisonConfig).apiKey).toBe('••••1234');
+      const project = listed.body.find(({ id }: Project) => id === created.id);
+      expect(JSON.parse(project.imageComparisonConfig).apiKey).toBe('••••1234');
+      expect(await storedKey(created.id)).toBe(key);
+    });
+
+    it('saving the masked key back keeps the stored key, a new key replaces it', async () => {
+      const created = await create();
+
+      await requestWithAuth(app, 'put', '/projects', user.token)
+        .send({ ...projectBody(ImageComparison.vlm, created.imageComparisonConfig), id: created.id })
+        .expect(200);
+      expect(await storedKey(created.id)).toBe(key);
+
+      await requestWithAuth(app, 'put', '/projects', user.token)
+        .send({ ...projectBody(ImageComparison.vlm, geminiConfig('AIzaSy-new-gemini-key-9999')), id: created.id })
+        .expect(200);
+      expect(await storedKey(created.id)).toBe('AIzaSy-new-gemini-key-9999');
+    });
+  });
+
   describe('lookSame', () => {
     it('the projects API rejects a config that is not JSON', async () => {
       await requestWithAuth(app, 'post', '/projects', user.token)
