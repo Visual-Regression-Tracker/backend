@@ -54,8 +54,7 @@ export class TestVariationsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   merge(@Query() params: MergeParams): Promise<BuildDto> {
-    const { projectId, fromBranch, toBranch } = params;
-    return this.testVariations.merge(projectId, fromBranch, toBranch);
+    return this.mergeFromBody(params);
   }
 
   @Post('merge')
@@ -63,8 +62,8 @@ export class TestVariationsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  mergeFromBody(@Body() params: MergeParams): Promise<BuildDto> {
-    return this.merge(params);
+  mergeFromBody(@Body() { projectId, fromBranch, toBranch }: MergeParams): Promise<BuildDto> {
+    return this.testVariations.merge(projectId, fromBranch, toBranch);
   }
 
   @Delete(':id')

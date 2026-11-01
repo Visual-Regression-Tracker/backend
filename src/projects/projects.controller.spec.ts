@@ -67,33 +67,6 @@ describe('Projects Controller', () => {
     expect(projectsService.remove).toHaveBeenCalledWith('a9385fc1-884d-4f9f-915e-40da0e7773d5');
   });
 
-  describe('a project with a Gemini key', () => {
-    const geminiProject = {
-      ...TEST_PROJECT,
-      imageComparisonConfig: JSON.stringify({ provider: 'gemini', apiKey: 'AIzaSy-secret-gemini-key-1234' }),
-    };
-    const masked = {
-      ...TEST_PROJECT,
-      imageComparisonConfig: JSON.stringify({ provider: 'gemini', apiKey: '••••1234' }),
-    };
-
-    it('lists it with the key masked', async () => {
-      projectsService.findAll.mockResolvedValue([geminiProject]);
-
-      await expect(controller.getAll()).resolves.toEqual([masked]);
-    });
-
-    it.each([
-      ['create', 'create', () => controller.create({} as CreateProjectDto)],
-      ['update', 'update', () => controller.update({} as UpdateProjectDto)],
-      ['remove', 'remove', () => controller.remove(projectId)],
-    ] as const)('%s answers with the key masked', async (_name, method, call) => {
-      projectsService[method].mockResolvedValue(geminiProject);
-
-      await expect(call()).resolves.toEqual(masked);
-    });
-  });
-
   it("lists the current user's favourite project ids", async () => {
     projectsService.findFavoriteIds.mockResolvedValue([projectId]);
 
@@ -140,6 +113,17 @@ describe('Projects Controller', () => {
 
     afterEach(async () => {
       await app.close();
+    });
+
+    it('answers GET /projects with the Gemini key masked', async () => {
+      const key = 'AIzaSy-secret-gemini-key-1234';
+      projectsService.findAll.mockResolvedValue([
+        { ...TEST_PROJECT, imageComparisonConfig: JSON.stringify({ provider: 'gemini', apiKey: key }) },
+      ]);
+
+      const res = await request(app.getHttpServer()).get('/projects').expect(200);
+
+      expect(JSON.parse(res.body[0].imageComparisonConfig)).toEqual({ provider: 'gemini', apiKey: '••••1234' });
     });
 
     it('answers GET /projects/favorites with the id list rather than treating "favorites" as a project id', async () => {

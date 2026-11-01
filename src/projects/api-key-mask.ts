@@ -1,4 +1,5 @@
-import { Project } from '@prisma/client';
+import { CallHandler, Injectable, NestInterceptor } from '@nestjs/common';
+import { map, Observable } from 'rxjs';
 
 const MASK = '••••';
 const MIN_KEY_LENGTH_TO_SHOW_TAIL = 12;
@@ -20,12 +21,22 @@ const apiKeyOf = (config: JsonObject | undefined): string | undefined =>
 export const maskApiKey = (key: string): string =>
   MASK + (key.length >= MIN_KEY_LENGTH_TO_SHOW_TAIL ? key.slice(-4) : '');
 
-export const maskProjectApiKey = (project: Project): Project => {
-  const config = parseObject(project.imageComparisonConfig);
+export const maskProjectApiKey = <T>(project: T): T => {
+  const configJson = (project as { imageComparisonConfig?: unknown } | null)?.imageComparisonConfig;
+  const config = typeof configJson === 'string' ? parseObject(configJson) : undefined;
   const apiKey = apiKeyOf(config);
   if (apiKey === undefined) return project;
   return { ...project, imageComparisonConfig: JSON.stringify({ ...config, apiKey: maskApiKey(apiKey) }) };
 };
+
+@Injectable()
+export class MaskApiKeyInterceptor implements NestInterceptor {
+  intercept(_context: unknown, next: CallHandler): Observable<unknown> {
+    return next
+      .handle()
+      .pipe(map((body: unknown) => (Array.isArray(body) ? body.map(maskProjectApiKey) : maskProjectApiKey(body))));
+  }
+}
 
 export const keepStoredApiKey = (incomingConfig: string, storedConfig: string | undefined): string => {
   const incoming = parseObject(incomingConfig);

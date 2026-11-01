@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common/constants';
 import { BadRequestException, NotFoundException, ParseArrayPipe } from '@nestjs/common';
 import { PNG } from 'pngjs';
-import { Role, User } from '@prisma/client';
+import { Prisma, Role, User } from '@prisma/client';
 import { TestRunsController, multipartLimits, parseIds, parseUuidIds } from './test-runs.controller';
 import { TestRunsService } from './test-runs.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
@@ -136,14 +136,32 @@ describe('TestRuns Controller', () => {
     expect(result).toEqual({ succeeded: ['1', '2'], failed: [] });
   });
 
-  it.each(['reject', 'delete'] as const)('%s reports a failing id and goes on', async (method) => {
+  it.each(['reject', 'delete'] as const)('%s reports an id the database no longer has and goes on', async (method) => {
     const { controller, mock } = await stub(method);
-    mock.mockRejectedValueOnce('not an error');
+    mock.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Record not found', { code: 'P2025', clientVersion: 'x' })
+    );
 
     const result = await controller[method](['ID-1', 'ID-2']);
 
-    expect(result).toEqual({ succeeded: ['ID-2'], failed: [{ id: 'ID-1', message: 'not an error' }] });
+    expect(result).toEqual({ succeeded: ['ID-2'], failed: [{ id: 'ID-1', message: 'Record not found' }] });
   });
+
+  it.each(['approveTestRun', 'reject', 'delete'] as const)(
+    '%s fails the request on an error that is not about the id',
+    async (method) => {
+      const controller = await initController({
+        approve: jest.fn().mockRejectedValue(new Error('database is down')),
+        reject: jest.fn().mockRejectedValue(new Error('database is down')),
+        delete: jest.fn().mockRejectedValue(new Error('database is down')),
+      });
+
+      const call =
+        method === 'approveTestRun' ? controller.approveTestRun(user, ['1'], false) : controller[method](['1']);
+
+      await expect(call).rejects.toThrow('database is down');
+    }
+  );
 
   it.each(['approveTestRun', 'reject', 'delete'] as const)('%s answers 200', (method) => {
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, TestRunsController.prototype[method])).toBe(200);

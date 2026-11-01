@@ -28,19 +28,28 @@ type TestRunEvent = (typeof TEST_RUN_EVENTS)[number];
 const projectRoom = (projectId: string) => `project:${projectId}`;
 const buildRoom = (buildId: string) => `build:${buildId}`;
 
-const roomsOf = (body: unknown): string[] => {
-  const { projectId, buildId } = (body ?? {}) as { projectId?: unknown; buildId?: unknown };
-  return [
-    ...(isUUID(projectId) ? [projectRoom(projectId as string)] : []),
-    ...(isUUID(buildId) ? [buildRoom(buildId as string)] : []),
-  ];
-};
+interface RoomsBody {
+  projectId?: unknown;
+  buildId?: unknown;
+}
+
+const isUuidString = (value: unknown): value is string => typeof value === 'string' && isUUID(value);
+
+const roomsOf = (body: RoomsBody | null | undefined): string[] => [
+  ...(isUuidString(body?.projectId) ? [projectRoom(body.projectId)] : []),
+  ...(isUuidString(body?.buildId) ? [buildRoom(body.buildId)] : []),
+];
 
 const groupBy = <T>(items: T[], keyOf: (item: T) => string): Map<string, T[]> => {
   const groups = new Map<string, T[]>();
   for (const item of items) {
     const key = keyOf(item);
-    groups.set(key, [...(groups.get(key) ?? []), item]);
+    const group = groups.get(key);
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(key, [item]);
+    }
   }
   return groups;
 };
@@ -66,15 +75,19 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
   }
 
   @SubscribeMessage('join')
-  async join(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown): Promise<void> {
-    await socket.join(roomsOf(body));
+  async join(@ConnectedSocket() socket: Socket, @MessageBody() body?: RoomsBody): Promise<string[]> {
+    const rooms = roomsOf(body);
+    await socket.join(rooms);
+    return rooms;
   }
 
   @SubscribeMessage('leave')
-  async leave(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown): Promise<void> {
-    for (const room of roomsOf(body)) {
+  async leave(@ConnectedSocket() socket: Socket, @MessageBody() body?: RoomsBody): Promise<string[]> {
+    const rooms = roomsOf(body);
+    for (const room of rooms) {
       await socket.leave(room);
     }
+    return rooms;
   }
 
   private readonly testRunQueues = Object.fromEntries(
@@ -139,11 +152,7 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
   }
 
   private emitToRoom(room: string, event: string, payload: unknown): void {
-    if (this.broadcast) {
-      this.server.emit(event, payload);
-    } else {
-      this.server.to(room).emit(event, payload);
-    }
+    (this.broadcast ? this.server : this.server.to(room)).emit(event, payload);
   }
 
   private emitToRooms<T>(event: string, items: T[], roomOf: (item: T) => string): void {
@@ -151,9 +160,7 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
       this.server.emit(event, items);
       return;
     }
-    for (const [room, group] of groupBy(items, roomOf)) {
-      this.server.to(room).emit(event, group);
-    }
+    groupBy(items, roomOf).forEach((group, room) => this.emitToRoom(room, event, group));
   }
 
   private buildUpdatedDebounced = debounce(

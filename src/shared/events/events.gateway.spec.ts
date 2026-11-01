@@ -371,6 +371,7 @@ describe('EventsGateway', () => {
       expect(emitsOf(emitMock, 'build_updated')).toEqual([]);
     });
   });
+
   describe('connections', () => {
     it('checks the token of every connection with the socket auth middleware', async () => {
       const { gateway, authMiddleware } = await initGateway();
@@ -415,7 +416,7 @@ describe('EventsGateway', () => {
       const { gateway } = await initGateway();
       const socket = socketMock();
 
-      await gateway.join(socket as unknown as Socket, body);
+      await expect(gateway.join(socket as unknown as Socket, body as never)).resolves.toEqual(rooms);
 
       expect(socket.join).toHaveBeenCalledWith(rooms);
     });

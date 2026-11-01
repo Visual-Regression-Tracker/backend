@@ -15,6 +15,7 @@ import {
   BadRequestException,
   ParseArrayPipe,
   HttpCode,
+  HttpException,
   PipeTransform,
 } from '@nestjs/common';
 import {
@@ -48,6 +49,7 @@ import { isPngBuffer } from '../static/utils';
 import { positiveNumber } from '../utils/env';
 import { isUUID } from 'class-validator';
 import { BulkResultDto } from './dto/bulk-result.dto';
+import { isPrismaError } from '../prisma/prisma-errors';
 
 const DEFAULT_MULTIPART_FILE_SIZE_LIMIT = 100 * 1024 * 1024;
 
@@ -242,9 +244,9 @@ export class TestRunsController {
         await run(id);
         result.succeeded.push(id);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`Cannot ${action} TestRun ${id}: ${message}`);
-        result.failed.push({ id, message });
+        if (!(error instanceof HttpException || isPrismaError(error, 'P2025'))) throw error;
+        this.logger.warn(`Cannot ${action} TestRun ${id}: ${error.message}`);
+        result.failed.push({ id, message: error.message });
       }
     }
     return result;

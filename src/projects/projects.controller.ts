@@ -10,6 +10,7 @@ import {
   Put,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -28,10 +29,11 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
 import { CurrentUser } from '../shared/current-user.decorator';
-import { maskProjectApiKey } from './api-key-mask';
+import { MaskApiKeyInterceptor } from './api-key-mask';
 
 @Controller('projects')
 @ApiTags('projects')
+@UseInterceptors(MaskApiKeyInterceptor)
 export class ProjectsController {
   constructor(private projectsService: ProjectsService) {}
 
@@ -39,8 +41,8 @@ export class ProjectsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOkResponse({ type: ProjectDto, isArray: true })
-  async getAll(): Promise<Project[]> {
-    return (await this.projectsService.findAll()).map(maskProjectApiKey);
+  getAll(): Promise<Project[]> {
+    return this.projectsService.findAll();
   }
 
   // No RoleGuard: favourites are personal. Declared before any `:id` route so "favorites" is not read as an id
@@ -78,8 +80,8 @@ export class ProjectsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
-  async create(@Body() createProjectDto: CreateProjectDto): Promise<Project> {
-    return maskProjectApiKey(await this.projectsService.create(createProjectDto));
+  create(@Body() createProjectDto: CreateProjectDto): Promise<Project> {
+    return this.projectsService.create(createProjectDto);
   }
 
   @Put()
@@ -87,8 +89,8 @@ export class ProjectsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
-  async update(@Body() projectDto: UpdateProjectDto): Promise<Project> {
-    return maskProjectApiKey(await this.projectsService.update(projectDto));
+  update(@Body() projectDto: UpdateProjectDto): Promise<Project> {
+    return this.projectsService.update(projectDto);
   }
 
   @Delete(':id')
@@ -97,7 +99,7 @@ export class ProjectsController {
   @Roles(Role.admin, Role.editor)
   @ApiOkResponse({ type: ProjectDto })
   @ApiParam({ name: 'id', required: true })
-  async remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Project> {
-    return maskProjectApiKey(await this.projectsService.remove(id));
+  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<Project> {
+    return this.projectsService.remove(id);
   }
 }

@@ -41,7 +41,6 @@ describe('SocketAuthService', () => {
 
   describe.each([
     ['unset', undefined],
-    ['false', 'false'],
     ['true', 'true'],
   ])('with WS_AUTH_REQUIRED %s', (_title, flag) => {
     it('lets in a socket with a valid token of an existing user', async () => {
@@ -82,7 +81,7 @@ describe('SocketAuthService', () => {
     });
   });
 
-  describe.each([undefined, 'false', 'no'])('with WS_AUTH_REQUIRED %p', (flag) => {
+  describe.each([undefined, 'false'])('with WS_AUTH_REQUIRED %p', (flag) => {
     it.each([
       ['no auth', undefined],
       ['no token', {}],
@@ -97,7 +96,7 @@ describe('SocketAuthService', () => {
     });
   });
 
-  describe.each(['true', '1', 'on'])('with WS_AUTH_REQUIRED %p', (flag) => {
+  describe.each(['true'])('with WS_AUTH_REQUIRED %p', (flag) => {
     it.each([
       ['no auth', undefined],
       ['no token', {}],

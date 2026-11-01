@@ -1,6 +1,7 @@
 import { Project } from '@prisma/client';
 import { TEST_PROJECT } from '../_data_';
-import { keepStoredApiKey, maskApiKey, maskProjectApiKey } from './api-key-mask';
+import { lastValueFrom, of } from 'rxjs';
+import { keepStoredApiKey, maskApiKey, MaskApiKeyInterceptor, maskProjectApiKey } from './api-key-mask';
 
 const KEY = 'AIzaSyD-secret-gemini-key-1234';
 const config = (extra: object) => JSON.stringify({ provider: 'gemini', model: 'gemini-2.5-flash', ...extra });
@@ -42,6 +43,30 @@ describe('maskProjectApiKey', () => {
     const project = withConfig(imageComparisonConfig);
 
     expect(maskProjectApiKey(project)).toBe(project);
+  });
+
+  it.each([undefined, null, 'id', { imageComparisonConfig: 42 }])('returns %p as is', (value) => {
+    expect(maskProjectApiKey(value)).toBe(value);
+  });
+});
+
+describe('MaskApiKeyInterceptor', () => {
+  const intercept = (body: unknown) =>
+    lastValueFrom(new MaskApiKeyInterceptor().intercept(undefined, { handle: () => of(body) }));
+  const project = withConfig(config({ apiKey: KEY }));
+  const masked = withConfig(config({ apiKey: '••••1234' }));
+
+  it('masks the key of a project in the response', async () => {
+    await expect(intercept(project)).resolves.toEqual(masked);
+  });
+
+  it('masks the keys of a list of projects', async () => {
+    await expect(intercept([project, withConfig('{}')])).resolves.toEqual([masked, withConfig('{}')]);
+  });
+
+  it('passes a response that holds no project through', async () => {
+    await expect(intercept(['a', 'b'])).resolves.toEqual(['a', 'b']);
+    await expect(intercept(undefined)).resolves.toBeUndefined();
   });
 });
 

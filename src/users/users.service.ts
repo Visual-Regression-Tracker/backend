@@ -12,6 +12,7 @@ import { UsersFactoryService } from './users.factory';
 import { Users } from './users.interface';
 import { OidcUsersService } from './oidc/oidcusers.service';
 import { ConfigService } from '@nestjs/config';
+import { booleanFlag } from '../utils/env';
 
 @Injectable()
 export class UsersService {
@@ -45,10 +46,7 @@ export class UsersService {
 
   // default true: switching registration off is the operator's choice, not an upgrade side effect
   isRegistrationAllowedByConfig(): boolean {
-    const value = String(this.configService.get('REGISTRATION_ENABLED') ?? 'true')
-      .trim()
-      .toLowerCase();
-    return !['false', '0', 'no', 'off'].includes(value);
+    return booleanFlag(this.configService.get('REGISTRATION_ENABLED'), true);
   }
 
   isRegistrationEnabled(): boolean {

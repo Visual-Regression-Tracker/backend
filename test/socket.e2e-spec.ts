@@ -9,7 +9,7 @@ import { UsersService } from '../src/users/users.service';
 import { createE2eApp, haveProject, setEnv } from './api-helpers';
 import { haveUserLogged, LoggedUser } from './preconditions';
 
-const EVENT_WAIT_MS = 3000;
+const SETTLE_MS = 300;
 
 describe('Socket.io (e2e)', () => {
   let app: INestApplication;
@@ -85,11 +85,15 @@ describe('Socket.io (e2e)', () => {
   describe('rooms', () => {
     let project: Project;
 
-    const received = (socket: Socket, event: string): Promise<unknown[]> => {
+    const collect = (socket: Socket, event: string): unknown[] => {
       const payloads: unknown[] = [];
       socket.on(event, (payload) => payloads.push(payload));
-      return new Promise((resolve) => setTimeout(() => resolve(payloads), EVENT_WAIT_MS));
+      return payloads;
     };
+    const nextOf = (socket: Socket, event: string): Promise<unknown> =>
+      new Promise((resolve) => socket.once(event, resolve));
+    // the server sends one event to all its sockets at once, so others have had their chance by now
+    const settle = () => new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
 
     const createBuild = () => app.get(BuildsService).findOrCreate({ projectId: project.id, branchName: 'master' });
 
@@ -103,21 +107,19 @@ describe('Socket.io (e2e)', () => {
       const member = await connect({ token: user.token });
       const outsider = await connect({ token: user.token });
       const left = await connect({ token: user.token });
-      member.emit('join', { projectId: project.id });
-      left.emit('join', { projectId: project.id });
-      left.emit('leave', { projectId: project.id });
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await expect(member.emitWithAck('join', { projectId: project.id })).resolves.toEqual([`project:${project.id}`]);
+      await left.emitWithAck('join', { projectId: project.id });
+      await expect(left.emitWithAck('leave', { projectId: project.id })).resolves.toEqual([`project:${project.id}`]);
+      const toOutsider = collect(outsider, 'build_created');
+      const toLeft = collect(left, 'build_created');
+      const toMember = nextOf(member, 'build_created');
 
-      const [toMember, toOutsider, toLeft] = [
-        received(member, 'build_created'),
-        received(outsider, 'build_created'),
-        received(left, 'build_created'),
-      ];
       const build = await createBuild();
 
-      expect(await toMember).toEqual([expect.objectContaining({ id: build.id, projectId: project.id })]);
-      expect(await toOutsider).toEqual([]);
-      expect(await toLeft).toEqual([]);
+      expect(await toMember).toEqual(expect.objectContaining({ id: build.id, projectId: project.id }));
+      await settle();
+      expect(toOutsider).toEqual([]);
+      expect(toLeft).toEqual([]);
     });
 
     it('by default every socket gets every build, joined or not', async () => {
@@ -125,14 +127,15 @@ describe('Socket.io (e2e)', () => {
       project = await haveProject(app.get(ProjectsService), 'Socket broadcast');
       const member = await connect();
       const outsider = await connect();
-      member.emit('join', { projectId: project.id });
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await member.emitWithAck('join', { projectId: project.id });
+      const received = [nextOf(member, 'build_created'), nextOf(outsider, 'build_created')];
 
-      const [toMember, toOutsider] = [received(member, 'build_created'), received(outsider, 'build_created')];
       const build = await createBuild();
 
-      expect(await toMember).toEqual([expect.objectContaining({ id: build.id })]);
-      expect(await toOutsider).toEqual([expect.objectContaining({ id: build.id })]);
+      expect(await Promise.all(received)).toEqual([
+        expect.objectContaining({ id: build.id }),
+        expect.objectContaining({ id: build.id }),
+      ]);
     });
   });
 });
