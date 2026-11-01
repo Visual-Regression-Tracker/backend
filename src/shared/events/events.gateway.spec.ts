@@ -146,6 +146,7 @@ describe('EventsGateway', () => {
       jest.advanceTimersByTime(1500);
 
       expect(emitsOf(emitMock, 'testRun_created')).toEqual([[new TestRunDto(testRunA)], [new TestRunDto(testRunC)]]);
+      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([[new TestRunDto(testRunA)]]);
       expect(emitsOf(emitMock, 'testRun_deleted')).toEqual([[new TestRunDto(testRunB)]]);
     });
 
