@@ -22,7 +22,7 @@ describe('JSON body limit (e2e)', () => {
     expect(res.body).toEqual({
       statusCode: 413,
       path: '/users/login',
-      name: 'PayloadTooLargeError',
+      name: 'HttpException',
       message: 'request entity too large',
     });
   });
