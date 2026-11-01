@@ -95,23 +95,23 @@ describe('TestRuns Controller', () => {
       expect(mock).toHaveBeenNthCalledWith(1, '1', true, false, user.id);
       expect(mock).toHaveBeenNthCalledWith(2, '2', true, false, user.id);
       expect(order).toEqual(['start 1', 'end 1', 'start 2', 'end 2']);
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ succeeded: ['1', '2'], failed: [] });
     });
 
-    it('stops at the first failing id', async () => {
+    it('goes on past a failing id and reports it with its message', async () => {
       const { controller, mock } = await stub('approve');
-      mock.mockRejectedValueOnce(new Error('boom'));
+      mock.mockRejectedValueOnce(new NotFoundException('Test run not found: 1'));
 
-      await expect(controller.approveTestRun(user, ['1', '2'], false)).rejects.toThrow('boom');
+      const result = await controller.approveTestRun(user, ['1', '2'], false);
 
-      expect(mock).toHaveBeenCalledTimes(1);
-      expect(mock).toHaveBeenCalledWith('1', false, false, user.id);
+      expect(mock).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ succeeded: ['2'], failed: [{ id: '1', message: 'Test run not found: 1' }] });
     });
 
-    it('does nothing for an empty list', async () => {
+    it('answers an empty result for an empty list', async () => {
       const { controller, mock } = await stub('approve');
 
-      await controller.approveTestRun(user, [], false);
+      await expect(controller.approveTestRun(user, [], false)).resolves.toEqual({ succeeded: [], failed: [] });
 
       expect(mock).not.toHaveBeenCalled();
     });
@@ -133,7 +133,20 @@ describe('TestRuns Controller', () => {
     const result = await controller[method](['1', '2']);
 
     expect(mock.mock.calls).toEqual([['1'], ['2']]);
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ succeeded: ['1', '2'], failed: [] });
+  });
+
+  it.each(['reject', 'delete'] as const)('%s reports a failing id and goes on', async (method) => {
+    const { controller, mock } = await stub(method);
+    mock.mockRejectedValueOnce('not an error');
+
+    const result = await controller[method](['ID-1', 'ID-2']);
+
+    expect(result).toEqual({ succeeded: ['ID-2'], failed: [{ id: 'ID-1', message: 'not an error' }] });
+  });
+
+  it.each(['approveTestRun', 'reject', 'delete'] as const)('%s answers 200', (method) => {
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, TestRunsController.prototype[method])).toBe(200);
   });
 
   it('revert passes the ids to the service as one request and answers 204', async () => {

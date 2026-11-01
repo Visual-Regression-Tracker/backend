@@ -66,7 +66,7 @@ describe('TestVariations API (e2e)', () => {
 
   const haveBaseline = async (branchName: string, image: Buffer, name = 'Screen') => {
     const run = await postRun(branchName, image, name);
-    await requestWithAuth(app, 'post', '/test-runs/approve?merge=false', user.token).send([run.id]).expect(201);
+    await requestWithAuth(app, 'post', '/test-runs/approve?merge=false', user.token).send([run.id]).expect(200);
     return prisma.testRun.findUnique({ where: { id: run.id } });
   };
 
