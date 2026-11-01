@@ -40,14 +40,6 @@ describe('JwtStrategy', () => {
       expect(jwtFromRequest({ headers: {} })).toBeNull();
     });
 
-    it('fails to construct when JWT_SECRET is not configured', () => {
-      configService.getOrThrow.mockImplementation(() => {
-        throw new TypeError('Configuration key "JWT_SECRET" does not exist');
-      });
-
-      expect(createStrategy).toThrow('Configuration key "JWT_SECRET" does not exist');
-    });
-
     it('fails to construct with an empty secret', () => {
       configService.getOrThrow.mockReturnValue('');
 

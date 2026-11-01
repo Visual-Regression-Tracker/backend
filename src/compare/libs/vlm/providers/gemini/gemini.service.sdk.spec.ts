@@ -9,11 +9,8 @@ const config: GeminiVlmConfig = {
   apiKey: 'test-api-key',
 };
 
-const geminiResponse = (text: string) =>
-  new Response(JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text }] } }] }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
+const jsonResponse = (body: object, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 describe('GeminiService with the real @google/genai SDK', () => {
   let fetchSpy: jest.SpyInstance;
@@ -27,7 +24,11 @@ describe('GeminiService with the real @google/genai SDK', () => {
   });
 
   it('posts the prompt, images and JSON schema to generateContent and returns the response text', async () => {
-    fetchSpy.mockResolvedValue(geminiResponse('{"identical":true,"description":"same"}'));
+    fetchSpy.mockResolvedValue(
+      jsonResponse({
+        candidates: [{ content: { role: 'model', parts: [{ text: '{"identical":true,"description":"same"}' }] } }],
+      })
+    );
 
     const result = await new GeminiService().generate(config, [new Uint8Array([1, 2, 3])]);
 
@@ -53,10 +54,7 @@ describe('GeminiService with the real @google/genai SDK', () => {
 
   it('rejects with the API error when Gemini answers with an error status', async () => {
     fetchSpy.mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: 400, message: 'API key not valid', status: 'INVALID_ARGUMENT' } }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      jsonResponse({ error: { code: 400, message: 'API key not valid', status: 'INVALID_ARGUMENT' } }, 400)
     );
 
     await expect(new GeminiService().generate(config, [])).rejects.toThrow('API key not valid');

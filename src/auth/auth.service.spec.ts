@@ -46,10 +46,8 @@ describe('AuthService', () => {
       await expect(service.compare('wrong', hashed)).resolves.toBe(false);
     });
 
-    it.each([
-      ['$2a$', '$2a$10$c300C6XmMm76tR259uiyd.fbWMdnHJdO9xeKHWodBvt7h8uyevn0q'],
-      ['$2b$', '$2b$10$c300C6XmMm76tR259uiyd.fbWMdnHJdO9xeKHWodBvt7h8uyevn0q'],
-    ])('accepts a stored %s hash made by bcryptjs 2', async (_prefix, stored) => {
+    it.each(['$2a$', '$2b$'])('accepts a stored %s hash made by bcryptjs 2', async (prefix) => {
+      const stored = `${prefix}04$R027vBbuLWRJ2xYKfqj3TekDrP67RjQ3V5fddfP4jdJBphIPfQ8HW`;
       await expect(service.compare('123456', stored)).resolves.toBe(true);
       await expect(service.compare('1234567', stored)).resolves.toBe(false);
     });
