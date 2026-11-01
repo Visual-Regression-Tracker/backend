@@ -153,7 +153,6 @@ export class BuildsService implements BeforeApplicationShutdown {
         await this.prismaService.build.delete({ where: { id } });
         break;
       } catch (e) {
-        // workaround https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/435
         if (isPrismaError(e, 'P2025')) {
           this.logger.warn(`Build already deleted ${id}`);
           return;
@@ -326,7 +325,7 @@ export class BuildsService implements BeforeApplicationShutdown {
       if (!isPrismaError(e, 'P2002')) {
         throw e;
       }
-      // concurrent upsert workaround https://www.prisma.io/docs/reference/api-reference/prisma-client-reference#unique-key-constraint-errors-on-upserts
+      // two concurrent upserts can both try to insert; the loser updates instead
       build = await this.prismaService.build.update({
         where,
         data: {

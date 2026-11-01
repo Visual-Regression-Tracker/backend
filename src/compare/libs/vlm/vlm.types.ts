@@ -1,6 +1,7 @@
 import { BlurAmplitudeConfig } from '../blur-amplitude.config';
 
-export interface BaseVlmConfig extends BlurAmplitudeConfig {
+interface BaseVlmConfig extends BlurAmplitudeConfig {
+  model: string;
   prompt: string;
   temperature: number;
   useThinking?: boolean;
@@ -8,12 +9,10 @@ export interface BaseVlmConfig extends BlurAmplitudeConfig {
 
 export interface OllamaVlmConfig extends BaseVlmConfig {
   provider?: 'ollama';
-  model: string;
 }
 
 export interface GeminiVlmConfig extends BaseVlmConfig {
   provider: 'gemini';
-  model: string;
   apiKey: string;
 }
 

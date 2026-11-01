@@ -1,5 +1,6 @@
 import { ExceptionFilter, Catch, ArgumentsHost, ForbiddenException, HttpStatus, Logger } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { errorMessage } from './utils/errors';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -15,7 +16,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const message =
       this.isUniqueConstraintException(error) || this.isForbiddenException(error)
         ? this.getCustomMessageForException(error)
-        : this.getMessage(error);
+        : errorMessage(error);
 
     if (status >= 500) {
       this.logger.error(`${request.method} ${request.url} ${status}: ${message}`, error.stack);
@@ -55,10 +56,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
     return exception instanceof ForbiddenException && exception.message === 'Forbidden resource';
   }
 
-  getMessage(exception: Error): string {
-    return errorMessage(exception);
-  }
-
   isUniqueConstraintException(exception: Error): boolean {
     // P2002 message says "on the fields" before Prisma 7, "on the constraint" since
     return (
@@ -76,10 +73,4 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (message.includes('Forbidden resource')) return 'You do not have permission to perform this operation.';
     return message;
   }
-}
-
-export function errorMessage(exception: Error): string {
-  const response = (exception as { getResponse?: () => unknown }).getResponse?.();
-  const details = typeof response === 'object' ? (response as { message?: unknown } | null)?.message : undefined;
-  return Array.isArray(details) ? details.join(', ') : exception.message;
 }

@@ -15,6 +15,7 @@ import { BlurAmplitudeOptions, isRenderingNoise } from './libs/pixelmatch/blur-a
 import { splitBlurAmplitudeConfig } from './libs/blur-amplitude.config';
 import { StaticService } from '../static/static.service';
 import { Dinov2Service } from './libs/dinov2/dinov2.service';
+import { messageOf } from '../utils/errors';
 
 @Injectable()
 export class CompareService {
@@ -100,8 +101,7 @@ export class CompareService {
       }
       return { ...result, status: TestStatus.ok, diffName: null };
     } catch (error) {
-      // a cast, not instanceof: fetch errors come from another realm under Jest
-      this.logger.warn(`Rendering-noise filter skipped: ${(error as Error)?.message ?? error}`);
+      this.logger.warn(`Rendering-noise filter skipped: ${messageOf(error)}`);
       return result;
     }
   }

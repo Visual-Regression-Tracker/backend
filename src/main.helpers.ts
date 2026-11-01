@@ -10,10 +10,12 @@ export function getHttpsOptions(
   env: NodeJS.ProcessEnv = process.env,
   logger: Pick<Logger, 'log' | 'warn'> = new Logger('Bootstrap')
 ): HttpsOptions | undefined {
-  const keyPath = env.HTTPS_KEY_PATH?.trim() || DEFAULT_HTTPS_KEY_PATH;
-  const certPath = env.HTTPS_CERT_PATH?.trim() || DEFAULT_HTTPS_CERT_PATH;
+  const configuredKeyPath = env.HTTPS_KEY_PATH?.trim();
+  const configuredCertPath = env.HTTPS_CERT_PATH?.trim();
+  const keyPath = configuredKeyPath || DEFAULT_HTTPS_KEY_PATH;
+  const certPath = configuredCertPath || DEFAULT_HTTPS_CERT_PATH;
   if (!existsSync(keyPath) || !existsSync(certPath)) {
-    if (env.HTTPS_KEY_PATH?.trim() || env.HTTPS_CERT_PATH?.trim()) {
+    if (configuredKeyPath || configuredCertPath) {
       logger.warn(`HTTPS key or certificate not found (${keyPath}, ${certPath}). Fall back to HTTP`);
     } else {
       logger.log('HTTPS config not found. Fall back to HTTP');

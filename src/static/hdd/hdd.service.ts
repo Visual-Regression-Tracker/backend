@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import path from 'path';
 import { promises as fs, mkdirSync } from 'fs';
 import { Readable } from 'stream';
-import { Static } from '../static.interface';
+import { ImageType, Static } from '../static.interface';
 import { HDD_IMAGE_PATH } from './constants';
 import { generateNewImageName } from '../utils';
 
@@ -11,7 +11,7 @@ export class HddService implements Static {
   private readonly logger: Logger = new Logger(HddService.name);
   private directoryReady = false;
 
-  generateNewImage(type: 'screenshot' | 'diff' | 'baseline'): { imageName: string; imagePath: string } {
+  generateNewImage(type: ImageType): { imageName: string; imagePath: string } {
     const imageName = generateNewImageName(type);
     return {
       imageName,
@@ -39,7 +39,7 @@ export class HddService implements Static {
     return Promise.resolve('/' + imageName);
   }
 
-  async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
+  async saveImage(type: ImageType, imageBuffer: Buffer): Promise<string> {
     const { imageName, imagePath } = this.generateNewImage(type);
     await fs.writeFile(imagePath, imageBuffer);
     return imageName;
@@ -68,7 +68,7 @@ export class HddService implements Static {
     }
   }
 
-  async copyImage(type: 'screenshot' | 'diff' | 'baseline', sourceImageName: string): Promise<string> {
+  async copyImage(type: ImageType, sourceImageName: string): Promise<string> {
     const { imageName, imagePath } = this.generateNewImage(type);
     await fs.copyFile(this.getImagePath(sourceImageName), imagePath);
     return imageName;

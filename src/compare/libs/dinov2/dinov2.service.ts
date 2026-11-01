@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PatchGate } from '../pixelmatch/patch-gate.core';
 import { positiveNumber } from '../../../utils/env';
+import { messageOf } from '../../../utils/errors';
 
 const TILE_PATCHES = 16;
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -12,7 +13,7 @@ export interface Dinov2Status {
   available: boolean;
 }
 
-export interface Dinov2Verdict {
+interface Dinov2Verdict {
   noise: boolean;
   score?: number;
 }
@@ -60,7 +61,7 @@ export class Dinov2Service {
       const response = await fetch(`${url}/health`, { signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
       return { configured: true, available: response.ok };
     } catch (error) {
-      this.logger.warn(`DINOv2 service is not answering: ${(error as Error)?.message ?? error}`);
+      this.logger.warn(`DINOv2 service is not answering: ${messageOf(error)}`);
       return { configured: true, available: false };
     }
   }
@@ -76,11 +77,10 @@ export class Dinov2Service {
       this.logger.warn('dinov2Check is on but DINOV2_URL is not set: the run goes to review');
       return { noise: false };
     }
+    if (gate.cells.length === 0) {
+      return { noise: true, score: 0 };
+    }
     try {
-      if (gate.cells.length === 0) {
-        return { noise: true, score: 0 };
-      }
-
       const response = await fetch(`${url}/v1/patch-distances`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,14 +104,9 @@ export class Dinov2Service {
       const score = blobScore(answer.distances, gate.width, gate.height, gate.cells);
       return { noise: score <= threshold, score };
     } catch (error) {
-      return this.failed(error);
+      this.logger.warn(`DINOv2 check failed, the run goes to review: ${messageOf(error)}`);
+      return { noise: false };
     }
-  }
-
-  private failed(error: unknown): Dinov2Verdict {
-    // a cast, not instanceof: fetch errors come from another realm under Jest
-    this.logger.warn(`DINOv2 check failed, the run goes to review: ${(error as Error)?.message ?? error}`);
-    return { noise: false };
   }
 
   private serviceUrl(): string | undefined {

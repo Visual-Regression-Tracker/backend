@@ -16,17 +16,22 @@ export function readPng(data: Buffer | Uint8Array): PNG {
   return PNG.sync.read(asBuffer(data));
 }
 
+export function tryReadPng(data: Buffer | Uint8Array): PNG | null {
+  try {
+    return readPng(data);
+  } catch {
+    return null;
+  }
+}
+
 export function readSameSizePair(
   baselineBytes: Buffer | Uint8Array,
   imageBytes: Buffer | Uint8Array,
   ignoreAreas: IgnoreAreaDto[]
 ): { baseline: PNG; image: PNG } | null {
-  let baseline: PNG;
-  let image: PNG;
-  try {
-    baseline = readPng(baselineBytes);
-    image = readPng(imageBytes);
-  } catch {
+  const baseline = tryReadPng(baselineBytes);
+  const image = baseline && tryReadPng(imageBytes);
+  if (!baseline || !image) {
     return null;
   }
   if (baseline.width !== image.width || baseline.height !== image.height) {

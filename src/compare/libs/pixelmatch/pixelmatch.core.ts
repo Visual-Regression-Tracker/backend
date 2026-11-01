@@ -55,18 +55,15 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
 
   const maxWidth = Math.max(baseline.width, image.width);
   const maxHeight = Math.max(baseline.height, image.height);
-  const scaledBaseline = scaleImageToSize(baseline, maxWidth, maxHeight);
-  const scaledImage = scaleImageToSize(image, maxWidth, maxHeight);
-
-  const baselineIgnored = applyIgnoreAreas(scaledBaseline, input.ignoreAreas);
-  const imageIgnored = applyIgnoreAreas(scaledImage, input.ignoreAreas);
+  const baselineIgnored = applyIgnoreAreas(scaleImageToSize(baseline, maxWidth, maxHeight), input.ignoreAreas);
+  const imageIgnored = applyIgnoreAreas(scaleImageToSize(image, maxWidth, maxHeight), input.ignoreAreas);
 
   const diff = new PNG({ width: maxWidth, height: maxHeight });
   const pixelMisMatchCount = Pixelmatch(baselineIgnored.data, imageIgnored.data, diff.data, maxWidth, maxHeight, {
     includeAA: input.includeAA,
     threshold: input.threshold,
   });
-  const diffPercent = (pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
+  const diffPercent = (pixelMisMatchCount * 100) / (maxWidth * maxHeight);
 
   const overTolerance = diffPercent > input.diffTolerancePercent;
   const blurAmplitude = overTolerance && isSameDimension ? input.blurAmplitude : undefined;

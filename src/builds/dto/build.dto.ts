@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Build, TestStatus } from '@prisma/client';
+import { Build } from '@prisma/client';
 import { TestRunDto } from '../../test-runs/dto/testRun.dto';
-import { BuildStats } from '../build-stats';
+import { BuildStats, statsOf } from '../build-stats';
 
 export class BuildDto {
   @ApiProperty()
@@ -53,39 +53,11 @@ export class BuildDto {
     this.createdAt = build.createdAt;
     this.isRunning = build.isRunning;
 
-    this.passedCount = 0;
-    this.unresolvedCount = 0;
-    this.failedCount = 0;
-
-    this.merge = false;
-    if (stats) {
-      this.passedCount = stats.passedCount;
-      this.unresolvedCount = stats.unresolvedCount;
-      this.failedCount = stats.failedCount;
-      this.merge = stats.merge;
-    } else if (build.testRuns) {
-      this.merge = build.testRuns.some((testRun) => testRun.merge);
-
-      build.testRuns.forEach((testRun) => {
-        switch (testRun.status) {
-          case TestStatus.autoApproved:
-          case TestStatus.approved:
-          case TestStatus.ok: {
-            this.passedCount += 1;
-            break;
-          }
-          case TestStatus.unresolved:
-          case TestStatus.new: {
-            this.unresolvedCount += 1;
-            break;
-          }
-          case TestStatus.failed: {
-            this.failedCount += 1;
-            break;
-          }
-        }
-      });
-    }
+    const counts = stats ?? statsOf(build.testRuns ?? []);
+    this.passedCount = counts.passedCount;
+    this.unresolvedCount = counts.unresolvedCount;
+    this.failedCount = counts.failedCount;
+    this.merge = counts.merge;
 
     const hasTestRuns = stats
       ? this.passedCount + this.unresolvedCount + this.failedCount > 0
