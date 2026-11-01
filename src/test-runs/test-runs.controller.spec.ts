@@ -64,20 +64,12 @@ describe('TestRuns Controller', () => {
 
   it('returns the run as stored, with its variation (kept for existing clients)', async () => {
     const testRun = generateTestRun();
-    const { controller, mock } = await stub('findOne', testRun);
+    const { controller, mock } = await stub('findOneOrThrow', testRun);
 
     const result = await controller.getDetails(testRun.id);
 
     expect(mock).toHaveBeenCalledWith(testRun.id);
     expect(result).toBe(testRun);
-  });
-
-  it('throws NotFoundException for an unknown test run', async () => {
-    const { controller } = await stub('findOne', null);
-
-    await expect(controller.getDetails('missing')).rejects.toThrow(
-      new NotFoundException('Test run not found: missing')
-    );
   });
 
   describe('approveTestRun', () => {

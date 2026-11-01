@@ -11,7 +11,6 @@ import {
   UseInterceptors,
   Logger,
   Patch,
-  NotFoundException,
   BadRequestException,
   ParseArrayPipe,
   HttpCode,
@@ -32,7 +31,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { Role, TestRun, User } from '@prisma/client';
-import { TestRunsService } from './test-runs.service';
+import { MatchingVariations, TestRunsService } from './test-runs.service';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { TestRunDto } from './dto/testRun.dto';
@@ -50,7 +49,7 @@ import { positiveNumber } from '../utils/env';
 import { isUUID } from 'class-validator';
 import { BulkResultDto } from './dto/bulk-result.dto';
 import { isPrismaError } from '../prisma/prisma-errors';
-import { errorMessage } from '../http-exception.filter';
+import { errorMessage } from '../utils/errors';
 
 const DEFAULT_MULTIPART_FILE_SIZE_LIMIT = 100 * 1024 * 1024;
 
@@ -97,12 +96,8 @@ export class TestRunsController {
   @ApiOkResponse({ type: TestRunDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  async getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRunDto> {
-    const testRun = await this.testRunsService.findOne(id);
-    if (!testRun) {
-      throw new NotFoundException(`Test run not found: ${id}`);
-    }
-    return testRun;
+  getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<TestRunDto> {
+    return this.testRunsService.findOneOrThrow(id);
   }
 
   @Post('approve')
@@ -134,9 +129,7 @@ export class TestRunsController {
   @ApiParam({ name: 'id', required: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  getMatchingSiblings(
-    @Param('id', new ParseUUIDPipe()) id: string
-  ): Promise<{ variations: TestRunDto[]; skipped: Array<TestRunDto & { reason: string }> }> {
+  getMatchingSiblings(@Param('id', new ParseUUIDPipe()) id: string): Promise<MatchingVariations> {
     return this.testRunsService.getMatchingVariations(id);
   }
 

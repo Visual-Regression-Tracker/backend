@@ -7,12 +7,14 @@ import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { BuildDto } from '../builds/dto/build.dto';
-import { getTestVariationUniqueData, parseIgnoreAreas, variationKey } from '../utils';
+import { VariationKey, getTestVariationUniqueData, parseIgnoreAreas, variationKey } from '../utils';
 import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 import { BaselineDataDto } from '../shared/dto/baseline-data.dto';
 import type { WrapperType } from '../shared/wrapper-type';
 
 export type BaselineRef = Pick<Baseline, 'id' | 'baselineName'>;
+
+type NewVariation = BaselineDataDto & { projectId: string; branchName: string };
 
 @Injectable()
 export class TestVariationsService {
@@ -79,7 +81,7 @@ export class TestVariationsService {
   }
 
   async findUnique(
-    data: ReturnType<typeof getTestVariationUniqueData> & { projectId: string; branchName: string },
+    data: VariationKey,
     tx: Prisma.TransactionClient = this.prismaService
   ): Promise<TestVariation | null> {
     return tx.testVariation.findUnique({
@@ -142,24 +144,19 @@ export class TestVariationsService {
     return mainBranchTestVariation ?? undefined;
   }
 
-  create(
-    { createTestRequestDto }: { createTestRequestDto: Omit<CreateTestRequestDto, 'buildId' | 'ignoreAreas'> },
-    tx: Prisma.TransactionClient = this.prismaService
-  ): Promise<TestVariation> {
+  create(data: NewVariation, tx: Prisma.TransactionClient = this.prismaService): Promise<TestVariation> {
     return tx.testVariation.create({
       data: {
-        project: { connect: { id: createTestRequestDto.projectId } },
-        branchName: createTestRequestDto.branchName,
-        ...getTestVariationUniqueData(createTestRequestDto),
+        project: { connect: { id: data.projectId } },
+        branchName: data.branchName,
+        ...getTestVariationUniqueData(data),
       },
     });
   }
 
-  async createOrTakeWinner(
-    createTestRequestDto: Omit<CreateTestRequestDto, 'buildId' | 'ignoreAreas'>
-  ): Promise<TestVariation> {
+  async createOrTakeWinner(createTestRequestDto: NewVariation): Promise<TestVariation> {
     try {
-      return await this.create({ createTestRequestDto });
+      return await this.create(createTestRequestDto);
     } catch (e) {
       if (isPrismaError(e, 'P2002')) {
         const winner = await this.findUnique(

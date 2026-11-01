@@ -22,11 +22,13 @@ export const getTestVariationUniqueData = (
   };
 };
 
+export type VariationKey = ReturnType<typeof getTestVariationUniqueData> & { projectId: string; branchName: string };
+
 export const variationKey = (
   projectId: string,
   branchName: string,
   source: TestRun | TestVariation | BaselineDataDto
-): ReturnType<typeof getTestVariationUniqueData> & { projectId: string; branchName: string } => ({
+): VariationKey => ({
   projectId,
   branchName,
   ...getTestVariationUniqueData(source),

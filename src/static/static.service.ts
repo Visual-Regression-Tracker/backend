@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Readable } from 'stream';
 import { StaticFactoryService } from './static.factory';
 import { assertPngWithinPixelLimit, isPngBuffer } from './utils';
-import { Static } from './static.interface';
+import { ImageType, Static } from './static.interface';
 import { mapWithConcurrency } from '../utils/map-with-concurrency';
 
 @Injectable()
@@ -13,7 +13,7 @@ export class StaticService {
     this.staticService = this.staticFactoryService.getStaticService();
   }
 
-  async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
+  async saveImage(type: ImageType, imageBuffer: Buffer): Promise<string> {
     if (!isPngBuffer(imageBuffer)) {
       throw new BadRequestException('Cannot parse image as PNG file');
     }
@@ -31,7 +31,7 @@ export class StaticService {
     return this.staticService.getImageStream(imageName);
   }
 
-  async copyImage(type: 'screenshot' | 'diff' | 'baseline', sourceImageName: string): Promise<string> {
+  async copyImage(type: ImageType, sourceImageName: string): Promise<string> {
     return this.staticService.copyImage(type, sourceImageName);
   }
 

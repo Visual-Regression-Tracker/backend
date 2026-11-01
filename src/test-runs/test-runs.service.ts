@@ -77,7 +77,9 @@ export class TestRunsService {
       throw new NotFoundException(`Build not found: ${createTestRequestDto.buildId}`);
     }
     if (build.projectId !== createTestRequestDto.projectId) {
-      this.warnForeignBuild(createTestRequestDto);
+      this.logger.warn(
+        `Build ${createTestRequestDto.buildId} does not belong to project ${createTestRequestDto.projectId}`
+      );
     }
     this.compareService.getComparator(project.imageComparison);
 
@@ -147,10 +149,6 @@ export class TestRunsService {
     );
   }
 
-  private warnForeignBuild({ buildId, projectId }: CreateTestRequestDto): void {
-    this.logger.warn(`Build ${buildId} does not belong to project ${projectId}`);
-  }
-
   async approve(id: string, merge = false, autoApprove = false, userId?: string): Promise<TestRun> {
     try {
       return await this.approveOnce(id, merge, autoApprove, userId);
@@ -194,8 +192,7 @@ export class TestRunsService {
         if (toFeatureBranch) {
           const key = variationKey(testVariation.projectId, testRun.branchName, testRun);
           const featureBranchTestVariation =
-            (await this.testVariationService.findUnique(key, tx)) ??
-            (await this.testVariationService.create({ createTestRequestDto: key }, tx));
+            (await this.testVariationService.findUnique(key, tx)) ?? (await this.testVariationService.create(key, tx));
           target = await this.testVariationService.update(
             featureBranchTestVariation.id,
             { ignoreAreas: testRun.ignoreAreas, comment: testRun.comment },
@@ -446,9 +443,7 @@ export class TestRunsService {
     return { testRun, matching, skipped };
   }
 
-  async getMatchingVariations(
-    id: string
-  ): Promise<{ variations: TestRunDto[]; skipped: Array<TestRunDto & { reason: string }> }> {
+  async getMatchingVariations(id: string): Promise<MatchingVariations> {
     const { testRun, matching, skipped } = await this.findMatchingSiblings(id);
     const variations = [testRun, ...matching].map((run) => new TestRunDto(run));
     const skippedDto = skipped.map((item) => ({ ...new TestRunDto(item.run), reason: item.reason }));
@@ -504,19 +499,19 @@ export class TestRunsService {
     return signature;
   }
 
-  async saveDiffResult(id: string, diffResult: DiffResult | null): Promise<TestRun> {
+  async saveDiffResult(id: string, diffResult: DiffResult): Promise<TestRun> {
     const testRun = await this.prismaService.testRun.update({
       where: { id },
       data: {
-        diffName: diffResult && diffResult.diffName,
-        pixelMisMatchCount: diffResult && diffResult.pixelMisMatchCount,
-        diffPercent: diffResult && diffResult.diffPercent,
-        status: diffResult ? diffResult.status : TestStatus.new,
+        diffName: diffResult.diffName,
+        pixelMisMatchCount: diffResult.pixelMisMatchCount,
+        diffPercent: diffResult.diffPercent,
+        status: diffResult.status,
         // null, not undefined: Prisma skips undefined and would keep the previous analysis
-        vlmDescription: diffResult?.vlmDescription ?? null,
-        changeSignature: diffResult?.changeSignature ? JSON.stringify(diffResult.changeSignature) : null,
-        imageThumbnailName: diffResult?.imageThumbnailName ?? null,
-        diffThumbnailName: diffResult?.diffThumbnailName ?? null,
+        vlmDescription: diffResult.vlmDescription ?? null,
+        changeSignature: diffResult.changeSignature ? JSON.stringify(diffResult.changeSignature) : null,
+        imageThumbnailName: diffResult.imageThumbnailName ?? null,
+        diffThumbnailName: diffResult.diffThumbnailName ?? null,
       },
     });
     this.eventsGateway.testRunUpdated(testRun);
@@ -604,7 +599,6 @@ export class TestRunsService {
     try {
       testRun = await this.prismaService.testRun.delete({ where: { id } });
     } catch (e) {
-      // workaround https://github.com/Visual-Regression-Tracker/Visual-Regression-Tracker/issues/435
       if (isPrismaError(e, 'P2025')) {
         this.logger.warn(`TestRun not found ${id}`);
         return;
@@ -779,6 +773,11 @@ interface AutoApproveProps {
   testRun: TestRun;
   project: Project;
   imageBuffer?: Buffer;
+}
+
+export interface MatchingVariations {
+  variations: TestRunDto[];
+  skipped: Array<TestRunDto & { reason: string }>;
 }
 
 interface SkippedSibling {

@@ -26,13 +26,13 @@ export interface BlurAmplitudeJobOutput {
   gate?: PatchGate;
 }
 
-export const DEFAULT_BLUR_SIGMA = 1;
+const DEFAULT_BLUR_SIGMA = 1;
 // strongest of 57 anti-aliasing-only real pairs: 75.1; 72% of injected bugs still fail
 export const DEFAULT_BLUR_AMPLITUDE_THRESHOLD = 80;
 
-// solid share: sub-pixel shifts up to 0.7%, #e0e0e0 panel 19%
 const SOLID_MIN_CHANGE = 6;
 const SOLID_KEEP = 0.9;
+// solid share: sub-pixel shifts up to 0.7%, #e0e0e0 panel 19%
 export const MAX_SOLID_SHARE = 0.01;
 
 export const MAX_MEASURED_PIXELS = 16_000_000;
