@@ -1,11 +1,9 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { ImageComparison, Project, TestStatus } from '@prisma/client';
 import { existsSync, readFileSync, promises as fs } from 'fs';
 import { createServer } from 'net';
 import { PNG } from 'pngjs';
 import { randomUUID } from 'crypto';
-import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { BuildsService } from '../src/builds/builds.service';
@@ -18,19 +16,8 @@ import { DEFAULT_CONFIG as LOOKS_SAME_DEFAULT_CONFIG } from '../src/compare/libs
 import { DEFAULT_CONFIG as ODIFF_DEFAULT_CONFIG } from '../src/compare/libs/odiff/odiff.service';
 import { DEFAULT_CONFIG as VLM_DEFAULT_CONFIG } from '../src/compare/libs/vlm/vlm.service';
 import { Response } from 'supertest';
+import { createE2eApp, withEnv } from './api-helpers';
 import { haveUserLogged, requestWithApiKey, requestWithAuth, LoggedUser } from './preconditions';
-
-/**
- * Every comparator end to end: a real project with the comparator selected,
- * test runs posted over HTTP (multipart, like the SDKs), the real looks-same
- * library, the native odiff-bin binary and the HDD storage underneath.
- *
- * VLM: no Ollama or Gemini is reachable from the test machine. The real
- * OllamaService is used for the "provider unreachable" case (it is pointed at
- * a closed local port), the real GeminiService for the "no API key" case, and
- * the model's verdict is stubbed with jest.spyOn on the OllamaService instance
- * the app resolved, so everything around the provider call stays real.
- */
 
 const SIZE = 360;
 const TOTAL_PIXELS = SIZE * SIZE;
@@ -40,7 +27,6 @@ const image = readFileSync('./test/image.png');
 const imageEdited = readFileSync('./test/image_edited.png');
 const imageEdited2 = readFileSync('./test/image_edited_2.png');
 
-// The same picture with its last 60 columns cut off (300x360): a layout change
 const cropWidth = (buffer: Buffer, width: number): Buffer => {
   const source = PNG.sync.read(buffer);
   const target = new PNG({ width, height: source.height });
@@ -48,6 +34,11 @@ const cropWidth = (buffer: Buffer, width: number): Buffer => {
   return PNG.sync.write(target);
 };
 const imageNarrow = cropWidth(image, 300);
+
+const slow = (name: string, fn: () => Promise<void>) => it(name, fn, SLOW_TEST);
+
+const NO_DIFF = { status: TestStatus.ok, diffPercent: 0, pixelMisMatchCount: 0, diffName: null };
+const NO_NUMBERS = { status: TestStatus.unresolved, diffName: null, diffPercent: null, pixelMisMatchCount: null };
 
 const WHOLE_IMAGE: IgnoreAreaDto[] = [{ x: 0, y: 0, width: SIZE, height: SIZE }];
 
@@ -74,21 +65,15 @@ describe('Comparators (e2e)', () => {
   const projectIds: string[] = [];
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe());
-    usersService = moduleFixture.get(UsersService);
-    projectsService = moduleFixture.get(ProjectsService);
-    buildsService = moduleFixture.get(BuildsService);
-    testRunsService = moduleFixture.get(TestRunsService);
-    hddService = moduleFixture.get(HddService);
-    prismaService = moduleFixture.get(PrismaService);
-    ollamaService = moduleFixture.get(OllamaService);
-
-    await app.init();
+    const created = await createE2eApp();
+    app = created.app;
+    usersService = created.get(UsersService);
+    projectsService = created.get(ProjectsService);
+    buildsService = created.get(BuildsService);
+    testRunsService = created.get(TestRunsService);
+    hddService = created.get(HddService);
+    prismaService = created.get(PrismaService);
+    ollamaService = created.get(OllamaService);
     user = await haveUserLogged(usersService);
   });
 
@@ -116,7 +101,6 @@ describe('Comparators (e2e)', () => {
     bulkApproveGroupBy: 'customTags',
   });
 
-  // created through the projects API, the way the UI does it
   const DEFAULT_CONFIGS: Partial<Record<ImageComparison, object>> = {
     [ImageComparison.lookSame]: LOOKS_SAME_DEFAULT_CONFIG,
     [ImageComparison.odiff]: ODIFF_DEFAULT_CONFIG,
@@ -134,7 +118,6 @@ describe('Comparators (e2e)', () => {
     return res.body;
   };
 
-  // resolves with the response: an async helper cannot hand back the chainable supertest request
   const postTestRun = async (
     project: Project,
     imageBuffer: Buffer,
@@ -164,407 +147,180 @@ describe('Comparators (e2e)', () => {
 
   const diffExists = (imageName: string) => existsSync(hddService.getImagePath(imageName));
 
-  // posts the first image and approves it, so the next run of the same screen has a baseline
-  // and resolves with the name of the baseline image file
   const haveBaseline = async (project: Project, imageBuffer: Buffer = image): Promise<string> => {
     const res = await postTestRun(project, imageBuffer);
     expect(res.body.status).toBe(TestStatus.new);
     const approved = await testRunsService.approve(res.body.id);
-    // approving gave the run a variation and the variation a baseline
     const baselineName = (await prismaService.testVariation.findUnique({ where: { id: approved.testVariationId! } }))!
       .baselineName!;
     expect(diffExists(baselineName)).toBe(true);
     return baselineName;
   };
 
+  const compare = async (
+    imageComparison: ImageComparison,
+    imageComparisonConfig: string | undefined,
+    candidate: Buffer,
+    extra: Parameters<typeof postTestRun>[2] = {}
+  ) => {
+    const project = await haveProject(imageComparison, imageComparisonConfig);
+    await haveBaseline(project);
+    return { project, res: await postTestRun(project, candidate, extra) };
+  };
+
+  describe.each([
+    {
+      comparator: ImageComparison.lookSame,
+      changedCount: 31068,
+      changedPercent: (31068 * 100) / TOTAL_PIXELS,
+      resizedConfig: { allowDiffDimensions: true },
+      resizedPercent: (60 * SIZE * 100) / TOTAL_PIXELS,
+      lenientConfig: { tolerance: 100 },
+    },
+    {
+      comparator: ImageComparison.odiff,
+      changedCount: 31145,
+      changedPercent: 24.03,
+      resizedConfig: { outputDiffMask: true, failOnLayoutDiff: false, threshold: 0, antialiasing: true },
+      resizedPercent: 16.67,
+      lenientConfig: { threshold: 1 },
+    },
+  ])('$comparator', ({ comparator, changedCount, changedPercent, resizedConfig, resizedPercent, lenientConfig }) => {
+    slow('ok for the same image', async () => {
+      const { res } = await compare(comparator, undefined, image);
+
+      expect(res.body).toMatchObject(NO_DIFF);
+    });
+
+    slow('unresolved with a diff file for a changed image', async () => {
+      const { res } = await compare(comparator, undefined, imageEdited);
+
+      expect(res.body).toMatchObject({
+        status: TestStatus.unresolved,
+        pixelMisMatchCount: changedCount,
+        diffPercent: changedPercent,
+        imageThumbnailName: null,
+        diffThumbnailName: null,
+      });
+      expect(res.body.diffName).toMatch(/\.diff\.png$/);
+      expect(diffExists(res.body.diffName)).toBe(true);
+      const diff = PNG.sync.read(await fs.readFile(hddService.getImagePath(res.body.diffName)));
+      expect([diff.width, diff.height]).toEqual([SIZE, SIZE]);
+    });
+
+    slow('ok, without a diff, when the change is within diffTollerancePercent', async () => {
+      const { res } = await compare(comparator, undefined, imageEdited, { diffTollerancePercent: 100 });
+
+      expect(res.body).toMatchObject({
+        diffTollerancePercent: 100,
+        status: TestStatus.ok,
+        diffName: null,
+        pixelMisMatchCount: changedCount,
+        diffPercent: changedPercent,
+      });
+    });
+
+    slow('unresolved when the change is over diffTollerancePercent', async () => {
+      const { res } = await compare(comparator, undefined, imageEdited, { diffTollerancePercent: 0.01 });
+
+      expect(res.body.status).toBe(TestStatus.unresolved);
+      expect(diffExists(res.body.diffName)).toBe(true);
+    });
+
+    slow('ok when an ignore area covers the whole change', async () => {
+      const { res } = await compare(comparator, undefined, imageEdited, { ignoreAreas: WHOLE_IMAGE });
+
+      expect(res.body).toMatchObject(NO_DIFF);
+    });
+
+    slow('unresolved without numbers for a different size', async () => {
+      const { res } = await compare(comparator, undefined, imageNarrow);
+
+      expect(res.body).toMatchObject(NO_NUMBERS);
+    });
+
+    slow('compares a different size when the project config allows it', async () => {
+      const { res } = await compare(comparator, JSON.stringify(resizedConfig), imageNarrow);
+
+      expect(res.body).toMatchObject({
+        status: TestStatus.unresolved,
+        pixelMisMatchCount: 60 * SIZE,
+        diffPercent: resizedPercent,
+      });
+      expect(diffExists(res.body.diffName)).toBe(true);
+    });
+
+    slow('reads the tolerance from the project config', async () => {
+      const { res } = await compare(comparator, JSON.stringify(lenientConfig), imageEdited);
+
+      expect(res.body).toMatchObject(NO_DIFF);
+    });
+
+    slow('treats a missing baseline file as no baseline', async () => {
+      const project = await haveProject(comparator);
+      await fs.unlink(hddService.getImagePath(await haveBaseline(project)));
+
+      const res = await postTestRun(project, imageEdited);
+
+      expect(res.body).toMatchObject({ status: TestStatus.new, diffName: null, diffPercent: null });
+    });
+  });
+
   describe('lookSame', () => {
-    it(
-      'new without a baseline, ok for the same image',
-      async () => {
-        const project = await haveProject(ImageComparison.lookSame);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, image);
-
-        expect(res.body).toMatchObject({
-          status: TestStatus.ok,
-          diffPercent: 0,
-          pixelMisMatchCount: 0,
-          diffName: null,
-        });
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'unresolved with a diff file for a changed image',
-      async () => {
-        const project = await haveProject(ImageComparison.lookSame);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited);
-
-        expect(res.body).toMatchObject({
-          status: TestStatus.unresolved,
-          pixelMisMatchCount: 31068,
-          diffPercent: (31068 * 100) / TOTAL_PIXELS,
-          // thumbnails and change signatures are pixelmatch-only
-          imageThumbnailName: null,
-          diffThumbnailName: null,
-        });
-        expect(res.body.diffName).toMatch(/\.diff\.png$/);
-        expect(diffExists(res.body.diffName)).toBe(true);
-        // looks-same writes a full-size diff image
-        const diff = PNG.sync.read(await fs.readFile(hddService.getImagePath(res.body.diffName)));
-        expect([diff.width, diff.height]).toEqual([SIZE, SIZE]);
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'ok, without a diff, when the change is within diffTollerancePercent',
-      async () => {
-        const project = await haveProject(ImageComparison.lookSame);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited, { diffTollerancePercent: 100 });
-
-        expect(res.body).toMatchObject({ diffTollerancePercent: 100, status: TestStatus.ok, diffName: null });
-        expect(res.body.pixelMisMatchCount).toBeGreaterThan(0);
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'unresolved when the change is over diffTollerancePercent',
-      async () => {
-        const project = await haveProject(ImageComparison.lookSame);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited, { diffTollerancePercent: 0.01 });
-
-        expect(res.body.status).toBe(TestStatus.unresolved);
-        expect(diffExists(res.body.diffName)).toBe(true);
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'ok when an ignore area covers the whole change',
-      async () => {
-        const project = await haveProject(ImageComparison.lookSame);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited, { ignoreAreas: WHOLE_IMAGE });
-
-        expect(res.body).toMatchObject({
-          status: TestStatus.ok,
-          diffPercent: 0,
-          pixelMisMatchCount: 0,
-          diffName: null,
-        });
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'unresolved without numbers for a different size',
-      async () => {
-        const project = await haveProject(ImageComparison.lookSame);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageNarrow);
-
-        expect(res.body).toMatchObject({
-          status: TestStatus.unresolved,
-          diffName: null,
-          diffPercent: null,
-          pixelMisMatchCount: null,
-        });
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'compares a different size when the project config allows it',
-      async () => {
-        const project = await haveProject(ImageComparison.lookSame, JSON.stringify({ allowDiffDimensions: true }));
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageNarrow);
-
-        // the 60 missing columns are the difference, counted against the baseline's area
-        expect(res.body).toMatchObject({
-          status: TestStatus.unresolved,
-          pixelMisMatchCount: 60 * SIZE,
-          diffPercent: (60 * SIZE * 100) / TOTAL_PIXELS,
-        });
-        expect(diffExists(res.body.diffName)).toBe(true);
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'reads tolerance from the project config',
-      async () => {
-        // a partial config replaces the defaults instead of being merged into them
-        const project = await haveProject(ImageComparison.lookSame, JSON.stringify({ tolerance: 100 }));
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited);
-
-        // a ΔE tolerance of 100 accepts every colour change in this picture
-        expect(res.body).toMatchObject({
-          status: TestStatus.ok,
-          diffPercent: 0,
-          pixelMisMatchCount: 0,
-          diffName: null,
-        });
-      },
-      SLOW_TEST
-    );
-
     it('the projects API rejects a config that is not JSON', async () => {
       await requestWithAuth(app, 'post', '/projects', user.token)
         .send(projectBody(ImageComparison.lookSame, 'not json'))
         .expect(400)
         .expect((res) => {
           expect(res.body.message).toBe('imageComparisonConfig must be a json string');
-          expect(res.body.exception.response.message).toEqual(['imageComparisonConfig must be a json string']);
         });
     });
 
-    it(
-      'falls back to the default config when the stored config is not JSON',
-      async () => {
-        const created = await haveProject(ImageComparison.lookSame);
-        // only reachable by writing the column directly: the API validates the JSON
-        const project = await prismaService.project.update({
-          where: { id: created.id },
-          data: { imageComparisonConfig: 'not json' },
-        });
-        await haveBaseline(project);
+    slow('falls back to the default config when the stored config is not JSON', async () => {
+      const created = await haveProject(ImageComparison.lookSame);
+      const project = await prismaService.project.update({
+        where: { id: created.id },
+        data: { imageComparisonConfig: 'not json' },
+      });
+      await haveBaseline(project);
 
-        const res = await postTestRun(project, imageEdited);
+      const res = await postTestRun(project, imageEdited);
 
-        // same numbers as with DEFAULT_CONFIG
-        expect(res.body).toMatchObject({ status: TestStatus.unresolved, pixelMisMatchCount: 31068 });
-        expect(diffExists(res.body.diffName)).toBe(true);
-      },
-      SLOW_TEST
-    );
+      expect(res.body).toMatchObject({ status: TestStatus.unresolved, pixelMisMatchCount: 31068 });
+      expect(diffExists(res.body.diffName)).toBe(true);
+    });
 
-    it(
-      'falls back to the default config when looks-same rejects the config',
-      async () => {
-        // looks-same refuses strict together with tolerance
-        const project = await haveProject(ImageComparison.lookSame, JSON.stringify({ strict: true, tolerance: 5 }));
-        await haveBaseline(project);
+    slow('falls back to the default config when looks-same rejects the config', async () => {
+      const { res } = await compare(
+        ImageComparison.lookSame,
+        JSON.stringify({ strict: true, tolerance: 5 }),
+        imageEdited
+      );
 
-        const res = await postTestRun(project, imageEdited);
-
-        // the same numbers as with the default config (see the config that is not JSON)
-        expect(res.body).toMatchObject({ status: TestStatus.unresolved, pixelMisMatchCount: 31068 });
-        expect(diffExists(res.body.diffName)).toBe(true);
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'treats a missing baseline file as no baseline',
-      async () => {
-        const project = await haveProject(ImageComparison.lookSame);
-        const baselineName = await haveBaseline(project);
-        await fs.unlink(hddService.getImagePath(baselineName));
-
-        const res = await postTestRun(project, imageEdited);
-
-        expect(res.body).toMatchObject({ status: TestStatus.new, diffName: null, diffPercent: null });
-      },
-      SLOW_TEST
-    );
+      expect(res.body).toMatchObject({ status: TestStatus.unresolved, pixelMisMatchCount: 31068 });
+      expect(diffExists(res.body.diffName)).toBe(true);
+    });
   });
 
   describe('odiff', () => {
-    it(
-      'ok for the same image',
-      async () => {
-        const project = await haveProject(ImageComparison.odiff);
-        await haveBaseline(project);
+    slow('fails the request when storage is not HDD', async () => {
+      const project = await haveProject(ImageComparison.odiff);
+      await haveBaseline(project);
 
-        const res = await postTestRun(project, image);
-
-        expect(res.body).toMatchObject({
-          status: TestStatus.ok,
-          diffPercent: 0,
-          pixelMisMatchCount: 0,
-          diffName: null,
-        });
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'unresolved with a diff file for a changed image',
-      async () => {
-        const project = await haveProject(ImageComparison.odiff);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited);
-
-        // odiff rounds the percentage to two decimals
-        expect(res.body).toMatchObject({
-          status: TestStatus.unresolved,
-          pixelMisMatchCount: 31145,
-          diffPercent: 24.03,
-          imageThumbnailName: null,
-          diffThumbnailName: null,
-        });
-        expect(res.body.diffName).toMatch(/\.diff\.png$/);
-        expect(diffExists(res.body.diffName)).toBe(true);
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'ok within diffTollerancePercent, without keeping a diff',
-      async () => {
-        const project = await haveProject(ImageComparison.odiff);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited, { diffTollerancePercent: 100 });
-
-        // the numbers are kept, the diff image odiff wrote is deleted
-        expect(res.body).toMatchObject({
-          status: TestStatus.ok,
-          diffName: null,
-          pixelMisMatchCount: 31145,
-          diffPercent: 24.03,
-        });
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'ok when an ignore region covers the whole change',
-      async () => {
-        const project = await haveProject(ImageComparison.odiff);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited, { ignoreAreas: WHOLE_IMAGE });
-
-        expect(res.body).toMatchObject({
-          status: TestStatus.ok,
-          diffPercent: 0,
-          pixelMisMatchCount: 0,
-          diffName: null,
-        });
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'unresolved without numbers for a different size',
-      async () => {
-        const project = await haveProject(ImageComparison.odiff);
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageNarrow);
-
-        expect(res.body).toMatchObject({
-          status: TestStatus.unresolved,
-          diffName: null,
-          diffPercent: null,
-          pixelMisMatchCount: null,
-        });
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'compares a different size when failOnLayoutDiff is off',
-      async () => {
-        const project = await haveProject(
-          ImageComparison.odiff,
-          JSON.stringify({ outputDiffMask: true, failOnLayoutDiff: false, threshold: 0, antialiasing: true })
+      await withEnv({ STATIC_SERVICE: 's3' }, async () => {
+        const res = await postTestRun(project, imageEdited, {}, 500);
+        expect(res.body.message).toBe(
+          'Odiff can only be used with HDD static service. Please use another image comparison lib in project settings or switch STATIC_SERVICE envitonmental variable to HDD.'
         );
-        await haveBaseline(project);
+      });
 
-        const res = await postTestRun(project, imageNarrow);
-
-        expect(res.body).toMatchObject({
-          status: TestStatus.unresolved,
-          pixelMisMatchCount: 60 * SIZE,
-          diffPercent: 16.67,
-        });
-        expect(diffExists(res.body.diffName)).toBe(true);
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'reads threshold from the project config',
-      async () => {
-        // a partial config replaces the defaults instead of being merged into them
-        const project = await haveProject(ImageComparison.odiff, JSON.stringify({ threshold: 1 }));
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited);
-
-        // the maximum colour threshold treats every changed pixel as equal
-        expect(res.body).toMatchObject({
-          status: TestStatus.ok,
-          diffPercent: 0,
-          pixelMisMatchCount: 0,
-          diffName: null,
-        });
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'treats a missing baseline file as no baseline',
-      async () => {
-        const project = await haveProject(ImageComparison.odiff);
-        const baselineName = await haveBaseline(project);
-        await fs.unlink(hddService.getImagePath(baselineName));
-
-        const res = await postTestRun(project, imageEdited);
-
-        expect(res.body).toMatchObject({ status: TestStatus.new, diffName: null, diffPercent: null });
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'fails the request when storage is not HDD',
-      async () => {
-        const project = await haveProject(ImageComparison.odiff);
-        await haveBaseline(project);
-        const previous = process.env.STATIC_SERVICE;
-        process.env.STATIC_SERVICE = 's3';
-        try {
-          const res = await postTestRun(project, imageEdited, {}, 500);
-          expect(res.body.message).toBe(
-            'Odiff can only be used with HDD static service. Please use another image comparison lib in project settings or switch STATIC_SERVICE envitonmental variable to HDD.'
-          );
-        } finally {
-          if (previous === undefined) {
-            delete process.env.STATIC_SERVICE;
-          } else {
-            process.env.STATIC_SERVICE = previous;
-          }
-        }
-        // refused before the run was stored: only the baseline's run is there
-        const runs = await prismaService.testRun.findMany({ where: { projectId: project.id } });
-        expect(runs.map((run) => run.status)).toEqual([TestStatus.approved]);
-      },
-      SLOW_TEST
-    );
+      const runs = await prismaService.testRun.findMany({ where: { projectId: project.id } });
+      expect(runs.map((run) => run.status)).toEqual([TestStatus.approved]);
+    });
   });
 
   describe.each([ImageComparison.lookSame, ImageComparison.odiff])('%s on a feature branch', (imageComparison) => {
-    it(
+    slow(
       'auto-approves a run that matches an older main-branch baseline, and compares without keeping diffs',
       async () => {
         const created = await haveProject(imageComparison);
@@ -573,41 +329,32 @@ describe('Comparators (e2e)', () => {
           data: { autoApproveFeature: true },
         });
         await haveBaseline(project, image);
-        // a second approval on main: the variation's baseline history is now [edited, image]
         const res = await postTestRun(project, imageEdited);
         expect(res.body.status).toBe(TestStatus.unresolved);
         await testRunsService.approve(res.body.id);
 
         const matching = await postTestRun(project, image, { branchName: 'feature' });
-        // compared with the older baseline with saveDiffAsFile off, then auto-approved
         expect(matching.body.status).toBe(TestStatus.autoApproved);
 
         const other = await postTestRun(project, imageEdited2, { branchName: 'feature' });
         expect(other.body.status).toBe(TestStatus.unresolved);
-        // the diff kept is the one against the current baseline
         expect(diffExists(other.body.diffName)).toBe(true);
-      },
-      SLOW_TEST
+      }
     );
   });
 
   describe('vlm', () => {
     const vlmConfig = JSON.stringify({ provider: 'ollama', model: 'llava:7b', prompt: 'compare', temperature: 0 });
+    const answer = (verdict: object) => ({ content: JSON.stringify(verdict) });
 
-    it(
-      'ok for the same image without asking the model',
-      async () => {
-        const generate = jest.spyOn(ollamaService, 'generate');
-        const project = await haveProject(ImageComparison.vlm, vlmConfig);
-        await haveBaseline(project);
+    slow('ok for the same image without asking the model', async () => {
+      const generate = jest.spyOn(ollamaService, 'generate');
 
-        const res = await postTestRun(project, image);
+      const { res } = await compare(ImageComparison.vlm, vlmConfig, image);
 
-        expect(res.body).toMatchObject({ status: TestStatus.ok, diffName: null, vlmDescription: null });
-        expect(generate).not.toHaveBeenCalled();
-      },
-      SLOW_TEST
-    );
+      expect(res.body).toMatchObject({ status: TestStatus.ok, diffName: null, vlmDescription: null });
+      expect(generate).not.toHaveBeenCalled();
+    });
 
     it.each([
       [true, TestStatus.ok],
@@ -617,11 +364,9 @@ describe('Comparators (e2e)', () => {
       async (identical, status) => {
         const generate = jest
           .spyOn(ollamaService, 'generate')
-          .mockResolvedValue({ content: JSON.stringify({ identical, description: 'Button moved' }) });
-        const project = await haveProject(ImageComparison.vlm, vlmConfig);
-        await haveBaseline(project);
+          .mockResolvedValue(answer({ identical, description: 'Button moved' }));
 
-        const res = await postTestRun(project, imageEdited);
+        const { res } = await compare(ImageComparison.vlm, vlmConfig, imageEdited);
 
         expect(res.body.status).toBe(status);
         expect(res.body.vlmDescription).toBe('Button moved');
@@ -636,24 +381,19 @@ describe('Comparators (e2e)', () => {
       SLOW_TEST
     );
 
-    it(
-      'reads the verdict from thinking when useThinking is set',
-      async () => {
-        jest
-          .spyOn(ollamaService, 'generate')
-          .mockResolvedValue({ content: '', thinking: JSON.stringify({ identical: true, description: 'Same' }) });
-        const project = await haveProject(
-          ImageComparison.vlm,
-          JSON.stringify({ ...JSON.parse(vlmConfig), useThinking: true })
-        );
-        await haveBaseline(project);
+    slow('reads the verdict from thinking when useThinking is set', async () => {
+      jest
+        .spyOn(ollamaService, 'generate')
+        .mockResolvedValue({ content: '', thinking: JSON.stringify({ identical: true, description: 'Same' }) });
 
-        const res = await postTestRun(project, imageEdited);
+      const { res } = await compare(
+        ImageComparison.vlm,
+        JSON.stringify({ ...JSON.parse(vlmConfig), useThinking: true }),
+        imageEdited
+      );
 
-        expect(res.body).toMatchObject({ status: TestStatus.ok, vlmDescription: 'Same' });
-      },
-      SLOW_TEST
-    );
+      expect(res.body).toMatchObject({ status: TestStatus.ok, vlmDescription: 'Same' });
+    });
 
     it.each([
       [
@@ -663,12 +403,10 @@ describe('Comparators (e2e)', () => {
       [{ content: '', thinking: '' }, 'VLM analysis failed: Empty response from model'],
     ])(
       'keeps the pixelmatch verdict when the model answers %j',
-      async (answer, description) => {
-        jest.spyOn(ollamaService, 'generate').mockResolvedValue(answer);
-        const project = await haveProject(ImageComparison.vlm, vlmConfig);
-        await haveBaseline(project);
+      async (response, description) => {
+        jest.spyOn(ollamaService, 'generate').mockResolvedValue(response);
 
-        const res = await postTestRun(project, imageEdited);
+        const { res } = await compare(ImageComparison.vlm, vlmConfig, imageEdited);
 
         expect(res.body.status).toBe(TestStatus.unresolved);
         expect(res.body.vlmDescription).toBe(description);
@@ -676,74 +414,44 @@ describe('Comparators (e2e)', () => {
       SLOW_TEST
     );
 
-    it(
-      'keeps the pixelmatch verdict when Ollama is unreachable',
-      async () => {
-        // the Ollama client is created lazily from OLLAMA_BASE_URL on first use
-        const previous = process.env.OLLAMA_BASE_URL;
-        process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${await closedPort()}`;
-        try {
-          const project = await haveProject(ImageComparison.vlm, vlmConfig);
-          await haveBaseline(project);
-
-          const res = await postTestRun(project, imageEdited);
-
-          expect(res.body.status).toBe(TestStatus.unresolved);
-          expect(res.body.vlmDescription).toBe('VLM analysis failed: fetch failed');
-          expect(diffExists(res.body.diffName)).toBe(true);
-        } finally {
-          if (previous === undefined) {
-            delete process.env.OLLAMA_BASE_URL;
-          } else {
-            process.env.OLLAMA_BASE_URL = previous;
-          }
-        }
-      },
-      SLOW_TEST
-    );
-
-    it(
-      'keeps the pixelmatch verdict when the Gemini config has no API key',
-      async () => {
-        const project = await haveProject(
-          ImageComparison.vlm,
-          JSON.stringify({ provider: 'gemini', model: 'gemini-2.0-flash', prompt: 'compare', temperature: 0 })
-        );
-        await haveBaseline(project);
-
-        const res = await postTestRun(project, imageEdited);
+    slow('keeps the pixelmatch verdict when Ollama is unreachable', async () => {
+      await withEnv({ OLLAMA_BASE_URL: `http://127.0.0.1:${await closedPort()}` }, async () => {
+        const { res } = await compare(ImageComparison.vlm, vlmConfig, imageEdited);
 
         expect(res.body.status).toBe(TestStatus.unresolved);
-        expect(res.body.vlmDescription).toBe('VLM analysis failed: Gemini API key is required');
-      },
-      SLOW_TEST
-    );
+        expect(res.body.vlmDescription).toBe('VLM analysis failed: fetch failed');
+        expect(diffExists(res.body.diffName)).toBe(true);
+      });
+    });
 
-    it(
-      'sends the project config as is when it is not a VLM config',
-      async () => {
-        const generate = jest
-          .spyOn(ollamaService, 'generate')
-          .mockResolvedValue({ content: JSON.stringify({ identical: false, description: 'Changed' }) });
-        // no imageComparisonConfig: the column default is a pixelmatch config
-        const project = await projectsService.create({
-          ...projectBody(ImageComparison.vlm, undefined as unknown as string),
-        });
-        projectIds.push(project.id);
-        await haveBaseline(project);
+    slow('keeps the pixelmatch verdict when the Gemini config has no API key', async () => {
+      const { res } = await compare(
+        ImageComparison.vlm,
+        JSON.stringify({ provider: 'gemini', model: 'gemini-2.0-flash', prompt: 'compare', temperature: 0 }),
+        imageEdited
+      );
 
-        const res = await postTestRun(project, imageEdited);
+      expect(res.body.status).toBe(TestStatus.unresolved);
+      expect(res.body.vlmDescription).toBe('VLM analysis failed: Gemini API key is required');
+    });
 
-        expect(res.body).toMatchObject({ status: TestStatus.unresolved, vlmDescription: 'Changed' });
-        // the column default is pixelmatch's, laid over the VLM defaults: Ollama still gets a model and a prompt
-        expect(generate).toHaveBeenCalledTimes(1);
-        expect(generate.mock.calls[0][0]).toMatchObject({
-          model: VLM_DEFAULT_CONFIG.model,
-          prompt: VLM_DEFAULT_CONFIG.prompt,
-          temperature: VLM_DEFAULT_CONFIG.temperature,
-        });
-      },
-      SLOW_TEST
-    );
+    slow('sends the project config as is when it is not a VLM config', async () => {
+      const generate = jest
+        .spyOn(ollamaService, 'generate')
+        .mockResolvedValue(answer({ identical: false, description: 'Changed' }));
+      const project = await projectsService.create(projectBody(ImageComparison.vlm, undefined as unknown as string));
+      projectIds.push(project.id);
+      await haveBaseline(project);
+
+      const res = await postTestRun(project, imageEdited);
+
+      expect(res.body).toMatchObject({ status: TestStatus.unresolved, vlmDescription: 'Changed' });
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(generate.mock.calls[0][0]).toMatchObject({
+        model: VLM_DEFAULT_CONFIG.model,
+        prompt: VLM_DEFAULT_CONFIG.prompt,
+        temperature: VLM_DEFAULT_CONFIG.temperature,
+      });
+    });
   });
 });

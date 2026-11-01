@@ -2,12 +2,7 @@ import { readFileSync } from 'fs';
 import { isAbsolute, resolve } from 'path';
 import { Client, ClientConfig } from 'pg';
 
-/**
- * The TLS and schema handling of the backend's getPgOptions
- * (src/prisma/prisma.service.ts), so the seed reaches the database the way the
- * API does and Prisma 6 did. This package is built on its own and cannot
- * import from src/.
- */
+/** Mirrors getPgOptions (src/prisma/prisma.service.ts); this package cannot import from src/. */
 const PRISMA_SSL_PARAMS = ['sslmode', 'sslaccept', 'sslcert'];
 const PG_ONLY_SSL_PARAMS = ['sslrootcert', 'sslkey', 'uselibpqcompat'];
 
@@ -26,12 +21,8 @@ export function getSeedPgOptions(databaseUrl: string | undefined): {
   const schema = params.get('schema') ?? undefined;
   const sslmode = params.get('sslmode') ?? 'prefer';
   if (!['prefer', 'require', 'disable'].includes(sslmode) || PG_ONLY_SSL_PARAMS.some((name) => params.has(name))) {
-    // written for pg: its TLS settings are pg's to read
     return { config: { connectionString: databaseUrl }, schema, preferSsl: false };
   }
-  // Prisma 6: no certificate check unless sslaccept=strict, which checks
-  // against sslcert (relative to the prisma/ folder, this file's, wherever the
-  // seed is started from)
   const sslcert = params.get('sslcert');
   const ssl =
     params.get('sslaccept') === 'strict'
@@ -45,7 +36,6 @@ export function getSeedPgOptions(databaseUrl: string | undefined): {
   };
 }
 
-/** sslmode=prefer: plaintext from now on if the server has no TLS at all. */
 export async function negotiatePreferredSsl(config: ClientConfig): Promise<void> {
   const client = new Client(config);
   try {

@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [master]
 
-# a new push to a pull request supersedes its running checks; master runs to completion
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -16,15 +15,14 @@ permissions:
 
 jobs:
   checks:
-    # https://github.com/actions/runner-images#available-images
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -55,7 +53,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # acceptance tests call the api container, e2e tests run the app in-process against its database
           - suite: e2e
             compose-file: docker-compose.yml
             test: npm run test:acceptance && npm run test:e2e
@@ -66,14 +63,14 @@ jobs:
             compose-file: docker-compose.yml:docker-compose.oidc.yml
             test: npm run test:oidc
     env:
-      # read by every docker compose command below
       COMPOSE_FILE: ${{ matrix.compose-file }}
+      COMPOSE_PROJECT_NAME: vrt
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -84,12 +81,32 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Build and run containers
-        run: docker compose up --build -d
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build api image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: vrt-api:latest
+          cache-from: type=gha,scope=ci-api
+          cache-to: type=gha,mode=max,scope=ci-api
+
+      - name: Build migration image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: prisma
+          load: true
+          tags: vrt-migration:latest
+          cache-from: type=gha,scope=ci-migration
+          cache-to: type=gha,mode=max,scope=ci-migration
+
+      - name: Run containers
+        run: docker compose up --no-build -d
 
       - name: Wait for migrations and the api
         run: |
-          # the migration container applies the migrations, seeds the default user and exits
           status=$(docker wait vrt_migration)
           if [ "$status" != 0 ]; then
             echo "::error::migration container exited with $status"
@@ -113,12 +130,28 @@ jobs:
     # See: https://github.com/Visual-Regression-Tracker/backend/issues/273
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:15.3-alpine3.18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vrt_migrations
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d vrt_migrations"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vrt_migrations
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -130,19 +163,23 @@ jobs:
         working-directory: prisma
         run: npm ci
 
-      - name: Static analysis
+      - name: Unit tests
         working-directory: prisma
         run: npm run test
+
+      - name: Migrations match the schema
+        working-directory: prisma
+        run: |
+          npx prisma migrate deploy
+          npx prisma migrate diff --from-config-datasource --to-schema schema.prisma --exit-code
 
   test-dinov2:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # the logic is tested with a stand-in encoder: numpy only, no model;
-      # the runner's own Python 3.12, in a venv (system pip is locked down)
       - name: Unit tests
         working-directory: dinov2
         run: |
@@ -150,8 +187,7 @@ jobs:
           .venv/bin/pip install numpy==2.5.4
           .venv/bin/python -m unittest test_patches
 
-  # Branch protection requires a check named "build": it passes only when every job above did,
-  # so the required check keeps covering the whole pipeline after the split.
+  # branch protection requires a check named "build"
   build:
     if: ${{ !cancelled() }}
     needs: [checks, integration, test-migrations, test-dinov2]

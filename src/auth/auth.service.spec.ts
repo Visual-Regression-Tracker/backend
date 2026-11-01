@@ -18,10 +18,6 @@ describe('AuthService', () => {
     service = module.get<AuthService>(AuthService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   describe('encryptPassword', () => {
     it('produces a salted bcrypt hash with 10 rounds that matches the password', async () => {
       const hashed = await service.encryptPassword('secret');
@@ -55,7 +51,6 @@ describe('AuthService', () => {
     it('returns a key in the format keys were always issued in', () => {
       const apiKey = service.generateApiKey();
 
-      // 28 Crockford base32 digits, upper case, no dashes
       expect(apiKey).toMatch(/^[0-9A-HJKMNP-TV-Z]{28}$/);
     });
 
@@ -65,11 +60,25 @@ describe('AuthService', () => {
   });
 
   describe('signToken', () => {
-    it('signs a payload carrying only the email of the user', () => {
+    it('signs the user id as sub next to the email, so older API versions still read the token', () => {
       const user = { id: 'user-id', email: 'user@example.com', password: 'hash', apiKey: 'key' } as User;
 
       expect(service.signToken(user)).toBe('signed-token');
-      expect(jwtService.sign).toHaveBeenCalledWith({ email: 'user@example.com' });
+      expect(jwtService.sign).toHaveBeenCalledWith({ sub: 'user-id', email: 'user@example.com' });
+    });
+
+    it('produces a token that decodes to sub, email, iat and exp', () => {
+      const real = new JwtService({ secret: 'secret', signOptions: { expiresIn: '1h' } });
+      const user = { id: 'user-id', email: 'user@example.com' } as User;
+
+      const token = new AuthService(real).signToken(user);
+
+      expect(real.decode(token)).toEqual({
+        sub: 'user-id',
+        email: 'user@example.com',
+        iat: expect.any(Number),
+        exp: expect.any(Number),
+      });
     });
   });
 });

@@ -2,16 +2,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TestStatus } from '@prisma/client';
 import { StaticService } from '../../../static/static.service';
 import { DiffResult } from '../../../test-runs/diffResult';
-import { applyIgnoreAreas, parseConfig } from '../../utils';
+import { parseConfig } from '../../utils';
+import { ConcurrencyLimiter } from './concurrency-limiter';
 import { ImageComparator } from '../image-comparator.interface';
 import { ImageCompareInput } from '../ImageCompareInput';
 import { VlmConfig, OllamaVlmConfig } from './vlm.types';
-import { VlmProvider } from './vlm-provider.interface';
+import { VlmProvider, VlmProviderResponse } from './vlm-provider.interface';
 import { VlmComparisonResultSchema } from './vlm-result.schema';
 import { OllamaService } from './providers/ollama/ollama.service';
 import { GeminiService } from './providers/gemini/gemini.service';
+import { DiffWorkerPool } from '../../diff-worker-pool';
 import { PixelmatchService, DEFAULT_CONFIG as PIXELMATCH_DEFAULT_CONFIG } from '../pixelmatch/pixelmatch.service';
-import { PNG } from 'pngjs';
 
 export const DEFAULT_PROMPT = `You are provided with three images:
 1. First image: baseline screenshot
@@ -21,8 +22,6 @@ export const DEFAULT_PROMPT = `You are provided with three images:
 Spot any difference in text, color, shape and position of elements - treat as different even slight change.
 Ignore minor rendering artifacts that are imperceptible to users like antialiasing.
 Describe the difference in about 100 words.`;
-
-export { VlmComparisonResultSchema } from './vlm-result.schema';
 
 export const DEFAULT_CONFIG: OllamaVlmConfig = {
   provider: 'ollama',
@@ -35,15 +34,15 @@ export const DEFAULT_CONFIG: OllamaVlmConfig = {
 @Injectable()
 export class VlmService implements ImageComparator {
   private readonly logger: Logger = new Logger(VlmService.name);
-  // through the pixelmatch pass below, which passes rendering noise before the
-  // model is ever asked about it
   readonly appliesBlurAmplitudeFilter = true;
+  private readonly limiter = new ConcurrencyLimiter(Math.max(1, Number(process.env.VLM_CONCURRENCY) || 4));
 
   constructor(
     private readonly staticService: StaticService,
     private readonly ollamaService: OllamaService,
     private readonly geminiService: GeminiService,
-    private readonly pixelmatchService: PixelmatchService
+    private readonly pixelmatchService: PixelmatchService,
+    private readonly diffWorkerPool: DiffWorkerPool
   ) {}
 
   parseConfig(configJson: string): VlmConfig {
@@ -51,55 +50,54 @@ export class VlmService implements ImageComparator {
   }
 
   async getDiff(data: ImageCompareInput, config: VlmConfig): Promise<DiffResult> {
-    const pixelmatchResult = await this.pixelmatchService.getDiff(
-      {
-        ...data,
-        saveDiffAsFile: true,
-      },
-      PIXELMATCH_DEFAULT_CONFIG
-    );
+    const pixelmatchResult = await this.pixelmatchService.getDiff(data, PIXELMATCH_DEFAULT_CONFIG);
 
-    if (pixelmatchResult.status === TestStatus.new) {
-      return pixelmatchResult;
-    }
-
-    if (pixelmatchResult.status === TestStatus.ok) {
+    if (
+      !data.saveDiffAsFile ||
+      !pixelmatchResult.status ||
+      pixelmatchResult.status === TestStatus.new ||
+      pixelmatchResult.status === TestStatus.ok
+    ) {
       return pixelmatchResult;
     }
 
     this.logger.debug('Pixel diff is being sent to VLM');
     try {
-      const baseline = await this.staticService.getImage(data.baseline);
-      const image = await this.staticService.getImage(data.image);
-      const diffImage = pixelmatchResult.diffName ? await this.staticService.getImage(pixelmatchResult.diffName) : null;
-
-      if (!baseline || !image || !diffImage) {
+      const [baselineBuffer, imageBuffer, diffBuffer] = await Promise.all([
+        this.staticService.getImageBuffer(data.baseline),
+        data.imageBuffer ?? this.staticService.getImageBuffer(data.image),
+        pixelmatchResult.diffName ? this.staticService.getImageBuffer(pixelmatchResult.diffName) : null,
+      ]);
+      if (!baselineBuffer || !imageBuffer || !diffBuffer) {
         this.logger.warn('Missing images for VLM analysis, returning pixelmatch result');
         return pixelmatchResult;
       }
 
-      // mask ignore areas the same way pixelmatch did, so the VLM does not flag changes inside them
-      const baselineBytes = new Uint8Array(PNG.sync.write(applyIgnoreAreas(baseline, data.ignoreAreas)));
-      const imageBytes = new Uint8Array(PNG.sync.write(applyIgnoreAreas(image, data.ignoreAreas)));
-      const diffBytes = new Uint8Array(PNG.sync.write(diffImage));
-
-      const { pass, description } = await this.compareImagesWithVLM(baselineBytes, imageBytes, diffBytes, config);
-
-      // Build result from pixelmatch, but override status based on VLM analysis
-      const result: DiffResult = {
-        ...pixelmatchResult,
-        vlmDescription: description,
-      };
-
-      if (pass) {
-        result.status = TestStatus.ok;
-      } else {
-        result.status = TestStatus.unresolved;
+      const { baseline, image } = await this.diffWorkerPool.run({
+        kind: 'vlm-inputs',
+        baseline: baselineBuffer,
+        image: imageBuffer,
+        ignoreAreas: data.ignoreAreas,
+      });
+      if (!baseline || !image) {
+        this.logger.warn('Missing images for VLM analysis, returning pixelmatch result');
+        return pixelmatchResult;
       }
 
-      return result;
+      const { pass, description } = await this.compareImagesWithVLM(
+        baseline,
+        image,
+        new Uint8Array(diffBuffer),
+        config
+      );
+
+      return {
+        ...pixelmatchResult,
+        status: pass ? TestStatus.ok : TestStatus.unresolved,
+        vlmDescription: description,
+      };
     } catch (error) {
-      // a cast, not instanceof: errors from Node's own fetch can come from another realm
+      // a cast, not instanceof: fetch errors come from another realm
       const { message, stack } = error as Error;
       this.logger.error(`VLM comparison failed: ${message}`, stack);
       return {
@@ -110,18 +108,10 @@ export class VlmService implements ImageComparator {
   }
 
   private getProvider(config: VlmConfig): VlmProvider {
-    const provider = config.provider || 'ollama'; // Default to ollama for backward compatibility
-
-    switch (provider) {
-      case 'gemini':
-        return this.geminiService;
-      case 'ollama':
-      default:
-        return this.ollamaService;
-    }
+    return config.provider === 'gemini' ? this.geminiService : this.ollamaService;
   }
 
-  private extractResponseContent(config: VlmConfig, response: { content?: string; thinking?: string }): string {
+  private extractResponseContent(config: VlmConfig, response: VlmProviderResponse): string {
     const preferred = config.useThinking ? response.thinking : response.content;
     const fallback = config.useThinking ? response.content : response.thinking;
     const content = preferred || fallback;
@@ -135,9 +125,7 @@ export class VlmService implements ImageComparator {
   }
 
   private parseVlmResponse(responseContent: string): { pass: boolean; description: string } {
-    const parsed = JSON.parse(responseContent);
-    const validated = VlmComparisonResultSchema.parse(parsed);
-
+    const validated = VlmComparisonResultSchema.parse(JSON.parse(responseContent));
     return {
       pass: validated.identical,
       description: validated.description || 'No description provided',
@@ -150,9 +138,9 @@ export class VlmService implements ImageComparator {
     diffBytes: Uint8Array,
     config: VlmConfig
   ): Promise<{ pass: boolean; description: string }> {
-    const provider = this.getProvider(config);
-    const images = [baselineBytes, imageBytes, diffBytes];
-    const response = await provider.generate(config, images);
+    const response = await this.limiter.run(() =>
+      this.getProvider(config).generate(config, [baselineBytes, imageBytes, diffBytes])
+    );
     const content = this.extractResponseContent(config, response);
     return this.parseVlmResponse(content);
   }

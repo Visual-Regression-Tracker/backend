@@ -1,101 +1,89 @@
 import { NotFoundException } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { StaticService } from '../static/static.service';
-import { TestVariation, Baseline, Project, Build } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PNG } from 'pngjs';
 import { BuildsService } from '../builds/builds.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { generateTestVariation, TEST_PROJECT } from '../_data_';
-import { TestVariationUpdateDto } from './dto/test-variation-update.dto';
 
-const initModule = async ({
-  imageDeleteMock = jest.fn(),
-  getImageBufferMock = jest.fn(),
-  variationfindUniqueMock = jest.fn,
-  variationFindManyMock = jest.fn().mockReturnValue([]),
-  variationCreateMock = jest.fn(),
-  variationUpdateMock = jest.fn(),
-  variationDeleteMock = jest.fn(),
-  baselineDeleteMock = jest.fn(),
-  projectFindUniqueMock = jest.fn(),
-  buildFindOrCreateMock = jest.fn(),
-  buildUpdateMock = jest.fn(),
-  testRunCreateMock = jest.fn(),
-  testRunFindMany = jest.fn(),
-  testRunDeleteMock = jest.fn(),
-  testRuncalCulateDiffMock = jest.fn(),
-  $executeRawMock = jest.fn(),
-}) => {
-  const module: TestingModule = await Test.createTestingModule({
+const build = async () => {
+  const m = {
+    static: { getImageBuffer: jest.fn(), deleteImage: jest.fn() },
+    builds: { findOrCreate: jest.fn(), update: jest.fn() },
+    testRuns: { create: jest.fn(), calculateDiff: jest.fn() },
+    prisma: {
+      $executeRaw: jest.fn(),
+      $transaction: jest.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
+      testVariation: {
+        findUnique: jest.fn(),
+        findMany: jest.fn().mockReturnValue([]),
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+      baseline: { findMany: jest.fn().mockResolvedValue([]), deleteMany: jest.fn() },
+      project: { findUnique: jest.fn() },
+    },
+  };
+  const module = await Test.createTestingModule({
     providers: [
       TestVariationsService,
       {
         provide: StaticService,
         useValue: {
-          getImageBuffer: getImageBufferMock,
-          deleteImage: imageDeleteMock,
-        },
-      },
-      {
-        provide: BuildsService,
-        useValue: {
-          findOrCreate: buildFindOrCreateMock,
-          update: buildUpdateMock,
-        },
-      },
-      {
-        provide: TestRunsService,
-        useValue: {
-          delete: testRunDeleteMock,
-          create: testRunCreateMock,
-          calculateDiff: testRuncalCulateDiffMock,
-        },
-      },
-      {
-        provide: PrismaService,
-        useValue: {
-          $executeRaw: $executeRawMock,
-          testVariation: {
-            findUnique: variationfindUniqueMock,
-            findMany: variationFindManyMock,
-            create: variationCreateMock,
-            update: variationUpdateMock,
-            delete: variationDeleteMock,
-          },
-          baseline: {
-            delete: baselineDeleteMock,
-          },
-          project: {
-            findUnique: projectFindUniqueMock,
-          },
-          testRun: {
-            findMany: testRunFindMany,
+          ...m.static,
+          deleteImages: async (names: Iterable<string | null | undefined>) => {
+            for (const name of names) if (name) await m.static.deleteImage(name);
           },
         },
       },
+      { provide: BuildsService, useValue: m.builds },
+      { provide: TestRunsService, useValue: m.testRuns },
+      { provide: PrismaService, useValue: m.prisma },
     ],
   }).compile();
-
-  return module.get<TestVariationsService>(TestVariationsService);
+  return { service: module.get<TestVariationsService>(TestVariationsService), m };
 };
 
-describe('TestVariationsService', () => {
-  let service: TestVariationsService;
-  const projectMock = TEST_PROJECT;
+const baselineData = {
+  name: 'Test name',
+  os: 'OS',
+  browser: 'browser',
+  viewport: 'viewport',
+  device: 'device',
+  customTags: 'tag',
+};
+const findRequest = (overrides: object = {}) => ({
+  ...baselineData,
+  projectId: TEST_PROJECT.id,
+  branchName: 'develop',
+  ...overrides,
+});
+const keyOf = (variation: typeof baselineData & { projectId: string }, branchName: string) => ({
+  name: variation.name,
+  os: variation.os,
+  device: variation.device,
+  browser: variation.browser,
+  viewport: variation.viewport,
+  customTags: variation.customTags,
+  branchName,
+  projectId: variation.projectId,
+});
+const prismaError = (code: string) => new Prisma.PrismaClientKnownRequestError(code, { code, clientVersion: 'test' });
 
+describe('TestVariationsService', () => {
   describe('getDetails', () => {
     it('can find one', async () => {
-      const id = 'test id';
-      const variationfindUniqueMock = jest.fn().mockResolvedValueOnce(generateTestVariation({ id }, []));
-      service = await initModule({ variationfindUniqueMock });
+      const { service, m } = await build();
+      m.prisma.testVariation.findUnique.mockResolvedValueOnce(generateTestVariation({ id: 'test id' }, []));
 
-      await service.getDetails(id);
+      await service.getDetails('test id');
 
-      expect(variationfindUniqueMock).toHaveBeenCalledWith({
-        where: { id },
+      expect(m.prisma.testVariation.findUnique).toHaveBeenCalledWith({
+        where: { id: 'test id' },
         include: {
           baselines: {
             include: {
@@ -111,8 +99,8 @@ describe('TestVariationsService', () => {
     });
 
     it('throws NotFoundException for an unknown id', async () => {
-      const variationfindUniqueMock = jest.fn().mockResolvedValueOnce(null);
-      service = await initModule({ variationfindUniqueMock });
+      const { service, m } = await build();
+      m.prisma.testVariation.findUnique.mockResolvedValueOnce(null);
 
       await expect(service.getDetails('missing')).rejects.toThrow(
         new NotFoundException('Test variation not found: missing')
@@ -120,535 +108,161 @@ describe('TestVariationsService', () => {
     });
   });
 
+  describe('findBaselineHistory', () => {
+    it('lists id and name of every baseline, newest first', async () => {
+      const history = [
+        { id: 'b3', baselineName: 'c.png' },
+        { id: 'b2', baselineName: 'b.png' },
+      ];
+      const { service, m } = await build();
+      m.prisma.baseline.findMany.mockResolvedValueOnce(history);
+
+      const result = await service.findBaselineHistory('variationId');
+
+      expect(m.prisma.baseline.findMany).toHaveBeenCalledWith({
+        where: { testVariationId: 'variationId' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, baselineName: true },
+      });
+      expect(result).toBe(history);
+    });
+  });
+
+  describe('findLatestBaselines', () => {
+    const row = (id: string) => ({ id, baselineName: `${id}.png`, testVariationId: id.split('-')[0] });
+
+    it('takes the newest baseline of each variation in the given order', async () => {
+      const { service, m } = await build();
+      m.prisma.baseline.findMany.mockResolvedValueOnce(['v2-new', 'v1-new', 'v2-old', 'v1-old'].map(row));
+
+      const result = await service.findLatestBaselines(['v1', 'v2']);
+
+      expect(m.prisma.baseline.findMany).toHaveBeenCalledWith({
+        where: { testVariationId: { in: ['v1', 'v2'] } },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, baselineName: true, testVariationId: true },
+      });
+      expect(result).toStrictEqual([
+        { id: 'v1-new', baselineName: 'v1-new.png' },
+        { id: 'v2-new', baselineName: 'v2-new.png' },
+      ]);
+    });
+
+    it('leaves out variations without baselines', async () => {
+      const { service, m } = await build();
+      m.prisma.baseline.findMany.mockResolvedValueOnce([row('v2-new')]);
+
+      expect(await service.findLatestBaselines(['v1', 'v2'])).toStrictEqual([
+        { id: 'v2-new', baselineName: 'v2-new.png' },
+      ]);
+    });
+
+    it('does not query for no ids', async () => {
+      const { service, m } = await build();
+
+      expect(await service.findLatestBaselines([])).toStrictEqual([]);
+      expect(m.prisma.baseline.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('find', () => {
-    it('can find by main branch', async () => {
-      const createRequest: CreateTestRequestDto = {
-        buildId: 'buildId',
-        projectId: projectMock.id,
-        name: 'Test name',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        branchName: 'develop',
-      };
+    const initFind = async (...found: unknown[]) => {
+      const ctx = await build();
+      ctx.service.findUnique = jest.fn();
+      found.forEach((variation) => jest.mocked(ctx.service.findUnique).mockResolvedValueOnce(variation as never));
+      return ctx;
+    };
+    const main = generateTestVariation({ branchName: 'master', updatedAt: new Date(2000) });
+    const current = generateTestVariation({ branchName: 'develop', updatedAt: new Date(1000) });
 
-      const variationMock: TestVariation = {
-        id: '123',
-        projectId: projectMock.id,
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        ignoreAreas: '[]',
-        comment: 'some comment',
-        branchName: 'develop',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
-      service = await initModule({ projectFindUniqueMock });
-      service.findUnique = jest.fn().mockResolvedValueOnce(variationMock).mockResolvedValueOnce(undefined);
+    it.each([
+      ['the main branch', [main, undefined], main],
+      ['the current branch', [undefined, current], current],
+      ['the current branch but main branch is more relevant', [main, current], main],
+    ])('can find by %s', async (_case, [mainResult, currentResult], expected) => {
+      const request = findRequest({ projectId: TEST_PROJECT.id });
+      const { service, m } = await initFind(mainResult, currentResult);
+      m.prisma.project.findUnique.mockReturnValueOnce(TEST_PROJECT);
 
-      const result = await service.find(createRequest);
+      const result = await service.find(request);
 
-      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
-      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
-        branchName: projectMock.mainBranchName,
-      });
-      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
-        branchName: createRequest.branchName,
-      });
-      expect(result).toBe(variationMock);
+      expect(m.prisma.project.findUnique).toHaveBeenCalledWith({ where: { id: request.projectId } });
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, keyOf(request, TEST_PROJECT.mainBranchName));
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, keyOf(request, request.branchName));
+      expect(result).toBe(expected);
     });
 
-    it('can find by current branch', async () => {
-      const createRequest: CreateTestRequestDto = {
-        buildId: 'buildId',
-        projectId: projectMock.id,
-        name: 'Test name',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        branchName: 'develop',
-      };
+    it('returns undefined when neither branch has the variation', async () => {
+      const { service, m } = await initFind(null, null);
+      m.prisma.project.findUnique.mockResolvedValueOnce(TEST_PROJECT);
 
-      const variationMock: TestVariation = {
-        id: '123',
-        projectId: projectMock.id,
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        ignoreAreas: '[]',
-        comment: 'some comment',
-        branchName: 'develop',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
-      service = await initModule({ projectFindUniqueMock });
-      service.findUnique = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(variationMock);
-
-      const result = await service.find(createRequest);
-
-      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
-      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
-        branchName: projectMock.mainBranchName,
-      });
-      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
-        branchName: createRequest.branchName,
-      });
-      expect(result).toBe(variationMock);
+      await expect(service.find(findRequest())).resolves.toBeUndefined();
     });
 
-    it('can find by current branch but main branch is more relevant', async () => {
-      const createRequest: CreateTestRequestDto = {
-        buildId: 'buildId',
-        projectId: projectMock.id,
-        name: 'Test name',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        branchName: 'develop',
-      };
+    it('only looks on the main branch when the build runs on it', async () => {
+      const variation = generateTestVariation({ branchName: TEST_PROJECT.mainBranchName });
+      const { service, m } = await initFind(variation);
+      m.prisma.project.findUnique.mockResolvedValueOnce(TEST_PROJECT);
+      const request = findRequest({ branchName: TEST_PROJECT.mainBranchName });
 
-      const variationMainMock: TestVariation = {
-        id: '123',
-        projectId: projectMock.id,
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        ignoreAreas: '[]',
-        comment: 'some comment',
-        branchName: 'master',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const variationFeatureMock: TestVariation = {
-        id: '123',
-        projectId: projectMock.id,
-        name: 'Test name',
-        baselineName: 'baselineName',
-        os: 'OS',
-        browser: 'browser',
-        viewport: 'viewport',
-        device: 'device',
-        customTags: '',
-        ignoreAreas: '[]',
-        comment: 'some comment',
-        branchName: 'develop',
-        createdAt: new Date(),
-        updatedAt: new Date(variationMainMock.updatedAt.getDate() - 1),
-      };
-      const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
-      service = await initModule({ projectFindUniqueMock });
-      service.findUnique = jest
-        .fn()
-        .mockResolvedValueOnce(variationMainMock)
-        .mockResolvedValueOnce(variationFeatureMock);
+      const result = await service.find(request);
 
-      const result = await service.find(createRequest);
+      expect(result).toBe(variation);
+      expect(service.findUnique).toHaveBeenCalledTimes(1);
+      expect(service.findUnique).toHaveBeenCalledWith(request);
+    });
 
-      expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: createRequest.projectId } });
-      expect(service.findUnique).toHaveBeenNthCalledWith(1, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
-        branchName: projectMock.mainBranchName,
-      });
-      expect(service.findUnique).toHaveBeenNthCalledWith(2, {
-        name: createRequest.name,
-        projectId: createRequest.projectId,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
-        branchName: createRequest.branchName,
-      });
-      expect(result).toBe(variationMainMock);
+    it('uses sourceBranch instead of the project main branch when given', async () => {
+      const { service, m } = await initFind();
+
+      await service.find(findRequest({ branchName: 'feature', sourceBranch: 'release' }));
+
+      expect(m.prisma.project.findUnique).not.toHaveBeenCalled();
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, expect.objectContaining({ branchName: 'release' }));
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, expect.objectContaining({ branchName: 'feature' }));
+    });
+
+    it('takes the main branch from the caller instead of reading the project', async () => {
+      const { service, m } = await initFind();
+
+      await service.find(findRequest({ branchName: 'feature' }), 'trunk');
+
+      expect(m.prisma.project.findUnique).not.toHaveBeenCalled();
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, expect.objectContaining({ branchName: 'trunk' }));
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, expect.objectContaining({ branchName: 'feature' }));
+    });
+
+    it('reads the project main branch when neither sourceBranch nor the caller gives one', async () => {
+      const { service, m } = await initFind();
+      m.prisma.project.findUnique.mockResolvedValueOnce({ ...TEST_PROJECT, mainBranchName: 'trunk' });
+
+      await service.find(findRequest({ branchName: 'feature' }));
+
+      expect(m.prisma.project.findUnique).toHaveBeenCalledWith({ where: { id: TEST_PROJECT.id } });
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, expect.objectContaining({ branchName: 'trunk' }));
+    });
+
+    it('keeps the current branch variation when it is as new as the main branch one', async () => {
+      const updatedAt = new Date('2024-01-01');
+      const sameAgeMain = generateTestVariation({ id: 'main', updatedAt });
+      const sameAgeCurrent = generateTestVariation({ id: 'current', updatedAt });
+      const { service, m } = await initFind(sameAgeMain, sameAgeCurrent);
+      m.prisma.project.findUnique.mockResolvedValueOnce(TEST_PROJECT);
+
+      await expect(service.find(findRequest())).resolves.toBe(sameAgeCurrent);
     });
   });
 
-  it('create', async () => {
-    const createRequest: CreateTestRequestDto = {
-      buildId: 'buildId',
-      projectId: projectMock.id,
-      name: 'Test name',
-      os: 'OS',
-      browser: 'browser',
-      viewport: 'viewport',
-      device: 'device',
-      customTags: '',
-      branchName: 'develop',
-    };
-
-    const projectFindUniqueMock = jest.fn().mockReturnValueOnce(projectMock);
-    const variationCreateMock = jest.fn();
-    service = await initModule({ projectFindUniqueMock, variationCreateMock });
-    service.findUnique = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
-
-    await service.create({
-      testRunId: 'testRunId',
-      createTestRequestDto: createRequest,
-    });
-
-    expect(variationCreateMock).toHaveBeenCalledWith({
-      data: {
-        name: createRequest.name,
-        os: createRequest.os,
-        browser: createRequest.browser,
-        viewport: createRequest.viewport,
-        device: createRequest.device,
-        customTags: createRequest.customTags,
-        branchName: createRequest.branchName,
-        testRuns: { connect: { id: 'testRunId' } },
-        project: {
-          connect: {
-            id: createRequest.projectId,
-          },
-        },
-      },
-    });
-  });
-
-  it('update', async () => {
-    const id = 'some id';
-    const data: TestVariationUpdateDto = {
-      baselineName: 'baselineName',
-      comment: 'random comment',
-      ignoreAreas: '[]',
-    };
-    const variationUpdateMock = jest.fn();
-    service = await initModule({
-      variationUpdateMock,
-    });
-
-    await service.update(id, data);
-
-    expect(variationUpdateMock).toHaveBeenCalledWith({
-      where: { id },
-      data,
-    });
-  });
-
-  it('merge', async () => {
-    const fromBranch = 'develop';
-    const targetBranch = 'test';
-    const project: Project = TEST_PROJECT;
-    const build: Build = {
-      id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5',
-      ciBuildId: 'ciBuildId',
-      number: null,
-      branchName: targetBranch,
-      status: null,
-      projectId: project.id,
-      updatedAt: new Date(),
-      createdAt: new Date(),
-      userId: null,
-      isRunning: true,
-    };
-    const testVariation: TestVariation = {
-      id: '123',
-      projectId: project.id,
-      name: 'Test name',
-      baselineName: 'baselineName',
-      os: 'OS',
-      browser: 'browser',
-      viewport: 'viewport',
-      device: 'device',
-      customTags: '',
-      ignoreAreas: '[]',
-      comment: 'some comment',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      branchName: fromBranch,
-    };
-    const testVariationSecond: TestVariation = {
-      id: '123',
-      projectId: project.id,
-      name: 'Test name second',
-      baselineName: 'baselineName',
-      os: 'OS',
-      browser: 'browser',
-      viewport: 'viewport',
-      device: 'device',
-      customTags: '',
-      ignoreAreas: '[]',
-      comment: 'some comment',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      branchName: fromBranch,
-    };
-    const testVariationNoBaseline: TestVariation = {
-      id: '123',
-      projectId: project.id,
-      name: 'Test name',
-      baselineName: null,
-      os: 'OS',
-      browser: 'browser',
-      viewport: 'viewport',
-      device: 'device',
-      customTags: '',
-      ignoreAreas: '[]',
-      comment: 'some comment',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      branchName: fromBranch,
-    };
-    const testVariationSourceBranch: TestVariation = {
-      id: '123',
-      projectId: project.id,
-      name: 'Test name',
-      baselineName: 'baselineName',
-      os: 'OS',
-      browser: 'browser',
-      viewport: 'viewport',
-      device: 'device',
-      customTags: '',
-      ignoreAreas: '[]',
-      comment: 'some comment',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      branchName: fromBranch,
-    };
-    const testVariationTargetBranch: TestVariation = {
-      ...testVariationSourceBranch,
-      branchName: targetBranch,
-    };
-    const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(build);
-    const variationFindManyMock = jest
-      .fn()
-      .mockResolvedValueOnce([testVariation, testVariationSecond, testVariationNoBaseline]);
-    const image = new PNG({
-      width: 10,
-      height: 10,
-    });
-    const imageBuffer = PNG.sync.write(image);
-    const getImageBufferMock = jest
-      .fn()
-      .mockReturnValueOnce(imageBuffer)
-      .mockReturnValueOnce(imageBuffer)
-      .mockReturnValueOnce(null);
-    const testRunCreateMock = jest.fn();
-    const buildUpdateMock = jest.fn();
-    const testRuncalCulateDiffMock = jest.fn();
-    const service = await initModule({
-      buildFindOrCreateMock,
-      buildUpdateMock,
-      testRunCreateMock,
-      testRuncalCulateDiffMock,
-      variationFindManyMock,
-      getImageBufferMock,
-    });
-    // neither screen has a variation on the target branch yet
-    service.findUnique = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null);
-    service.create = jest
-      .fn()
-      .mockResolvedValueOnce(testVariationTargetBranch)
-      .mockResolvedValueOnce(testVariationTargetBranch);
-
-    await service.merge(project.id, fromBranch, targetBranch);
-
-    expect(buildFindOrCreateMock).toHaveBeenCalledWith({
-      branchName: targetBranch,
-      projectId: project.id,
-    });
-    expect(service.findUnique).toHaveBeenNthCalledWith(1, {
-      name: testVariation.name,
-      os: testVariation.os,
-      device: testVariation.device,
-      browser: testVariation.browser,
-      viewport: testVariation.viewport,
-      customTags: testVariation.customTags,
-      branchName: targetBranch,
-      projectId: project.id,
-    });
-    expect(service.findUnique).toHaveBeenNthCalledWith(2, {
-      name: testVariationSecond.name,
-      os: testVariationSecond.os,
-      device: testVariationSecond.device,
-      browser: testVariationSecond.browser,
-      viewport: testVariationSecond.viewport,
-      customTags: testVariationSecond.customTags,
-      branchName: targetBranch,
-      projectId: project.id,
-    });
-    expect(testRunCreateMock).toHaveBeenNthCalledWith(1, {
-      testVariation: testVariationTargetBranch,
-      createTestRequestDto: {
-        ...testVariation,
-        branchName: targetBranch,
-        buildId: build.id,
-        diffTollerancePercent: 0,
-        merge: true,
-        ignoreAreas: JSON.parse(testVariation.ignoreAreas),
-      },
-      imageBuffer,
-    });
-    expect(testRunCreateMock).toHaveBeenNthCalledWith(2, {
-      testVariation: testVariationTargetBranch,
-      createTestRequestDto: {
-        ...testVariationSecond,
-        branchName: targetBranch,
-        buildId: build.id,
-        diffTollerancePercent: 0,
-        merge: true,
-        ignoreAreas: JSON.parse(testVariationSecond.ignoreAreas),
-      },
-      imageBuffer,
-    });
-    expect(testRunCreateMock).toHaveBeenCalledTimes(2);
-    expect(buildUpdateMock).toHaveBeenCalledWith(build.id, { isRunning: false });
-  });
-
-  it('delete', async () => {
-    const testRunId = 'test run id';
-    const testVariationId = 'test variation id';
-    const variation: TestVariation & {
-      baselines: Baseline[];
-    } = {
-      id: testVariationId,
-      projectId: 'project Id',
-      name: 'Test name',
-      baselineName: 'baselineName',
-      os: 'OS',
-      browser: 'browser',
-      viewport: 'viewport',
-      device: 'device',
-      customTags: '',
-      ignoreAreas: '[]',
-      comment: 'some comment',
-      branchName: 'develop',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      baselines: [
-        {
-          id: 'baseline id 1',
-          baselineName: 'image name 1',
-          testVariationId: testVariationId,
-          testRunId: testRunId,
-          userId: 'userId',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ],
-    };
-
-    const $executeRawMock = jest.fn();
-    const variationDeleteMock = jest.fn();
-    const getDetailsMock = jest.fn().mockResolvedValueOnce(variation);
-    const deleteBaselineMock = jest.fn().mockResolvedValueOnce(variation.baselines[0]);
-    const service = await initModule({
-      variationDeleteMock,
-      $executeRawMock,
-    });
-    service.getDetails = getDetailsMock;
-    service.deleteBaseline = deleteBaselineMock;
-
-    await service.delete(testVariationId);
-
-    expect(service.getDetails).toHaveBeenCalledWith(testVariationId);
-    expect(service.deleteBaseline).toHaveBeenCalledWith(variation.baselines[0]);
-    expect($executeRawMock).toHaveBeenCalled();
-    expect(variationDeleteMock).toHaveBeenCalledWith({
-      where: { id: testVariationId },
-    });
-  });
-
-  it('deleteBaseline', async () => {
-    const baseline: Baseline = {
-      id: 'baseline id 1',
-      baselineName: 'image name 1',
-      testVariationId: 'test variation id',
-      testRunId: 'test run id 1',
-      userId: 'userId',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const baselineDeleteMock = jest.fn();
-    const imageDeleteMock = jest.fn();
-    const service = await initModule({
-      baselineDeleteMock,
-      imageDeleteMock,
-    });
-
-    await service.deleteBaseline(baseline);
-
-    expect(imageDeleteMock).toHaveBeenCalledWith(baseline.baselineName);
-    expect(baselineDeleteMock).toHaveBeenCalledWith({
-      where: { id: baseline.id },
-    });
-  });
-
-  describe('characterization', () => {
-    const baselineData = {
-      name: 'Test name',
-      os: 'OS',
-      browser: 'browser',
-      viewport: 'viewport',
-      device: 'device',
-      customTags: 'tag',
-    };
-
-    it('findUnique looks the variation up by its full composite key', async () => {
+  describe('findUnique', () => {
+    it('looks the variation up by its full composite key', async () => {
       const variation = generateTestVariation();
-      const variationfindUniqueMock = jest.fn().mockResolvedValueOnce(variation);
-      service = await initModule({ variationfindUniqueMock });
+      const { service, m } = await build();
+      m.prisma.testVariation.findUnique.mockResolvedValueOnce(variation);
 
       const result = await service.findUnique({ ...baselineData, projectId: 'projectId', branchName: 'develop' });
 
       expect(result).toBe(variation);
-      expect(variationfindUniqueMock).toHaveBeenCalledWith({
+      expect(m.prisma.testVariation.findUnique).toHaveBeenCalledWith({
         where: {
           projectId_name_browser_device_os_viewport_customTags_branchName: {
             projectId: 'projectId',
@@ -658,74 +272,54 @@ describe('TestVariationsService', () => {
         },
       });
     });
+  });
 
-    describe('find', () => {
-      it('returns undefined when neither branch has the variation', async () => {
-        const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
-        service = await initModule({ projectFindUniqueMock });
-        service.findUnique = jest.fn().mockResolvedValue(null);
+  describe('create', () => {
+    it('create stores the project, branch and screen', async () => {
+      const { service, m } = await build();
 
-        // NOTE: current behavior — declared as `TestVariation | null` but resolves undefined
-        await expect(
-          service.find({ ...baselineData, projectId: TEST_PROJECT.id, branchName: 'develop' })
-        ).resolves.toBeUndefined();
+      await service.create({
+        createTestRequestDto: { ...baselineData, projectId: 'projectId', branchName: 'develop' },
       });
 
-      it('only looks on the main branch when the build runs on it', async () => {
-        const variation = generateTestVariation({ branchName: TEST_PROJECT.mainBranchName });
-        const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
-        service = await initModule({ projectFindUniqueMock });
-        service.findUnique = jest.fn().mockResolvedValueOnce(variation);
-
-        const result = await service.find({
-          ...baselineData,
-          projectId: TEST_PROJECT.id,
-          branchName: TEST_PROJECT.mainBranchName,
-        });
-
-        expect(result).toBe(variation);
-        expect(service.findUnique).toHaveBeenCalledTimes(1);
-        expect(service.findUnique).toHaveBeenCalledWith({
-          ...baselineData,
-          projectId: TEST_PROJECT.id,
-          branchName: TEST_PROJECT.mainBranchName,
-        });
-      });
-
-      it('uses sourceBranch instead of the project main branch when given', async () => {
-        const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
-        service = await initModule({ projectFindUniqueMock });
-        service.findUnique = jest.fn().mockResolvedValue(null);
-
-        await service.find({
-          ...baselineData,
-          projectId: TEST_PROJECT.id,
-          branchName: 'feature',
-          sourceBranch: 'release',
-        });
-
-        expect(projectFindUniqueMock).toHaveBeenCalledWith({ where: { id: TEST_PROJECT.id } });
-        expect(service.findUnique).toHaveBeenNthCalledWith(1, expect.objectContaining({ branchName: 'release' }));
-        expect(service.findUnique).toHaveBeenNthCalledWith(2, expect.objectContaining({ branchName: 'feature' }));
-      });
-
-      it('keeps the current branch variation when it is as new as the main branch one', async () => {
-        const updatedAt = new Date('2024-01-01');
-        const main = generateTestVariation({ id: 'main', updatedAt });
-        const current = generateTestVariation({ id: 'current', updatedAt });
-        const projectFindUniqueMock = jest.fn().mockResolvedValueOnce(TEST_PROJECT);
-        service = await initModule({ projectFindUniqueMock });
-        service.findUnique = jest.fn().mockResolvedValueOnce(main).mockResolvedValueOnce(current);
-
-        await expect(
-          service.find({ ...baselineData, projectId: TEST_PROJECT.id, branchName: 'develop' })
-        ).resolves.toBe(current);
+      expect(m.prisma.testVariation.create.mock.calls[0][0].data).toStrictEqual({
+        project: { connect: { id: 'projectId' } },
+        branchName: 'develop',
+        ...baselineData,
       });
     });
 
+    it('create stores missing optional fields as empty strings', async () => {
+      const { service, m } = await build();
+
+      await service.create({
+        createTestRequestDto: { name: 'only name', projectId: 'projectId', branchName: 'develop' },
+      });
+
+      expect(m.prisma.testVariation.create.mock.calls[0][0].data).toMatchObject({
+        name: 'only name',
+        os: '',
+        device: '',
+        browser: '',
+        viewport: '',
+        customTags: '',
+      });
+    });
+  });
+
+  describe('update', () => {
+    it('update', async () => {
+      const data = { baselineName: 'baselineName', comment: 'random comment', ignoreAreas: '[]' };
+      const { service, m } = await build();
+
+      await service.update('some id', data);
+
+      expect(m.prisma.testVariation.update).toHaveBeenCalledWith({ where: { id: 'some id' }, data });
+    });
+
     it('update connects the test run when one is given', async () => {
-      const variationUpdateMock = jest.fn().mockResolvedValueOnce('updated');
-      service = await initModule({ variationUpdateMock });
+      const { service, m } = await build();
+      m.prisma.testVariation.update.mockResolvedValueOnce('updated');
 
       const result = await service.update(
         'variationId',
@@ -734,7 +328,7 @@ describe('TestVariationsService', () => {
       );
 
       expect(result).toBe('updated');
-      expect(variationUpdateMock).toHaveBeenCalledWith({
+      expect(m.prisma.testVariation.update).toHaveBeenCalledWith({
         where: { id: 'variationId' },
         data: {
           baselineName: 'baseline.png',
@@ -744,55 +338,15 @@ describe('TestVariationsService', () => {
         },
       });
     });
+  });
 
-    it('create leaves testRuns undefined without a test run id', async () => {
-      const variationCreateMock = jest.fn();
-      service = await initModule({ variationCreateMock });
-
-      await service.create({
-        createTestRequestDto: {
-          ...baselineData,
-          projectId: 'projectId',
-          branchName: 'develop',
-        } as CreateTestRequestDto,
-      });
-
-      expect(variationCreateMock.mock.calls[0][0].data).toStrictEqual({
-        project: { connect: { id: 'projectId' } },
-        testRuns: undefined,
-        branchName: 'develop',
-        ...baselineData,
-      });
-    });
-
-    it('create stores missing optional fields as empty strings', async () => {
-      const variationCreateMock = jest.fn();
-      service = await initModule({ variationCreateMock });
-
-      await service.create({
-        createTestRequestDto: {
-          name: 'only name',
-          projectId: 'projectId',
-          branchName: 'develop',
-        } as CreateTestRequestDto,
-      });
-
-      expect(variationCreateMock.mock.calls[0][0].data).toMatchObject({
-        name: 'only name',
-        os: '',
-        device: '',
-        browser: '',
-        viewport: '',
-        customTags: '',
-      });
-    });
-
+  describe('addBaseline', () => {
     it.each([
       ['a user', 'userId', { connect: { id: 'userId' } }],
       ['no user', undefined, undefined],
-    ])('addBaseline records a baseline for the test run with %s', async (_, userId, user) => {
-      const variationUpdateMock = jest.fn().mockResolvedValueOnce('updated');
-      service = await initModule({ variationUpdateMock });
+    ])('records a baseline for the test run with %s', async (_, userId, user) => {
+      const { service, m } = await build();
+      m.prisma.testVariation.update.mockResolvedValueOnce('updated');
 
       const result = await service.addBaseline({
         id: 'variationId',
@@ -802,7 +356,7 @@ describe('TestVariationsService', () => {
       });
 
       expect(result).toBe('updated');
-      expect(variationUpdateMock.mock.calls[0][0]).toStrictEqual({
+      expect(m.prisma.testVariation.update.mock.calls[0][0]).toStrictEqual({
         where: { id: 'variationId' },
         data: {
           baselineName: 'baseline.png',
@@ -816,39 +370,93 @@ describe('TestVariationsService', () => {
         },
       });
     });
+  });
+
+  describe('merge', () => {
+    const project = TEST_PROJECT;
+    const fromBranch = 'develop';
+    const targetBranch = 'test';
+    const source = (overrides: object = {}) =>
+      generateTestVariation({ id: '123', projectId: project.id, branchName: fromBranch, ...overrides }, []);
+
+    it('merge', async () => {
+      const mergeBuild = { id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5' };
+      const testVariation = source();
+      const testVariationSecond = source({ name: 'Test name second' });
+      const testVariationNoBaseline = source({ baselineName: null });
+      const testVariationTargetBranch = { ...source(), branchName: targetBranch };
+      const imageBuffer = PNG.sync.write(new PNG({ width: 10, height: 10 }));
+      const { service, m } = await build();
+      m.builds.findOrCreate.mockResolvedValueOnce(mergeBuild);
+      m.prisma.testVariation.findMany.mockResolvedValueOnce([
+        testVariation,
+        testVariationSecond,
+        testVariationNoBaseline,
+      ]);
+      m.static.getImageBuffer
+        .mockReturnValueOnce(imageBuffer)
+        .mockReturnValueOnce(imageBuffer)
+        .mockReturnValueOnce(null);
+      m.prisma.project.findUnique.mockResolvedValue(project);
+      service.findUnique = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+      service.create = jest
+        .fn()
+        .mockResolvedValueOnce(testVariationTargetBranch)
+        .mockResolvedValueOnce(testVariationTargetBranch);
+
+      await service.merge(project.id, fromBranch, targetBranch);
+
+      expect(m.builds.findOrCreate).toHaveBeenCalledWith({ branchName: targetBranch, projectId: project.id });
+      expect(service.findUnique).toHaveBeenNthCalledWith(1, keyOf(testVariation, targetBranch));
+      expect(service.findUnique).toHaveBeenNthCalledWith(2, keyOf(testVariationSecond, targetBranch));
+      [testVariation, testVariationSecond].forEach((variation, index) =>
+        expect(m.testRuns.create).toHaveBeenNthCalledWith(index + 1, {
+          testVariation: testVariationTargetBranch,
+          createTestRequestDto: {
+            ...variation,
+            branchName: targetBranch,
+            buildId: mergeBuild.id,
+            diffTollerancePercent: 0,
+            merge: true,
+            ignoreAreas: JSON.parse(variation.ignoreAreas),
+          },
+          imageBuffer,
+        })
+      );
+      expect(m.testRuns.create).toHaveBeenCalledTimes(2);
+      expect(m.prisma.project.findUnique).toHaveBeenCalledTimes(1);
+      expect(m.testRuns.calculateDiff).toHaveBeenCalledTimes(2);
+      expect(m.testRuns.calculateDiff).toHaveBeenCalledWith(project.id, undefined, imageBuffer, project);
+      expect(m.builds.update).toHaveBeenCalledWith(mergeBuild.id, { isRunning: false });
+    });
 
     it('merge reuses a variation that already lives on the target branch', async () => {
-      const source = generateTestVariation({
+      const mergeSource = generateTestVariation({
         branchName: 'develop',
         ignoreAreas: '[{"x":1,"y":2,"width":3,"height":4}]',
       });
       const target = generateTestVariation({ id: 'target', branchName: 'master' });
-      const build = { id: 'buildId' };
       const imageBuffer = Buffer.from('png');
       const testRun = { id: 'testRunId' };
-      const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce(build);
-      const variationFindManyMock = jest.fn().mockResolvedValueOnce([source]);
-      const getImageBufferMock = jest.fn().mockResolvedValueOnce(imageBuffer);
-      const testRunCreateMock = jest.fn().mockResolvedValueOnce(testRun);
-      const testRuncalCulateDiffMock = jest.fn();
-      const buildUpdateMock = jest.fn().mockResolvedValueOnce('stopped build');
-      service = await initModule({
-        buildFindOrCreateMock,
-        variationFindManyMock,
-        getImageBufferMock,
-        testRunCreateMock,
-        testRuncalCulateDiffMock,
-        buildUpdateMock,
-      });
+      const mergeProject = { ...TEST_PROJECT, id: 'projectId' };
+      const { service, m } = await build();
+      m.builds.findOrCreate.mockResolvedValueOnce({ id: 'buildId' });
+      m.prisma.testVariation.findMany.mockResolvedValueOnce([mergeSource]);
+      m.static.getImageBuffer.mockResolvedValueOnce(imageBuffer);
+      m.testRuns.create.mockResolvedValueOnce(testRun);
+      m.builds.update.mockResolvedValueOnce('stopped build');
+      m.prisma.project.findUnique.mockResolvedValue(mergeProject);
       service.findUnique = jest.fn().mockResolvedValueOnce(target);
       service.create = jest.fn();
 
       const result = await service.merge('projectId', 'develop', 'master');
 
-      expect(variationFindManyMock).toHaveBeenCalledWith({ where: { projectId: 'projectId', branchName: 'develop' } });
-      expect(getImageBufferMock).toHaveBeenCalledWith(source.baselineName);
+      expect(m.prisma.testVariation.findMany).toHaveBeenCalledWith({
+        where: { projectId: 'projectId', branchName: 'develop' },
+      });
+      expect(m.static.getImageBuffer).toHaveBeenCalledWith(mergeSource.baselineName);
       expect(service.create).not.toHaveBeenCalled();
-      expect(testRunCreateMock).toHaveBeenCalledWith({
+      expect(m.testRuns.create).toHaveBeenCalledWith({
         testVariation: target,
         createTestRequestDto: expect.objectContaining({
           branchName: 'master',
@@ -859,46 +467,202 @@ describe('TestVariationsService', () => {
         }),
         imageBuffer,
       });
-      expect(testRuncalCulateDiffMock).toHaveBeenCalledWith('projectId', testRun);
-      expect(buildUpdateMock).toHaveBeenCalledWith('buildId', { isRunning: false });
+      expect(m.testRuns.calculateDiff).toHaveBeenCalledWith('projectId', testRun, imageBuffer, mergeProject);
+      expect(m.builds.update).toHaveBeenCalledWith('buildId', { isRunning: false });
       expect(result).toBe('stopped build');
     });
 
+    it('merge into a deleted project answers 404 and stops its build', async () => {
+      const { service, m } = await build();
+      m.builds.findOrCreate.mockResolvedValueOnce({ id: 'buildId' });
+      m.builds.update.mockResolvedValueOnce('stopped build');
+      m.prisma.project.findUnique.mockResolvedValue(null);
+
+      await expect(service.merge('gone', 'develop', 'master')).rejects.toThrow(
+        new NotFoundException('Project not found: gone')
+      );
+
+      expect(m.builds.update).toHaveBeenCalledWith('buildId', { isRunning: false });
+      expect(m.prisma.testVariation.findMany).not.toHaveBeenCalled();
+    });
+
     it('merge stops its build when a step fails and passes the failure on', async () => {
-      const source = generateTestVariation({ branchName: 'develop' });
-      const buildFindOrCreateMock = jest.fn().mockResolvedValueOnce({ id: 'buildId' });
-      const variationFindManyMock = jest.fn().mockResolvedValueOnce([source]);
-      const getImageBufferMock = jest.fn().mockResolvedValueOnce(Buffer.from('png'));
-      const testRunCreateMock = jest.fn().mockRejectedValueOnce(new Error('storage down'));
-      const buildUpdateMock = jest.fn().mockResolvedValueOnce('stopped build');
-      service = await initModule({
-        buildFindOrCreateMock,
-        variationFindManyMock,
-        getImageBufferMock,
-        testRunCreateMock,
-        buildUpdateMock,
-      });
+      const { service, m } = await build();
+      m.builds.findOrCreate.mockResolvedValueOnce({ id: 'buildId' });
+      m.prisma.testVariation.findMany.mockResolvedValueOnce([generateTestVariation({ branchName: 'develop' })]);
+      m.static.getImageBuffer.mockResolvedValueOnce(Buffer.from('png'));
+      m.testRuns.create.mockRejectedValueOnce(new Error('storage down'));
+      m.builds.update.mockResolvedValueOnce('stopped build');
+      m.prisma.project.findUnique.mockResolvedValue({ ...TEST_PROJECT, id: 'projectId' });
       service.findUnique = jest.fn().mockResolvedValueOnce(generateTestVariation({ branchName: 'master' }));
 
       await expect(service.merge('projectId', 'develop', 'master')).rejects.toThrow('storage down');
 
-      expect(buildUpdateMock).toHaveBeenCalledWith('buildId', { isRunning: false });
+      expect(m.builds.update).toHaveBeenCalledWith('buildId', { isRunning: false });
+    });
+  });
+
+  describe('delete', () => {
+    const twoBaselines = [{ baselineName: 'image 1' }, { baselineName: 'image 2' }];
+
+    it('removes the rows in one transaction before the files', async () => {
+      const order: string[] = [];
+      const { service, m } = await build();
+      m.prisma.$transaction.mockImplementation(async (operations: Promise<unknown>[]) => {
+        order.push('rows');
+        return Promise.all(operations);
+      });
+      m.static.deleteImage.mockImplementation(async () => {
+        order.push('file');
+      });
+      m.prisma.baseline.findMany.mockResolvedValueOnce(twoBaselines);
+
+      await service.delete('variationId');
+
+      expect(m.prisma.baseline.findMany).toHaveBeenCalledWith({
+        where: { testVariationId: 'variationId' },
+        select: { baselineName: true },
+      });
+      expect(m.prisma.baseline.deleteMany).toHaveBeenCalledWith({ where: { testVariationId: 'variationId' } });
+      expect(m.prisma.testVariation.delete).toHaveBeenCalledWith({ where: { id: 'variationId' } });
+      expect(m.prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(m.static.deleteImage.mock.calls).toEqual([['image 1'], ['image 2']]);
+      expect(order).toEqual(['rows', 'file', 'file']);
     });
 
-    it('delete detaches the test runs with a raw update before deleting the variation', async () => {
-      const $executeRawMock = jest.fn();
-      const variationDeleteMock = jest.fn().mockResolvedValueOnce('deleted');
-      service = await initModule({ $executeRawMock, variationDeleteMock });
-      service.getDetails = jest.fn().mockResolvedValueOnce(generateTestVariation({ id: 'variationId' }, []));
+    it('keeps the files when the rows cannot be deleted', async () => {
+      const { service, m } = await build();
+      m.prisma.$transaction.mockRejectedValueOnce(new Error('db down'));
+      m.prisma.baseline.findMany.mockResolvedValueOnce(twoBaselines);
 
-      const result = await service.delete('variationId');
+      await expect(service.delete('variationId')).rejects.toThrow('db down');
 
-      const [strings, ...values] = $executeRawMock.mock.calls[0];
-      expect(strings.join('?')).toBe(
-        'UPDATE "public"."TestRun" SET "testVariationId" = NULL::text WHERE "testVariationId" = ?'
+      expect(m.static.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('returns the deleted variation', async () => {
+      const deleted = generateTestVariation({ id: 'variationId' });
+      const { service, m } = await build();
+      m.prisma.$transaction.mockResolvedValueOnce([{ count: 2 }, deleted]);
+      m.prisma.baseline.findMany.mockResolvedValueOnce(twoBaselines);
+
+      expect(await service.delete('variationId')).toBe(deleted);
+    });
+
+    it('delete runs no raw SQL', async () => {
+      const { service, m } = await build();
+
+      await service.delete('id');
+
+      expect(m.prisma.$executeRaw).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createOrTakeWinner', () => {
+    const request = {
+      projectId: 'projectId',
+      branchName: 'develop',
+      name: 'Test name',
+      os: 'OS',
+      browser: 'browser',
+      viewport: 'viewport',
+      device: 'device',
+      customTags: '',
+    };
+
+    it('creates the variation without looking it up first', async () => {
+      const created = generateTestVariation({ id: 'created' });
+      const { service, m } = await build();
+      m.prisma.testVariation.create.mockResolvedValueOnce(created);
+
+      expect(await service.createOrTakeWinner(request)).toBe(created);
+      expect(m.prisma.testVariation.create).toHaveBeenCalledTimes(1);
+      expect(m.prisma.testVariation.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('returns the variation a concurrent request created', async () => {
+      const winner = generateTestVariation({ id: 'winner' });
+      const { service, m } = await build();
+      m.prisma.testVariation.findUnique.mockResolvedValueOnce(winner);
+      m.prisma.testVariation.create.mockRejectedValueOnce(prismaError('P2002'));
+
+      expect(await service.createOrTakeWinner(request)).toBe(winner);
+      expect(m.prisma.testVariation.findUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it('rethrows a non-P2002 error', async () => {
+      const { service, m } = await build();
+      m.prisma.testVariation.create.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(service.createOrTakeWinner(request)).rejects.toThrow('db down');
+      expect(m.prisma.testVariation.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rethrows P2002 when the winner cannot be found', async () => {
+      const error = prismaError('P2002');
+      const { service, m } = await build();
+      m.prisma.testVariation.findUnique.mockResolvedValue(null);
+      m.prisma.testVariation.create.mockRejectedValueOnce(error);
+
+      await expect(service.createOrTakeWinner(request)).rejects.toBe(error);
+    });
+  });
+
+  describe('transaction client', () => {
+    const txWith = (testVariation: Record<string, jest.Mock>) =>
+      ({ testVariation }) as unknown as Prisma.TransactionClient;
+    const idKey = {
+      projectId: 'p',
+      branchName: 'b',
+      name: 'n',
+      os: '',
+      device: '',
+      browser: '',
+      viewport: '',
+      customTags: '',
+    };
+
+    it('update uses the transaction client it is given', async () => {
+      const { service, m } = await build();
+      const txUpdate = jest.fn();
+
+      await service.update('id', { comment: 'c' }, 'runId', txWith({ update: txUpdate }));
+
+      expect(txUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'id' } }));
+      expect(m.prisma.testVariation.update).not.toHaveBeenCalled();
+    });
+
+    it('addBaseline uses the transaction client it is given', async () => {
+      const { service, m } = await build();
+      const txUpdate = jest.fn();
+
+      await service.addBaseline({ id: 'id', testRunId: 'runId', baselineName: 'b.png' }, txWith({ update: txUpdate }));
+
+      expect(txUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'id' } }));
+      expect(m.prisma.testVariation.update).not.toHaveBeenCalled();
+    });
+
+    it('findUnique uses the transaction client it is given', async () => {
+      const { service, m } = await build();
+      const txFindUnique = jest.fn();
+
+      await service.findUnique(idKey, txWith({ findUnique: txFindUnique }));
+
+      expect(txFindUnique).toHaveBeenCalledTimes(1);
+      expect(m.prisma.testVariation.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('create uses the transaction client it is given', async () => {
+      const { service, m } = await build();
+      const txCreate = jest.fn();
+
+      await service.create(
+        { createTestRequestDto: { projectId: 'p', branchName: 'b', name: 'n' } },
+        txWith({ create: txCreate })
       );
-      expect(values).toEqual(['variationId']);
-      expect(result).toBe('deleted');
+
+      expect(txCreate).toHaveBeenCalledTimes(1);
+      expect(m.prisma.testVariation.create).not.toHaveBeenCalled();
     });
   });
 });

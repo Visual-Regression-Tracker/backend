@@ -2,9 +2,6 @@ services:
   api:
     environment:
       OIDC_ENABLED: 'true'
-      # Issuer must be reachable both from the api container and the browser.
-      # On macOS/Windows Docker Desktop host.docker.internal works out of the box,
-      # on Linux add `127.0.0.1 host.docker.internal` to /etc/hosts.
       OIDC_ISSUER_URL: 'http://host.docker.internal:8090/default'
       OIDC_CLIENT_ID: 'vrt-client'
       OIDC_CLIENT_SECRET: 'vrt-secret'
@@ -17,8 +14,6 @@ services:
       OIDC_ADMIN_VALUES: 'vrt-admin'
       OIDC_DEFAULT_ROLE: 'editor'
       OIDC_REQUIRE_VERIFIED_EMAIL: 'true'
-    # Docker Desktop provides host.docker.internal; on Linux map it to the host
-    # so the api container reaches the mock IdP through the published port.
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     depends_on:
@@ -28,9 +23,6 @@ services:
         condition: service_started
   oidcmock:
     container_name: oidcmock
-    # See https://github.com/navikt/mock-oauth2-server
-    # Interactive login: http://host.docker.internal:8090/default/debugger
-    # Default users: 'admin' (role admin) and any other username (role editor).
     image: ghcr.io/navikt/mock-oauth2-server:6.1.0
     hostname: host.docker.internal
     restart: always

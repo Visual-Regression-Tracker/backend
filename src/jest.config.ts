@@ -1,25 +1,21 @@
-/** @returns {Promise<import('jest').Config>} */
 module.exports = async () => {
   return {
     displayName: 'Unit Tests',
     roots: ['./'],
     moduleFileExtensions: ['js', 'json', 'ts'],
     transform: {
-      // SWC only transpiles; type errors are caught once by `npm run typecheck`
       '^.+\\.(t|j)s$': '@swc/jest',
     },
-    // count every source file, not just the ones some test happens to import
-    // measured on the TypeScript source through source maps: istanbul would
-    // instrument SWC's output and count its decorator helpers as branches
+    // v8 on the TypeScript source via source maps: istanbul would count SWC's decorator helpers as branches
     coverageProvider: 'v8',
     collectCoverageFrom: [
       '**/*.ts',
       '!**/*.spec.ts',
       '!jest.config.ts',
-      // startup only
+      '!jest.setup.ts',
+      '!**/test-utils.ts',
       '!main.ts',
       '!swagger.ts',
-      // types only: no code runs, so v8 would report them as never executed
       '!**/*.interface.ts',
       '!**/*.types.ts',
       '!**/*.model.ts',
@@ -29,9 +25,10 @@ module.exports = async () => {
       '!test-variations/dto/test-variation-update.dto.ts',
     ],
     coverageThreshold: {
-      global: { statements: 98, branches: 85, functions: 98, lines: 98 },
+      global: { statements: 98.5, branches: 98, functions: 99, lines: 98.5 },
     },
     coverageDirectory: '../coverage',
     testEnvironment: 'node',
+    setupFiles: ['<rootDir>/jest.setup.ts'],
   };
 };

@@ -30,14 +30,12 @@ export class UsersFactoryService {
       return new OidcUsersService(this.configService, this.prismaService, this.authService);
     }
 
-    switch (ldapEnabled) {
-      case true:
-        this.logger.debug('users service type: LDAP');
-        return new LdapUsersService(this.configService, this.prismaService, this.authService);
-      case false:
-      default:
-        this.logger.debug('users service type: DB');
-        return new DbUsersService(this.prismaService, this.authService);
+    if (ldapEnabled) {
+      this.logger.debug('users service type: LDAP');
+      return new LdapUsersService(this.configService, this.prismaService, this.authService);
     }
+
+    this.logger.debug('users service type: DB');
+    return new DbUsersService(this.prismaService, this.authService);
   }
 }

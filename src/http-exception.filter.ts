@@ -1,63 +1,68 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, ForbiddenException, HttpStatus, Logger } from '@nestjs/common';
 import { Request, Response } from 'express';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  catch(exception: HttpException, host: ArgumentsHost): any {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
+    const error = exception instanceof Error ? exception : new Error(String(exception));
 
-    let status: number;
-    const isUniqueConstaintException = this.isUniqueConstraintException(exception);
-    const isForbiddenException = this.isForbiddenException(exception);
-    try {
-      status = isUniqueConstaintException
-        ? HttpStatus.BAD_REQUEST
-        : this.isRecordNotFoundException(exception)
-          ? HttpStatus.NOT_FOUND
-          : exception.getStatus();
-    } catch {
-      status = HttpStatus.INTERNAL_SERVER_ERROR;
-    }
+    const status = this.getStatus(error);
     const message =
-      isUniqueConstaintException || isForbiddenException
-        ? this.getCustomMessageForException(exception)
-        : this.getMessage(exception);
+      this.isUniqueConstraintException(error) || this.isForbiddenException(error)
+        ? this.getCustomMessageForException(error)
+        : this.getMessage(error);
 
-    Logger.error(exception, exception.stack, exception.getResponse?.());
+    if (status >= 500) {
+      this.logger.error(`${request.method} ${request.url} ${status}: ${message}`, error.stack);
+    } else {
+      this.logger.warn(`${request.method} ${request.url} ${status}: ${message}`);
+    }
 
-    response.status(status).json({
-      path: request.url,
-      name: exception.name,
-      message: message,
-      exception: exception,
-      stack: exception.stack,
-    });
+    const retryAfter = (exception as { retryAfterSeconds?: unknown } | null)?.retryAfterSeconds;
+    if (typeof retryAfter === 'number') {
+      response.setHeader('Retry-After', String(retryAfter));
+    }
+
+    response.status(status).json({ statusCode: status, path: request.url, name: error.name, message });
   }
 
-  isForbiddenException(exception: HttpException): boolean {
-    return exception.message.includes('Forbidden resource');
+  getStatus(exception: Error): number {
+    if (this.isUniqueConstraintException(exception)) return HttpStatus.BAD_REQUEST;
+    const code = (exception as { code?: unknown }).code;
+    if (code === 'P2025') return HttpStatus.NOT_FOUND;
+    if (code === 'P2003') return HttpStatus.CONFLICT;
+    try {
+      const status = (exception as { getStatus?: () => unknown }).getStatus?.();
+      if (typeof status === 'number') return status;
+    } catch {
+      return HttpStatus.INTERNAL_SERVER_ERROR;
+    }
+    return this.getParserStatus(exception) ?? HttpStatus.INTERNAL_SERVER_ERROR;
   }
 
-  // P2025: an update or delete found no row to act on — the id the client sent
-  // names nothing, which is a 404 like any other lookup that comes back empty
-  isRecordNotFoundException(exception: HttpException): boolean {
-    return (exception as { code?: unknown }).code === 'P2025';
+  private getParserStatus(exception: Error): number | undefined {
+    const { status, statusCode, type } = exception as { status?: unknown; statusCode?: unknown; type?: unknown };
+    const clientStatus = Number(status ?? statusCode);
+    return typeof type === 'string' && clientStatus >= 400 && clientStatus < 500 ? clientStatus : undefined;
   }
 
-  // ValidationPipe puts the reasons in the response body and leaves the
-  // exception's own message at the generic "Bad Request Exception"; the
-  // reasons are what the client needs to see
-  getMessage(exception: HttpException): string {
-    const response = exception.getResponse?.();
-    const details = typeof response === 'object' ? (response as { message?: unknown })?.message : undefined;
+  isForbiddenException(exception: Error): boolean {
+    return exception instanceof ForbiddenException && exception.message === 'Forbidden resource';
+  }
+
+  getMessage(exception: Error): string {
+    const response = (exception as { getResponse?: () => unknown }).getResponse?.();
+    const details = typeof response === 'object' ? (response as { message?: unknown } | null)?.message : undefined;
     return Array.isArray(details) ? details.join(', ') : exception.message;
   }
 
-  isUniqueConstraintException(exception: HttpException): boolean {
-    // P2002 is Prisma's code for it in every version; the wording changed in
-    // Prisma 7 ("on the constraint" instead of "on the fields")
+  isUniqueConstraintException(exception: Error): boolean {
+    // P2002 message says "on the fields" before Prisma 7, "on the constraint" since
     return (
       (exception as { code?: unknown }).code === 'P2002' ||
       exception.message.includes('Unique constraint failed on the fields') ||
@@ -65,17 +70,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     );
   }
 
-  getCustomMessageForException(exception: HttpException): string {
-    let message = exception.message;
-    message = message.includes('build.update()')
-      ? 'There is already a build with this ci build id.'
-      : message.includes('project.create()')
-        ? 'Project exists with this name.'
-        : message.includes('user.create()')
-          ? 'This user already exists.'
-          : message.includes('Forbidden resource')
-            ? 'You do not have permission to perform this operation.'
-            : message;
+  getCustomMessageForException(exception: Error): string {
+    const { message } = exception;
+    if (message.includes('build.update()')) return 'There is already a build with this ci build id.';
+    if (message.includes('project.create()')) return 'Project exists with this name.';
+    if (message.includes('user.create()')) return 'This user already exists.';
+    if (message.includes('Forbidden resource')) return 'You do not have permission to perform this operation.';
     return message;
   }
 }

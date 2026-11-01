@@ -6,7 +6,6 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { PNG } from 'pngjs';
 import { Readable } from 'stream';
 import { AWSS3Service, URL_WINDOW_SECONDS } from './s3.service';
 import { generateNewImageName } from '../utils';
@@ -31,12 +30,28 @@ jest.mock('../utils', () => ({
   generateNewImageName: jest.fn(),
 }));
 
+const notFound = (props: object) => Object.assign(new Error('not found'), props);
+const notFoundCases = [
+  ['a NoSuchKey error', { name: 'NoSuchKey' }],
+  ['an HTTP 404', { $metadata: { httpStatusCode: 404 } }],
+] as const;
+const defaultTimeouts = {
+  requestHandler: { connectionTimeout: 5000, requestTimeout: 60000, throwOnRequestTimeout: true },
+};
+
 describe('AWSS3Service', () => {
   const originalAwsBucket = process.env.AWS_S3_BUCKET_NAME;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.AWS_S3_BUCKET_NAME = 'vrt-bucket';
+    mockSend.mockResolvedValue({});
+    (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
   });
 
   afterAll(() => {
@@ -46,7 +61,6 @@ describe('AWSS3Service', () => {
   describe('saveImage', () => {
     it('uploads the image buffer and returns the generated image name', async () => {
       (generateNewImageName as jest.Mock).mockReturnValue('generated.screenshot.png');
-      mockSend.mockResolvedValue({});
       const service = new AWSS3Service();
       const imageBuffer = Buffer.from('png-data');
 
@@ -82,49 +96,7 @@ describe('AWSS3Service', () => {
     });
   });
 
-  describe('getImage', () => {
-    it('returns null when the file name is missing', async () => {
-      const service = new AWSS3Service();
-
-      await expect(service.getImage('')).resolves.toBeNull();
-      expect(mockSend).not.toHaveBeenCalled();
-    });
-
-    it('reads the image from S3 and parses it as PNG', async () => {
-      const service = new AWSS3Service();
-      const png = new PNG({ width: 1, height: 1 });
-      const pngBuffer = PNG.sync.write(png);
-      const stream = {
-        toArray: jest.fn().mockResolvedValue([pngBuffer.subarray(0, 8), pngBuffer.subarray(8)]),
-      } as unknown as Readable;
-      mockSend.mockResolvedValue({ Body: stream });
-
-      const result = await service.getImage('baseline.png');
-
-      expect(GetObjectCommand).toHaveBeenCalledWith({
-        Bucket: 'vrt-bucket',
-        Key: 'baseline.png',
-      });
-      expect(result).toMatchObject({ width: 1, height: 1 });
-    });
-
-    it('logs failures and returns undefined when the image cannot be read', async () => {
-      const service = new AWSS3Service();
-      const loggerSpy = jest.spyOn((service as any).logger, 'error').mockImplementation();
-      mockSend.mockRejectedValue(new Error('download failed'));
-
-      await expect(service.getImage('baseline.png')).resolves.toBeUndefined();
-
-      expect(loggerSpy).toHaveBeenCalledWith(
-        'Error from read : Cannot get image: baseline.png. Error: download failed'
-      );
-    });
-  });
-
   describe('getImageUrl', () => {
-    // A browser caches by URL. Signing from the current instant produced a
-    // different URL on every request, so the bytes it had just downloaded
-    // could never be reused and every view of an image cost a fresh download.
     const signingDateOfLastCall = (): Date => (getSignedUrl as jest.Mock).mock.calls.at(-1)[2].signingDate;
 
     afterEach(() => {
@@ -133,7 +105,6 @@ describe('AWSS3Service', () => {
 
     it('returns a signed URL for the requested object', async () => {
       const service = new AWSS3Service();
-      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
 
       const result = await service.getImageUrl('image.png');
 
@@ -143,47 +114,57 @@ describe('AWSS3Service', () => {
       );
     });
 
-    it('hands out the same URL for an image asked for again soon after', async () => {
+    it('signs for twice the window, from the start of the current window, with a matching cache header', async () => {
+      jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-01T10:42:31.500Z'));
       const service = new AWSS3Service();
-      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
+
+      await service.getImageUrl('image.png');
+
+      expect(URL_WINDOW_SECONDS).toBe(3600);
+      expect(GetObjectCommand).toHaveBeenCalledWith({
+        Bucket: 'vrt-bucket',
+        Key: 'image.png',
+        ResponseCacheControl: 'private, max-age=3600',
+      });
+      expect(getSignedUrl).toHaveBeenCalledWith(expect.objectContaining({ send: mockSend }), expect.anything(), {
+        expiresIn: 7200,
+        signingDate: new Date('2026-09-01T10:00:00.000Z'),
+      });
+    });
+
+    it('signs against "undefined" when no bucket is configured (startup warns about it)', async () => {
+      delete process.env.AWS_S3_BUCKET_NAME;
+      const service = new AWSS3Service();
+
+      await service.getImageUrl('image.png');
+
+      expect(GetObjectCommand).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'undefined' }));
+    });
+
+    it.each([
+      ['hands out the same URL for an image asked for again soon after', '10:00:05', '10:42:31', true],
+      ['moves on to a new URL once the window has passed', '10:42:31', '11:00:01', false],
+    ])('%s', async (_, firstTime, secondTime, same) => {
+      const service = new AWSS3Service();
       const nowSpy = jest.spyOn(Date, 'now');
 
-      nowSpy.mockReturnValue(Date.parse('2026-09-01T10:00:05Z'));
+      nowSpy.mockReturnValue(Date.parse(`2026-09-01T${firstTime}Z`));
       await service.getImageUrl('image.png');
       const first = signingDateOfLastCall();
 
-      nowSpy.mockReturnValue(Date.parse('2026-09-01T10:42:31Z'));
+      nowSpy.mockReturnValue(Date.parse(`2026-09-01T${secondTime}Z`));
       await service.getImageUrl('image.png');
 
-      // asserted to be a real instant first: two undefineds are also equal
       expect(first).toBeInstanceOf(Date);
-      expect(signingDateOfLastCall()).toEqual(first);
+      if (same) {
+        expect(signingDateOfLastCall()).toEqual(first);
+      } else {
+        expect(signingDateOfLastCall()).not.toEqual(first);
+      }
     });
 
-    it('moves on to a new URL once the window has passed', async () => {
-      const service = new AWSS3Service();
-      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
-      const nowSpy = jest.spyOn(Date, 'now');
-
-      nowSpy.mockReturnValue(Date.parse('2026-09-01T10:42:31Z'));
-      await service.getImageUrl('image.png');
-      const first = signingDateOfLastCall();
-
-      nowSpy.mockReturnValue(Date.parse('2026-09-01T11:00:01Z'));
-      await service.getImageUrl('image.png');
-
-      expect(signingDateOfLastCall()).not.toEqual(first);
-    });
-
-    // a URL handed out at the very end of a window must still be usable for a
-    // whole window afterwards, or the browser's cached copy outlives its URL
     it('keeps a URL alive well past the window it was signed in', async () => {
       const service = new AWSS3Service();
-      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
-      // The worst case, when the least life is left: minted at the last second
-      // of a window. Pinned rather than read live, or a run that straddles the
-      // hour boundary asks the clock on the far side of it and sees a shorter
-      // life than the URL actually has.
       const lastSecondOfWindow = Date.parse('2026-09-01T10:59:59Z');
       jest.spyOn(Date, 'now').mockReturnValue(lastSecondOfWindow);
 
@@ -194,11 +175,8 @@ describe('AWSS3Service', () => {
       expect(livesUntil - lastSecondOfWindow).toBeGreaterThanOrEqual(3600 * 1000);
     });
 
-    // S3 answers with no cache headers of its own, so a stable URL alone still
-    // leaves the browser guessing whether it may keep the bytes
     it('asks S3 to answer with a cache header', async () => {
       const service = new AWSS3Service();
-      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
 
       await service.getImageUrl('image.png');
 
@@ -209,17 +187,39 @@ describe('AWSS3Service', () => {
   });
 
   describe('constructor', () => {
-    it('creates one S3 client with the default credential chain', () => {
+    it('creates one S3 client with the default credential chain and request timeouts', () => {
+      delete process.env.S3_CONNECTION_TIMEOUT_MS;
+      delete process.env.S3_REQUEST_TIMEOUT_MS;
+
       new AWSS3Service();
 
       expect(S3Client).toHaveBeenCalledTimes(1);
-      expect(S3Client).toHaveBeenCalledWith();
+      expect(S3Client).toHaveBeenCalledWith(defaultTimeouts);
+    });
+
+    it('reads the timeouts from S3_CONNECTION_TIMEOUT_MS and S3_REQUEST_TIMEOUT_MS', () => {
+      process.env.S3_CONNECTION_TIMEOUT_MS = '2000';
+      process.env.S3_REQUEST_TIMEOUT_MS = '1000';
+
+      new AWSS3Service();
+
+      expect(S3Client).toHaveBeenCalledWith({
+        requestHandler: { connectionTimeout: 2000, requestTimeout: 1000, throwOnRequestTimeout: true },
+      });
+    });
+
+    it.each(['abc', '', '0', '-5'])('falls back to the default timeout for %p', (value) => {
+      process.env.S3_CONNECTION_TIMEOUT_MS = value;
+      process.env.S3_REQUEST_TIMEOUT_MS = value;
+
+      new AWSS3Service();
+
+      expect(S3Client).toHaveBeenCalledWith(defaultTimeouts);
     });
 
     it('reads the bucket name when the service is constructed, not on each call', async () => {
       const service = new AWSS3Service();
       process.env.AWS_S3_BUCKET_NAME = 'changed-later';
-      mockSend.mockResolvedValue({});
 
       await service.deleteImage('image.png');
 
@@ -228,8 +228,6 @@ describe('AWSS3Service', () => {
   });
 
   describe('getImageBuffer', () => {
-    const notFound = (props: object) => Object.assign(new Error('not found'), props);
-
     it.each(['', undefined, null])('returns null for an empty name (%p) without calling S3', async (fileName) => {
       const service = new AWSS3Service();
 
@@ -246,10 +244,7 @@ describe('AWSS3Service', () => {
       expect(mockSend).toHaveBeenCalledWith({ input: { Bucket: 'vrt-bucket', Key: 'image.png' }, type: 'get' });
     });
 
-    it.each([
-      ['a NoSuchKey error', { name: 'NoSuchKey' }],
-      ['an HTTP 404', { $metadata: { httpStatusCode: 404 } }],
-    ])('returns null for %s', async (_label, props) => {
+    it.each(notFoundCases)('returns null for %s', async (_label, props) => {
       const service = new AWSS3Service();
       jest.spyOn((service as any).logger, 'error').mockImplementation();
       mockSend.mockRejectedValue(notFound(props));
@@ -281,29 +276,41 @@ describe('AWSS3Service', () => {
     });
   });
 
-  describe('getImage (missing object)', () => {
-    it('returns undefined when the object does not exist', async () => {
+  describe('getImageStream', () => {
+    it('returns the body of the object without reading it', async () => {
       const service = new AWSS3Service();
-      jest.spyOn((service as any).logger, 'error').mockImplementation();
-      mockSend.mockRejectedValue(Object.assign(new Error('nope'), { name: 'NoSuchKey' }));
+      const body = Readable.from([Buffer.from('ab')]);
+      mockSend.mockResolvedValue({ Body: body });
 
-      await expect(service.getImage('missing.png')).resolves.toBeUndefined();
+      await expect(service.getImageStream('image.png')).resolves.toBe(body);
+      expect(mockSend).toHaveBeenCalledWith({ input: { Bucket: 'vrt-bucket', Key: 'image.png' }, type: 'get' });
     });
 
-    it('logs and returns undefined when the object is not a valid PNG', async () => {
+    it('returns null when the response has no body', async () => {
       const service = new AWSS3Service();
-      const loggerSpy = jest.spyOn((service as any).logger, 'error').mockImplementation();
-      mockSend.mockResolvedValue({ Body: { toArray: jest.fn().mockResolvedValue([Buffer.from('garbage')]) } });
 
-      await expect(service.getImage('corrupt.png')).resolves.toBeUndefined();
-      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot get image: corrupt.png.'));
+      await expect(service.getImageStream('image.png')).resolves.toBeNull();
+    });
+
+    it.each(notFoundCases)('returns null for %s', async (_label, props) => {
+      const service = new AWSS3Service();
+      mockSend.mockRejectedValue(notFound(props));
+
+      await expect(service.getImageStream('missing.png')).resolves.toBeNull();
+    });
+
+    it('rethrows any other failure', async () => {
+      const service = new AWSS3Service();
+      const error = Object.assign(new Error('Access Denied'), { name: 'AccessDenied' });
+      mockSend.mockRejectedValue(error);
+
+      await expect(service.getImageStream('image.png')).rejects.toBe(error);
     });
   });
 
   describe('copyImage', () => {
     it('copies the source object inside the bucket under a newly generated name', async () => {
       (generateNewImageName as jest.Mock).mockReturnValue('generated.baseline.png');
-      mockSend.mockResolvedValue({});
       const service = new AWSS3Service();
 
       await expect(service.copyImage('baseline', 'source.png')).resolves.toBe('generated.baseline.png');
@@ -328,44 +335,6 @@ describe('AWSS3Service', () => {
     });
   });
 
-  describe('getImageUrl (exact parameters)', () => {
-    afterEach(() => {
-      jest.restoreAllMocks();
-    });
-
-    it('signs for twice the window, from the start of the current window, with a matching cache header', async () => {
-      jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-01T10:42:31.500Z'));
-      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
-      const service = new AWSS3Service();
-
-      await service.getImageUrl('image.png');
-
-      expect(URL_WINDOW_SECONDS).toBe(3600);
-      expect(GetObjectCommand).toHaveBeenCalledWith({
-        Bucket: 'vrt-bucket',
-        Key: 'image.png',
-        ResponseCacheControl: 'private, max-age=3600',
-      });
-      expect(getSignedUrl).toHaveBeenCalledWith(expect.objectContaining({ send: mockSend }), expect.anything(), {
-        expiresIn: 7200,
-        signingDate: new Date('2026-09-01T10:00:00.000Z'),
-      });
-    });
-
-    // NOTE: current behavior — the bucket is interpolated into a template
-    // string here, so a missing AWS_S3_BUCKET_NAME becomes the literal
-    // "undefined" (the other commands pass undefined through).
-    it('signs against a bucket literally named "undefined" when no bucket is configured', async () => {
-      delete process.env.AWS_S3_BUCKET_NAME;
-      (getSignedUrl as jest.Mock).mockResolvedValue('https://signed-url');
-      const service = new AWSS3Service();
-
-      await service.getImageUrl('image.png');
-
-      expect(GetObjectCommand).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'undefined' }));
-    });
-  });
-
   describe('deleteImage', () => {
     it('returns false when the image name is missing', async () => {
       const service = new AWSS3Service();
@@ -376,7 +345,6 @@ describe('AWSS3Service', () => {
 
     it('deletes the object and returns true', async () => {
       const service = new AWSS3Service();
-      mockSend.mockResolvedValue({});
 
       await expect(service.deleteImage('image.png')).resolves.toBe(true);
 

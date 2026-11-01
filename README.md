@@ -14,6 +14,136 @@
 - Seed initial data `npx prisma db seed`
 - `npm run start:debug`
 
+## Running the test suites
+
+| Suite | Command | Needs | Covers |
+|---|---|---|---|
+| unit | `npm test` | nothing | services with mocked dependencies (`src/**/*.spec.ts`) |
+| e2e | `npm run test:e2e` | Postgres with the migrations applied (`DATABASE_URL`); run `npm run build` first | the app in-process against that database |
+| acceptance | `npm run test:acceptance` | `docker compose up -d`; the API on `localhost:4200` | the running API over HTTP and socket.io |
+| ldap | `npm run test:ldap` | `COMPOSE_FILE=docker-compose.yml:docker-compose.ldap.yml docker compose up -d` | LDAP login against the LDAP mock |
+| oidc | `npm run test:oidc` | `COMPOSE_FILE=docker-compose.yml:docker-compose.oidc.yml docker compose up -d` | the OIDC endpoints against the OIDC mock |
+| prisma package | `cd prisma && npm test` | `npm ci` in `prisma/` | the `prisma/` package's own tests |
+
+The e2e suite loads the diff worker threads from `dist/`. Without a build they run
+inline, so `npm run build` makes the e2e run match production.
+
+Schema drift check (AGENTS.md: every schema change ships with its migration). Run it
+against a database where the migrations are applied; exit code 2 means the schema has
+changes without a migration:
+```
+cd prisma && npx prisma migrate deploy && npx prisma migrate diff --from-config-datasource --to-schema schema.prisma --exit-code
+```
+
+## Environment variables
+
+Defaults are what the code uses when the variable is unset or empty. The commented
+lines in `.env` (section `# optional`) show the same variables.
+
+### Core
+
+| Variable | Default | What it does |
+|---|---|---|
+| `DATABASE_URL` | none, required | Postgres connection string. `connection_limit` sets the pool size per instance (see Database connections). |
+| `APP_PORT` | `3000` | Port the API listens on. |
+| `APP_FRONTEND_URL` | none | Frontend base URL, used to build links in test run results. |
+| `BODY_PARSER_JSON_LIMIT` | body-parser default | Maximum JSON request body size, e.g. `5mb`. |
+| `JWT_SECRET` | none, required | Key that signs login tokens; startup fails when it is unset. The public sample `jwtPrivateKey` is refused with `NODE_ENV=production`, and the sample in `.env` only logs a warning. Generate one with `openssl rand -hex 32`. |
+| `JWT_LIFE_TIME` | `1d` | Token lifetime as a timespan such as `1d`, `12h` or `3600s`. An invalid value falls back to `1d` with a warning. |
+| `JWT_LEGACY_EMAIL_TOKENS` | `true` | Accept tokens issued before the `sub` claim existed (they carry only the email). Set `false` once those tokens have expired. |
+| `SERVER_TIMEOUT` | Node.js default | HTTP `server.timeout`, in milliseconds. |
+| `SERVER_HEADERS_TIMEOUT` | Node.js default | HTTP `headersTimeout`, in milliseconds. |
+| `SERVER_KEEP_ALIVE_TIMEOUT` | Node.js default | HTTP `keepAliveTimeout`, in milliseconds. |
+| `BUILD_RETENTION_GRACE_MINUTES` | `60` | Automatic build pruning keeps builds active within this many minutes. `0` turns that protection off. |
+| `STRICT_BUILD_PROJECT_CHECK` | `false` | `true` (case-insensitive) makes `POST /test-runs` reject a build that belongs to another project with `400`. By default such a request is accepted with a warning, because older clients may send such pairs. |
+| `LOG_LEVEL` | all levels | Comma-separated Nest log levels to keep, e.g. `log,warn,error,fatal`. |
+| `NODE_ENV` | unset | `production` makes startup refuse the public sample `JWT_SECRET`. |
+| `HTTPS_KEY_PATH` | `./secrets/ssl.key` | TLS private key. HTTPS is used only when both files exist; otherwise the API serves HTTP. |
+| `HTTPS_CERT_PATH` | `./secrets/ssl.cert` | TLS certificate. |
+| `VRT_RUN_AS_ROOT` | `false` | Read by `docker-entrypoint.sh`, not by the app. The container drops to the `node` user when the image volume and TLS files allow it; `true` keeps root. |
+
+### Storage
+
+| Variable | Default | What it does |
+|---|---|---|
+| `STATIC_SERVICE` | `hdd` | Where images are stored: `hdd` (local disk) or `s3`. Odiff works only with `hdd`. |
+| `AWS_S3_BUCKET_NAME` | none | Bucket for `STATIC_SERVICE=s3`; required then. |
+| `AWS_REGION` | from the AWS SDK | Read by the AWS SDK v3 default chain, not by VRT code. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from the AWS SDK | Same chain. An IAM role or shared AWS config works without them. |
+| `S3_CONNECTION_TIMEOUT_MS` | `5000` | S3 connection timeout, in milliseconds. |
+| `S3_REQUEST_TIMEOUT_MS` | `60000` | S3 request timeout, in milliseconds. A request that exceeds it fails. |
+
+### Image comparison
+
+| Variable | Default | What it does |
+|---|---|---|
+| `MAX_IMAGE_PIXELS` | `100000000` | Largest accepted image in pixels (width times height), checked from the PNG header before decoding. `0` turns the limit off. |
+| `MULTIPART_FILE_SIZE_LIMIT` | `104857600` (100 MiB) | Largest accepted multipart file upload, in bytes. |
+| `DIFF_WORKERS_COUNT` | CPUs minus 1, between 1 and 8 | Number of diff worker threads. |
+| `DIFF_QUEUE_LIMIT` | `256` | Diff jobs allowed to wait for a worker. When the queue is full the API answers `503` with `Retry-After: 5`. |
+| `DIFF_JOB_TIMEOUT_MS` | `120000` | Timeout for one diff job, in milliseconds. `0` turns it off. |
+| `DIFF_WORKER_MAX_HEAP_MB` | `512` | Heap limit of each diff worker, in MB. |
+| `VLM_CONCURRENCY` | `4` | Concurrent VLM requests per API instance (minimum 1). |
+| `OLLAMA_BASE_URL` | none | Ollama server for VLM comparisons; required when the Ollama provider is used. |
+| `OLLAMA_TIMEOUT_MS` | `300000` | Timeout for one Ollama request, in milliseconds. |
+| `GEMINI_TIMEOUT_MS` | `300000` | Timeout for one Gemini request, in milliseconds. The API key comes from the project's VLM settings. |
+| `DINOV2_URL` | none | DINOv2 service for the `dinov2Check` noise filter. With the filter on and this unset, runs go to review. |
+| `DINOV2_TIMEOUT_MS` | `60000` | Timeout for one DINOv2 request, in milliseconds. |
+
+### Auth
+
+| Variable | Default | What it does |
+|---|---|---|
+| `REGISTRATION_ENABLED` | `true` | `false` (also `0`, `no`, `off`) disables self-registration. |
+| `LDAP_ENABLED` | `false` | Enables LDAP login. When OIDC is enabled too, OIDC is used. |
+| `LDAP_URL` | none | LDAP server URL, e.g. `ldaps://ldap.example.com:636/`. Required when LDAP is enabled. |
+| `LDAP_BIND_USER` | none | DN of the service account used for the user search. Required when LDAP is enabled. |
+| `LDAP_BIND_PASSWORD` | none | Password of the service account. Required when LDAP is enabled. |
+| `LDAP_SEARCH_DN` | none | Base DN of the user search. Required when LDAP is enabled. |
+| `LDAP_USERS_SEARCH_FILTER` | none | User search filter; `{{email}}` is replaced by the login email. Required when LDAP is enabled. |
+| `LDAP_ATTRIBUTE_MAIL`, `LDAP_ATTRIBUTE_FIRST_NAME`, `LDAP_ATTRIBUTE_LAST_NAME` | none | Attributes that hold the email, first name and last name. Required when LDAP is enabled. |
+| `LDAP_TLS_NO_VERIFY` | `false` | Skip TLS certificate verification for LDAP. Test servers only. |
+| `LDAP_TIMEOUT_MS` | `10000` | LDAP operation timeout, in milliseconds. |
+| `LDAP_CONNECT_TIMEOUT_MS` | `5000` | LDAP connection timeout, in milliseconds. |
+| `OIDC_ENABLED` | `false` | Enables OIDC (SSO) login; see the OIDC section. |
+| `OIDC_ISSUER_URL` | none | Issuer URL of the identity provider. Required when OIDC is enabled. |
+| `OIDC_CLIENT_ID` | none | OIDC client ID. Required when OIDC is enabled. |
+| `OIDC_CLIENT_SECRET` | none | OIDC client secret. Required when OIDC is enabled. |
+| `OIDC_REDIRECT_URI` | `http://localhost:4200/users/oidc/callback` | Callback URL registered at the identity provider. |
+| `OIDC_SCOPES` | `openid profile email` | Requested scopes. |
+| `OIDC_ATTRIBUTE_MAIL` | `email` | Claim that holds the email. |
+| `OIDC_ATTRIBUTE_FIRST_NAME` | `given_name` | Claim that holds the first name. |
+| `OIDC_ATTRIBUTE_LAST_NAME` | `family_name` | Claim that holds the last name. |
+| `OIDC_ROLE_CLAIM` | `groups` | Claim, or dotted path, that holds the roles. |
+| `OIDC_ADMIN_VALUES` | `vrt-admin,admin` | Comma-separated claim values that give the admin role. |
+| `OIDC_DEFAULT_ROLE` | `editor` | Role for every other user: `admin` or `editor`. |
+| `OIDC_REQUIRE_VERIFIED_EMAIL` | `true` | Reject logins whose email is not verified. |
+| `OIDC_TLS_NO_VERIFY` | `false` | Skip TLS verification for the identity provider. Test servers only. |
+
+### Service variables
+
+| Variable | Default | What it does |
+|---|---|---|
+| `REDIS_URL` | unset, in-memory adapter | Redis for socket.io fan-out between instances (see Scaling to multiple instances). |
+| `REDIS_CONNECT_TIMEOUT_MS` | `30000` | How long the first Redis connection may take before the API exits instead of waiting. |
+
+### Seed
+
+Read by `prisma db seed`.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `DEFAULT_USER_EMAIL` | `visual-regression-tracker@example.com` | Email of the default user. |
+| `DEFAULT_USER_PASSWORD` | generated, printed once | Password of the default user. |
+| `DEFAULT_USER_API_KEY` | generated, printed once | API key of the default user. |
+
+## Optional services
+
+- **Redis** runs several API instances behind one socket.io fan-out. Set `REDIS_URL`; see [Scaling to multiple instances](#scaling-to-multiple-instances-real-time-updates).
+- **DINOv2** serves the `dinov2Check` rendering-noise filter (see `dinov2/README.md`). Start it with `docker compose --profile dinov2 up -d`. The service listens on port 8000 inside the compose network only, so the API container uses `DINOV2_URL=http://dinov2:8000`.
+- **Ollama** runs the VLM comparison locally. Set `OLLAMA_BASE_URL`; from the API container, which is started by compose, the host is `http://host.docker.internal:11434`.
+- **Gemini** runs the VLM comparison in the cloud. Its API key is set in the project's VLM settings, not in the environment; `GEMINI_TIMEOUT_MS` sets the request timeout.
+
 ## Scaling to multiple instances (real-time updates)
 
 Real-time UI updates are delivered over socket.io. Running **more than one API

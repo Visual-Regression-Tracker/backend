@@ -1,10 +1,9 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
 import { UsersService } from '../src/users/users.service';
 import { OllamaService } from '../src/compare/libs/vlm/providers/ollama/ollama.service';
+import { createE2eApp } from './api-helpers';
 import { haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
 
 const image = './test/image.png';
@@ -26,17 +25,9 @@ describe('Ollama (e2e)', () => {
   };
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(OllamaService)
-      .useValue(ollamaServiceMock)
-      .compile();
-
-    app = moduleFixture.createNestApplication();
-    usersService = moduleFixture.get<UsersService>(UsersService);
-
-    await app.init();
+    const created = await createE2eApp({ validation: false, overrides: [[OllamaService, ollamaServiceMock]] });
+    app = created.app;
+    usersService = created.get(UsersService);
   });
 
   beforeEach(() => {
@@ -79,8 +70,6 @@ describe('Ollama (e2e)', () => {
   });
 
   describe('POST /ollama/compare', () => {
-    // Guards reject before the upload is read, so rejected requests are sent without files:
-    // streaming a multipart body into an already closed connection fails with EPIPE.
     it('401 without authentication', async () => {
       await request(app.getHttpServer()).post(compareUrl).expect(401);
       expect(ollamaServiceMock.generate).not.toHaveBeenCalled();

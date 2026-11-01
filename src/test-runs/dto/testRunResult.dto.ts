@@ -6,11 +6,11 @@ export class TestRunResultDto extends TestRunDto {
   @ApiPropertyOptional()
   pixelMisMatchCount?: number | null;
   @ApiPropertyOptional()
-  vlmDescription?: string | null;
+  override vlmDescription?: string | null;
   @ApiProperty()
   url: string;
   @ApiProperty()
-  baselineName: string | null;
+  override baselineName: string | null;
 
   constructor(testRun: TestRun, testVariation: TestVariation) {
     super(testRun);

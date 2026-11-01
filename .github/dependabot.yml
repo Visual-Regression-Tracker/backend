@@ -46,14 +46,25 @@ updates:
           - "*"
 
   - package-ecosystem: docker
-    # base images of the api (Dockerfile) and the migration image (prisma/Dockerfile)
+    # base images of the api (Dockerfile), the migration image (prisma/Dockerfile) and dinov2/Dockerfile
     directories:
       - "/"
       - "/prisma"
+      - "/dinov2"
     schedule:
       interval: weekly
     groups:
       docker:
+        patterns:
+          - "*"
+
+  - package-ecosystem: pip
+    # the DINOv2 service image installs dinov2/requirements.txt
+    directory: "/dinov2"
+    schedule:
+      interval: weekly
+    groups:
+      pip:
         patterns:
           - "*"
 

@@ -1,7 +1,6 @@
-/**
- * @see https://www.prisma.io/docs/orm/prisma-client/testing/unit-testing
- */
-import { seed } from '../seed';
+import { compareSync } from 'bcryptjs';
+
+import { createDefaultProject, createDefaultUser, generateApiKey, seed } from '../seed';
 import { prismaMock } from './client.mock';
 
 const mockDefaultProject = {
@@ -33,74 +32,194 @@ const mockDefaultUser = {
   createdAt: new Date(),
 } as const;
 
-describe('Defaults get created', () => {
+const API_KEY_FORMAT = /^[0-9A-HJKMNP-TV-Z]{28}$/;
+
+const ENV_KEYS = ['DEFAULT_USER_EMAIL', 'DEFAULT_USER_PASSWORD', 'DEFAULT_USER_API_KEY'] as const;
+
+describe('seed', () => {
+  const savedEnv: Record<string, string | undefined> = {};
+  let log: jest.SpyInstance;
+  let warn: jest.SpyInstance;
+
   beforeEach(() => {
-    prismaMock.user.upsert.mockResolvedValue(mockDefaultUser);
+    for (const key of ENV_KEYS) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+    log = jest.spyOn(console, 'log').mockImplementation();
+    warn = jest.spyOn(console, 'warn').mockImplementation();
+    prismaMock.user.create.mockResolvedValue(mockDefaultUser);
     prismaMock.project.create.mockResolvedValue(mockDefaultProject);
   });
-  test('Default user and project are created for empty database', async () => {
-    prismaMock.user.findMany.mockResolvedValue([]);
-    prismaMock.project.findMany.mockResolvedValue([]);
 
-    await seed();
-
-    expect(prismaMock.user.upsert).toHaveBeenCalled();
-    expect(prismaMock.project.create).toHaveBeenCalled();
+  afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
+    }
+    log.mockRestore();
+    warn.mockRestore();
   });
 
-  test('Default user and project are created on error', async () => {
-    prismaMock.user.findMany.mockRejectedValue(new Error('"user" table does not exist'));
-    prismaMock.project.findMany.mockRejectedValue(new Error('"project" table does not exist'));
+  const noAdmin = (existing: object | null = null) => {
+    prismaMock.user.findFirst.mockResolvedValue(null);
+    prismaMock.user.findUnique.mockResolvedValue(existing as never);
+  };
 
-    await seed();
+  const loggedText = () => JSON.stringify([...log.mock.calls, ...warn.mock.calls]);
 
-    expect(prismaMock.user.upsert).toHaveBeenCalled();
-    expect(prismaMock.project.create).toHaveBeenCalled();
+  describe('seed()', () => {
+    test('creates the default user and project in an empty database', async () => {
+      noAdmin();
+      prismaMock.project.count.mockResolvedValue(0);
+
+      await seed();
+
+      expect(prismaMock.user.create).toHaveBeenCalledTimes(1);
+      expect(prismaMock.project.create).toHaveBeenCalledTimes(1);
+    });
+
+    test('rejects when the database cannot be read', async () => {
+      prismaMock.user.findFirst.mockRejectedValue(new Error('"user" table does not exist'));
+      prismaMock.project.count.mockRejectedValue(new Error('"project" table does not exist'));
+
+      await expect(seed()).rejects.toThrow();
+    });
   });
 
-  test('Default user is create if NO admin user exists', async () => {
-    prismaMock.user.findMany.mockResolvedValue([{ ...mockDefaultUser, email: 'foo@bar.com', role: 'editor' }]);
-    prismaMock.project.findMany.mockResolvedValue([]);
+  describe('createDefaultUser', () => {
+    test('active admin exists: nothing is created or changed', async () => {
+      prismaMock.user.findFirst.mockResolvedValue({ id: 'admin' } as never);
 
-    await seed();
+      await createDefaultUser();
 
-    expect(prismaMock.user.upsert).toHaveBeenCalled();
-    expect(prismaMock.project.create).toHaveBeenCalled();
+      expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+      expect(prismaMock.user.create).not.toHaveBeenCalled();
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+      expect(prismaMock.user.upsert).not.toHaveBeenCalled();
+    });
+
+    test('never logs user rows, password hashes or api keys of existing users', async () => {
+      prismaMock.user.findFirst.mockResolvedValue({
+        id: 'admin',
+        apiKey: 'EXISTINGKEY',
+        password: 'hash',
+      } as never);
+
+      await createDefaultUser();
+
+      expect(loggedText()).not.toContain('EXISTINGKEY');
+      expect(loggedText()).not.toContain('hash');
+    });
+
+    test('fresh database with env values: uses them and does not print the password or key', async () => {
+      process.env.DEFAULT_USER_EMAIL = 'admin@corp.test';
+      process.env.DEFAULT_USER_PASSWORD = 'env-password-value';
+      process.env.DEFAULT_USER_API_KEY = 'ENVAPIKEYVALUE';
+      noAdmin();
+
+      await createDefaultUser();
+
+      expect(prismaMock.user.create).toHaveBeenCalledTimes(1);
+      const { data } = prismaMock.user.create.mock.calls[0][0];
+      expect(data.email).toBe('admin@corp.test');
+      expect(data.role).toBe('admin');
+      expect(data.apiKey).toBe('ENVAPIKEYVALUE');
+      expect(compareSync('env-password-value', data.password)).toBe(true);
+      expect(loggedText()).not.toContain('env-password-value');
+      expect(loggedText()).not.toContain('ENVAPIKEYVALUE');
+    });
+
+    test('fresh database without env values: generates the secrets and prints each exactly once', async () => {
+      noAdmin();
+
+      await createDefaultUser();
+
+      const { data } = prismaMock.user.create.mock.calls[0][0];
+      expect(data.email).toBe('visual-regression-tracker@example.com');
+      expect(data.apiKey).toMatch(API_KEY_FORMAT);
+      const printed = log.mock.calls.map((args) => args.join(' '));
+      const passwordLine = printed.find((line) => line.startsWith('Password (generated, shown once): '));
+      const password = passwordLine?.replace('Password (generated, shown once): ', '');
+      expect(password).toMatch(/^[A-Za-z0-9_-]{24}$/);
+      expect(compareSync(password as string, data.password)).toBe(true);
+      expect(printed.filter((line) => line.includes(password as string))).toHaveLength(1);
+      expect(printed.filter((line) => line.includes(data.apiKey))).toHaveLength(1);
+    });
+
+    test('empty env values count as unset', async () => {
+      process.env.DEFAULT_USER_EMAIL = '';
+      process.env.DEFAULT_USER_PASSWORD = '';
+      process.env.DEFAULT_USER_API_KEY = '';
+      noAdmin();
+
+      await createDefaultUser();
+
+      const { data } = prismaMock.user.create.mock.calls[0][0];
+      expect(data.email).toBe('visual-regression-tracker@example.com');
+      expect(data.apiKey).toMatch(API_KEY_FORMAT);
+      expect(compareSync('', data.password)).toBe(false);
+      expect(loggedText()).toContain('generated, shown once');
+    });
+
+    test('no active admin, email taken by an editor: not promoted', async () => {
+      noAdmin({ role: 'editor', isActive: true });
+
+      await createDefaultUser();
+
+      expect(prismaMock.user.create).not.toHaveBeenCalled();
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+      expect(prismaMock.user.upsert).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalled();
+    });
+
+    test('warns about the public defaults', async () => {
+      process.env.DEFAULT_USER_PASSWORD = '123456';
+      noAdmin();
+
+      await createDefaultUser();
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('publicly known default'));
+    });
+
+    test('does not warn about values that are not the public defaults', async () => {
+      process.env.DEFAULT_USER_PASSWORD = 'something-private';
+      noAdmin();
+
+      await createDefaultUser();
+
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 
-  test('Default user is create if the only admin user is inActive', async () => {
-    prismaMock.user.findMany.mockResolvedValue([{ ...mockDefaultUser, email: 'foo@bar.com', isActive: false }]);
-    prismaMock.project.findMany.mockResolvedValue([]);
+  describe('createDefaultProject', () => {
+    test('creates it when there are no projects', async () => {
+      prismaMock.project.count.mockResolvedValue(0);
 
-    await seed();
+      await createDefaultProject();
 
-    expect(prismaMock.user.upsert).toHaveBeenCalled();
-    expect(prismaMock.project.create).toHaveBeenCalled();
-  });
-});
+      expect(prismaMock.project.create).toHaveBeenCalledTimes(1);
+    });
 
-describe('Defaults do NOT get created', () => {
-  beforeEach(() => {
-    prismaMock.user.upsert.mockResolvedValue(mockDefaultUser);
-    prismaMock.project.create.mockResolvedValue(mockDefaultProject);
-  });
-  test('Default project is NOT create if any project exists', async () => {
-    prismaMock.user.findMany.mockResolvedValue([]);
-    prismaMock.project.findMany.mockResolvedValue([mockDefaultProject]);
+    test('does nothing when a project exists', async () => {
+      prismaMock.project.count.mockResolvedValue(1);
 
-    await seed();
+      await createDefaultProject();
 
-    expect(prismaMock.user.upsert).toHaveBeenCalled();
-    expect(prismaMock.project.create).not.toHaveBeenCalled();
+      expect(prismaMock.project.create).not.toHaveBeenCalled();
+    });
   });
 
-  test('Default user is NOT create if any active admin user exists', async () => {
-    prismaMock.user.findMany.mockResolvedValue([{ ...mockDefaultUser, email: 'foo@bar.com' }]);
-    prismaMock.project.findMany.mockResolvedValue([]);
+  describe('generateApiKey', () => {
+    test('has the format of the API keys generated by the backend', () => {
+      expect(generateApiKey()).toMatch(API_KEY_FORMAT);
+    });
 
-    await seed();
-
-    expect(prismaMock.user.upsert).not.toHaveBeenCalled();
-    expect(prismaMock.project.create).toHaveBeenCalled();
+    test('differs between calls', () => {
+      expect(generateApiKey()).not.toBe(generateApiKey());
+    });
   });
 });

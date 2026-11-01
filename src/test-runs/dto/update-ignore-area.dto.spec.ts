@@ -21,4 +21,10 @@ describe('UpdateIgnoreAreasDto', () => {
 
     expect(await failedProperties(dto)).toEqual(['ids', 'ignoreAreas']);
   });
+
+  it('rejects ids and areas that are not arrays', async () => {
+    const dto = plainToInstance(UpdateIgnoreAreasDto, { ids: 'abc', ignoreAreas: area });
+
+    expect(await failedProperties(dto)).toEqual(['ids', 'ignoreAreas']);
+  });
 });

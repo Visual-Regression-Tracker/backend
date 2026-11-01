@@ -1,23 +1,18 @@
 import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
+import { isByteEqualWellFormedPng } from '../../../static/utils';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { applyIgnoreAreas, scaleImageToSize } from '../../utils';
+import { applyIgnoreAreas, readPng, scaleImageToSize } from '../../utils';
 import {
   BlurAmplitudeOptions,
   BlurredDifference,
   isRenderingNoise,
   measureBlurredDifference,
 } from './blur-amplitude.core';
+import { DINOV2_PATCH, gateOfDecoded, PatchGate } from './patch-gate.core';
 import { signatureOfDecoded } from './signature.core';
 import { encodeThumbnail } from './thumbnail.core';
 
-/**
- * CPU-bound part of the pixelmatch comparison, extracted so it can run inside
- * a worker thread (see pixelmatch.worker.ts / DiffWorkerPool): PNG decode,
- * scaling, pixelmatch and diff encode of full-size screenshots block the event
- * loop for ~a second each, which makes the whole API unresponsive during
- * build ingestion. All input/output must stay structured-clone serializable.
- */
 export interface PixelmatchJobInput {
   kind: 'diff';
   baseline: Buffer | Uint8Array;
@@ -28,23 +23,6 @@ export interface PixelmatchJobInput {
   allowDiffDimensions?: boolean;
   diffTolerancePercent: number;
   saveDiff: boolean;
-  /**
-   * Also produce the change signature the variations dialog matches on. Free
-   * here next to the diff — the images are decoded already — and computed once
-   * at ingest so reviewing never has to fetch and decode a build's screenshots
-   * again just to group them.
-   */
-  withSignature?: boolean;
-  /**
-   * Also return small PNGs of the checkpoint and of the diff. The grids draw
-   * these a hundred-odd pixels wide; sending the full-size files and letting
-   * CSS shrink them is what made opening the variations dialog cost megabytes.
-   */
-  withThumbnails?: boolean;
-  /**
-   * Prototype: pass a change that is over tolerance but, once blurred, no
-   * stronger than rendering noise (see blur-amplitude.core.ts). Off when absent.
-   */
   blurAmplitude?: BlurAmplitudeOptions;
 }
 
@@ -54,59 +32,41 @@ export interface PixelmatchJobOutput {
   pixelMisMatchCount?: number;
   diffPercent?: number;
   diffBuffer?: Buffer | Uint8Array;
-  // absent when not asked for, when the screenshots are identical, or when
-  // their dimensions differ and there is nothing meaningful to sign
   signature?: number[];
-  // absent when not asked for, or when the screenshots matched and there is
-  // nothing to show
   imageThumbnail?: Buffer | Uint8Array;
   diffThumbnail?: Buffer | Uint8Array;
-  // absent unless the blur-amplitude filter was asked for and the change was
-  // over tolerance between screenshots of one size — the only case where its
-  // verdict could matter; the two numbers are absent when it could not measure
   blurAmplitude?: number;
   solidPixels?: number;
   renderingNoiseOnly?: boolean;
-}
-
-// postMessage turns Buffers into Uint8Array views over their own ArrayBuffer.
-function toBuffer(data: Buffer | Uint8Array): Buffer {
-  return Buffer.isBuffer(data) ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  gate?: PatchGate;
 }
 
 export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobOutput {
-  const baseline = PNG.sync.read(toBuffer(input.baseline));
-  const image = PNG.sync.read(toBuffer(input.image));
+  if (isByteEqualWellFormedPng(input.baseline, input.image)) {
+    return { equal: true };
+  }
+
+  const baseline = readPng(input.baseline);
+  const image = readPng(input.image);
 
   const isSameDimension = baseline.width === image.width && baseline.height === image.height;
   if (!isSameDimension && !input.allowDiffDimensions) {
     return { equal: false, isSameDimension };
   }
 
-  // Identical bytes only mean identical screenshots at the same size: a 60x30
-  // and a 30x60 image of the same pixels decode to the very same buffer.
-  if (
-    isSameDimension &&
-    baseline.data.equals(new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength))
-  ) {
+  if (isSameDimension && baseline.data.equals(image.data)) {
     return { equal: true };
   }
 
-  // scale image to max size
   const maxWidth = Math.max(baseline.width, image.width);
   const maxHeight = Math.max(baseline.height, image.height);
   const scaledBaseline = scaleImageToSize(baseline, maxWidth, maxHeight);
   const scaledImage = scaleImageToSize(image, maxWidth, maxHeight);
 
-  // apply ignore areas
   const baselineIgnored = applyIgnoreAreas(scaledBaseline, input.ignoreAreas);
   const imageIgnored = applyIgnoreAreas(scaledImage, input.ignoreAreas);
 
-  // compare
-  const diff = new PNG({
-    width: maxWidth,
-    height: maxHeight,
-  });
+  const diff = new PNG({ width: maxWidth, height: maxHeight });
   const pixelMisMatchCount = Pixelmatch(baselineIgnored.data, imageIgnored.data, diff.data, maxWidth, maxHeight, {
     includeAA: input.includeAA,
     threshold: input.threshold,
@@ -114,42 +74,33 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
   const diffPercent = (pixelMisMatchCount * 100) / (scaledImage.width * scaledImage.height);
 
   const overTolerance = diffPercent > input.diffTolerancePercent;
-  // A size change is a finding of its own, as CompareService treats it for the
-  // other comparators: the filter only judges screenshots of one size.
   const blurAmplitude = overTolerance && isSameDimension ? input.blurAmplitude : undefined;
   let measure: BlurredDifference | null = null;
-  let renderingNoiseOnly: boolean | undefined;
+  let renderingNoiseOnly = false;
   if (blurAmplitude) {
-    measure = measureBlurredDifference(baselineIgnored, imageIgnored, blurAmplitude.sigma);
+    measure = measureBlurredDifference(baselineIgnored, imageIgnored);
     renderingNoiseOnly = isRenderingNoise(measure, blurAmplitude.threshold);
   }
 
-  // A build is mostly runs that pass, so anything produced for a diff that is
-  // about to be thrown away is work nobody ever sees the result of.
-  // ...unless a DINOv2 check is still to come, which may send the run to
-  // review after all — and then it needs its diff.
-  const keepingTheDiff = overTolerance && input.saveDiff && (!renderingNoiseOnly || !!input.blurAmplitude?.dinov2);
+  const gate =
+    renderingNoiseOnly && blurAmplitude?.dinov2
+      ? gateOfDecoded(baselineIgnored, imageIgnored, DINOV2_PATCH)
+      : undefined;
 
-  let diffBuffer: Buffer | undefined;
-  if (keepingTheDiff) {
-    diffBuffer = PNG.sync.write(diff);
-  }
+  const keepingTheDiff = overTolerance && input.saveDiff && (!renderingNoiseOnly || !!blurAmplitude?.dinov2);
+  const diffBuffer = keepingTheDiff ? PNG.sync.write(diff, { filterType: 1 }) : undefined;
 
-  // Same source images, same ignore areas, same threshold as the standalone
-  // signature job — sharing signatureOfDecoded is what keeps the two answers
-  // identical, so a stored signature still matches one computed on the fly.
   const signature =
-    input.withSignature && isSameDimension
+    input.saveDiff && isSameDimension
       ? signatureOfDecoded(baselineIgnored, imageIgnored, {
           threshold: input.threshold,
           includeAA: input.includeAA,
         })
       : null;
 
-  const thumbnails =
-    input.withThumbnails && keepingTheDiff
-      ? { imageThumbnail: encodeThumbnail(imageIgnored), diffThumbnail: encodeThumbnail(diff) }
-      : {};
+  const thumbnails = keepingTheDiff
+    ? { imageThumbnail: encodeThumbnail(imageIgnored), diffThumbnail: encodeThumbnail(diff) }
+    : {};
 
   return {
     equal: false,
@@ -159,6 +110,7 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
     diffBuffer,
     ...(signature ? { signature } : {}),
     ...thumbnails,
+    ...(gate ? { gate } : {}),
     ...(blurAmplitude
       ? {
           renderingNoiseOnly,

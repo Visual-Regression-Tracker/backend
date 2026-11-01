@@ -19,6 +19,7 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       DINOV2_URL: ${DINOV2_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      BUILD_RETENTION_GRACE_MINUTES: ${BUILD_RETENTION_GRACE_MINUTES}
     ports:
       - "${APP_PORT}:3000"
     expose:
@@ -30,6 +31,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
   migration:
     container_name: vrt_migration
     build:
@@ -52,7 +61,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
     expose:
       - "${POSTGRES_PORT}"
     volumes:
@@ -62,9 +71,6 @@ services:
       interval: 10s
       timeout: 120s
       retries: 10
-  # The DINOv2 service behind an image-comparison config's "dinov2Check". Only
-  # with `docker compose --profile dinov2 up`, and the api reaches it once
-  # DINOV2_URL=http://dinov2:8000 is set.
   dinov2:
     container_name: vrt_dinov2
     profiles: ["dinov2"]
@@ -85,20 +91,5 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-  # Available at http://localhost:5050
-  # pgadmin:
-  #   container_name: pgadmin4
-  #   # https://hub.docker.com/r/dpage/pgadmin4
-  #   # https://www.pgadmin.org/docs/pgadmin4/latest/release_notes_7_4.html
-  #   image: dpage/pgadmin4:7.4
-  #   restart: always
-  #   environment:
-  #     PGADMIN_DEFAULT_EMAIL: admin@admin.com
-  #     PGADMIN_DEFAULT_PASSWORD: root
-  #   ports:
-  #     - "5050:80"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
 volumes:
   postgres:

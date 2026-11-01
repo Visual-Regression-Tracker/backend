@@ -8,8 +8,8 @@ const prisma = new PrismaClient({
   // the adapter builds its connection from this object when Prisma first
   // connects, so prepareConnection can still settle TLS on it
   adapter: new PrismaPg(config, schema ? { schema } : undefined),
-  // 'info' | 'query' | 'warn' | 'error'
-  log: ['query'],
+  // 'query' would print every statement, including the ones that carry password hashes and API keys
+  log: ['warn', 'error'],
 });
 
 /** Settles sslmode=prefer; call before the first query. */

@@ -55,7 +55,15 @@ Run typecheck, lint, format check and the unit tests before calling work done.
   Fields older clients do not send must be `@IsOptional()`, or saving breaks for them.
 - Format only the files you changed (`npx prettier --write <files>`), not whole
   directories: prettier also rewrites untouched files, markdown included.
-- Comments explain *why*, in the surrounding style; match existing naming.
+- Comments: by default, none. Write one only for a non-obvious _why_ that a
+  reader would otherwise get wrong, and keep it to one line. Delete on sight:
+  comments that restate the code or its names, narrate past bugs or earlier
+  versions (that goes in the commit message), explain what a well-named
+  function already says, point at review notes or ticket ids that are not in
+  the repo, or run for several lines without changing what a reader would do.
+  No TODOs or "known issue" notes (open an issue). Tests follow the same rule:
+  the test name says what is checked. Match existing naming. Before a pull
+  request, see the `pre-pr-review` skill.
 
 ## Services beside the API
 

@@ -1,4 +1,3 @@
-import { PNG, PNGWithMetadata } from 'pngjs';
 import { Logger } from '@nestjs/common';
 import { Static } from '../static.interface';
 import {
@@ -11,10 +10,11 @@ import {
 import { Readable } from 'stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { generateNewImageName } from '../utils';
+import { positiveNumber } from '../../utils/env';
 
-// How long one pre-signed URL is reused before a new one is minted. Also the
-// lifetime S3 is asked to advertise on the object itself.
 export const URL_WINDOW_SECONDS = 3600;
+
+const msFromEnv = (name: string, fallback: number): number => positiveNumber(process.env[name], fallback);
 
 export class AWSS3Service implements Static {
   private readonly logger: Logger = new Logger(AWSS3Service.name);
@@ -23,7 +23,13 @@ export class AWSS3Service implements Static {
   private s3Client: S3Client;
 
   constructor() {
-    this.s3Client = new S3Client();
+    this.s3Client = new S3Client({
+      requestHandler: {
+        connectionTimeout: msFromEnv('S3_CONNECTION_TIMEOUT_MS', 5_000),
+        requestTimeout: msFromEnv('S3_REQUEST_TIMEOUT_MS', 60_000),
+        throwOnRequestTimeout: true,
+      },
+    });
     this.logger.log('AWS S3 service is being used for file storage.');
   }
 
@@ -44,19 +50,6 @@ export class AWSS3Service implements Static {
     }
   }
 
-  async getImage(fileName: string | null): Promise<PNGWithMetadata | null | undefined> {
-    if (!fileName) return null;
-    try {
-      // the comparison pipeline treats an unreadable image as a missing
-      // baseline, so storage failures stay contained here
-      const imageBuffer = await this.getImageBuffer(fileName);
-      if (!imageBuffer) return undefined;
-      return PNG.sync.read(imageBuffer);
-    } catch (ex) {
-      this.logger.error(`Error from read : Cannot get image: ${fileName}. ${ex}`);
-    }
-  }
-
   async getImageBuffer(fileName: string | null): Promise<Buffer | null> {
     if (!fileName) return null;
     try {
@@ -66,14 +59,28 @@ export class AWSS3Service implements Static {
       return Buffer.concat(await stream.toArray());
     } catch (ex) {
       this.logger.error(`Error from read : Cannot get image: ${fileName}. ${ex}`);
-      // only a missing object means "no image"; credentials, throttling and
-      // network failures have to stay errors instead of reading as absence
-      const error = ex as { name?: string; $metadata?: { httpStatusCode?: number } } | undefined;
-      if (error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404) {
+      if (this.isNotFound(ex)) {
         return null;
       }
       throw ex;
     }
+  }
+
+  async getImageStream(fileName: string): Promise<Readable | null> {
+    try {
+      const { Body } = await this.s3Client.send(
+        new GetObjectCommand({ Bucket: this.AWS_S3_BUCKET_NAME, Key: fileName })
+      );
+      return (Body as Readable | undefined) ?? null;
+    } catch (ex) {
+      if (this.isNotFound(ex)) return null;
+      throw ex;
+    }
+  }
+
+  private isNotFound(ex: unknown): boolean {
+    const error = ex as { name?: string; $metadata?: { httpStatusCode?: number } } | undefined;
+    return error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404;
   }
 
   async copyImage(type: 'screenshot' | 'diff' | 'baseline', sourceImageName: string): Promise<string> {
@@ -92,23 +99,6 @@ export class AWSS3Service implements Static {
     }
   }
 
-  /**
-   * A pre-signed URL for the object, stable for the length of a window.
-   *
-   * A browser caches by URL. Signing from the current instant gave every
-   * request a different URL, so the bytes it had just downloaded could never be
-   * reused: reopening a screen, or stepping back one, paid for the whole image
-   * again. Signing from the start of a fixed window instead makes every request
-   * inside that window produce the very same URL, which a cache can hit.
-   *
-   * The signature is given twice the window to live, so a URL handed out at the
-   * last second of one window is still good for a whole window afterwards.
-   *
-   * `ResponseCacheControl` makes S3 answer with a cache header of its own —
-   * without it a stable URL still leaves the browser guessing, since the bucket
-   * sets none. An image name is unique per upload and its bytes never change,
-   * so the only thing bounding the lifetime is the signature.
-   */
   async getImageUrl(imageName: string): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: `${this.AWS_S3_BUCKET_NAME}`,

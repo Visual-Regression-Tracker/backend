@@ -1,30 +1,9 @@
 import { Logger } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
 import { HttpAdapterHost } from '@nestjs/core';
 import { AppService } from './app.service';
 import { ConfigService } from '@nestjs/config';
 
 describe('AppService', () => {
-  let service: AppService;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AppService,
-        {
-          provide: ConfigService,
-          useValue: {},
-        },
-      ],
-    }).compile();
-
-    service = module.get<AppService>(AppService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   describe('onApplicationBootstrap', () => {
     const ENV_KEYS = ['SERVER_TIMEOUT', 'SERVER_HEADERS_TIMEOUT', 'SERVER_KEEP_ALIVE_TIMEOUT'];
     const originalEnv = { ...process.env };
@@ -79,10 +58,25 @@ describe('AppService', () => {
       expect(bootstrap({ SERVER_TIMEOUT: '1500.9' }).timeout).toBe(1500);
     });
 
-    // NOTE: current behavior — the value is parsed with parseInt and never
-    // validated, so a typo in the env sets the timeout to NaN.
-    it('sets NaN for a non-numeric override', () => {
-      expect(bootstrap({ SERVER_TIMEOUT: 'abc' }).timeout).toBeNaN();
+    it('keeps the server default and warns for a non-numeric override', () => {
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+      const server = bootstrap({ SERVER_TIMEOUT: 'abc', SERVER_HEADERS_TIMEOUT: '-5' });
+
+      expect(server).toEqual({ timeout: 0, headersTimeout: 60000, keepAliveTimeout: 5000 });
+      expect(warnSpy).toHaveBeenCalledWith('SERVER_TIMEOUT="abc" is not a number of milliseconds; keeping 0');
+      expect(warnSpy).toHaveBeenCalledWith(
+        'SERVER_HEADERS_TIMEOUT="-5" is not a number of milliseconds; keeping 60000'
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('treats an empty value as not set, without a warning', () => {
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+      expect(bootstrap({ SERVER_TIMEOUT: '  ' }).timeout).toBe(0);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
 
     it('logs every resulting timeout', () => {

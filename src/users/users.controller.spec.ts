@@ -4,12 +4,15 @@ import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { ConfigService } from '@nestjs/config';
 import { Role, User } from '@prisma/client';
-import { UserDto } from './dto/user.dto';
+import { UserDto, toUserSummary } from './dto/user.dto';
+import { ForbiddenException } from '@nestjs/common';
 
 describe('Users Controller', () => {
   let controller: UsersController;
   let usersService: {
     isOidcEnabled: jest.Mock;
+    isRegistrationAllowedByConfig: jest.Mock;
+    isRegistrationEnabled: jest.Mock;
     oidcGetAuthorizationUrl: jest.Mock;
     oidcBuildFrontendRedirect: jest.Mock;
     oidcHandleCallback: jest.Mock;
@@ -40,6 +43,8 @@ describe('Users Controller', () => {
   beforeEach(async () => {
     usersService = {
       isOidcEnabled: jest.fn(),
+      isRegistrationAllowedByConfig: jest.fn().mockReturnValue(true),
+      isRegistrationEnabled: jest.fn(),
       oidcGetAuthorizationUrl: jest.fn(),
       oidcBuildFrontendRedirect: jest.fn(),
       oidcHandleCallback: jest.fn(),
@@ -66,10 +71,6 @@ describe('Users Controller', () => {
     controller = module.get<UsersController>(UsersController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
-
   it('returns the current user', () => {
     const result = controller.me(user);
     expect(result).toBeInstanceOf(UserDto);
@@ -81,105 +82,17 @@ describe('Users Controller', () => {
     expect(controller.oidcEnabled()).toBe(true);
   });
 
-  it('redirects to the frontend with an error when the state cookie is missing', async () => {
-    usersService.isOidcEnabled.mockReturnValue(true);
-    usersService.oidcBuildFrontendRedirect.mockReturnValue('http://localhost:8080/login#error=oidc_login_failed');
-    const res = { clearCookie: jest.fn(), redirect: jest.fn(), status: jest.fn().mockReturnThis(), send: jest.fn() };
-
-    await controller.oidcCallback({ headers: {}, query: {} } as never, res as never);
-
-    expect(usersService.oidcHandleCallback).not.toHaveBeenCalled();
-    expect(res.redirect).toHaveBeenCalledWith('http://localhost:8080/login#error=oidc_login_failed');
-  });
-
-  it('redirects to the frontend with an error when the state cookie is malformed', async () => {
-    usersService.isOidcEnabled.mockReturnValue(true);
-    usersService.oidcBuildFrontendRedirect.mockReturnValue('http://localhost:8080/login#error=oidc_login_failed');
-    const res = { clearCookie: jest.fn(), redirect: jest.fn(), status: jest.fn().mockReturnThis(), send: jest.fn() };
-
-    await controller.oidcCallback({ headers: { cookie: 'oidc_state=%E0%A4%A' }, query: {} } as never, res as never);
-
-    expect(usersService.oidcHandleCallback).not.toHaveBeenCalled();
-    expect(res.redirect).toHaveBeenCalledWith('http://localhost:8080/login#error=oidc_login_failed');
-  });
-
-  it('redirects to the frontend with an error when the identity provider is unreachable', async () => {
-    usersService.isOidcEnabled.mockReturnValue(true);
-    usersService.oidcGetAuthorizationUrl.mockRejectedValue(new Error('discovery down'));
-    usersService.oidcBuildFrontendRedirect.mockReturnValue('http://localhost:8080/login#error=oidc_login_failed');
-    const res = { cookie: jest.fn(), redirect: jest.fn() };
-
-    await controller.oidcLogin(res as never);
-
-    expect(res.cookie).not.toHaveBeenCalled();
-    expect(res.redirect).toHaveBeenCalledWith('http://localhost:8080/login#error=oidc_login_failed');
-  });
-
-  it('returns 404 on login when OIDC is disabled', async () => {
-    usersService.isOidcEnabled.mockReturnValue(false);
-    const res = { cookie: jest.fn(), redirect: jest.fn(), status: jest.fn().mockReturnThis(), send: jest.fn() };
-
-    await controller.oidcLogin(res as never);
-
-    expect(res.status).toHaveBeenCalledWith(404);
-    expect(usersService.oidcGetAuthorizationUrl).not.toHaveBeenCalled();
-  });
-
-  it('redirects to the identity provider and stores the PKCE state cookie', async () => {
-    usersService.isOidcEnabled.mockReturnValue(true);
-    usersService.oidcGetAuthorizationUrl.mockResolvedValue({
-      url: 'https://idp.example.com/authorize',
-      state: 'state',
-      codeVerifier: 'verifier',
-    });
-    const res = { cookie: jest.fn(), redirect: jest.fn() };
-
-    await controller.oidcLogin(res as never);
-
-    expect(res.cookie).toHaveBeenCalledWith(
-      'oidc_state',
-      'state.verifier',
-      expect.objectContaining({ httpOnly: true, sameSite: 'lax' })
-    );
-    expect(res.redirect).toHaveBeenCalledWith('https://idp.example.com/authorize');
-  });
-
-  it('redirects to the frontend with the token after a successful callback', async () => {
-    usersService.isOidcEnabled.mockReturnValue(true);
-    usersService.oidcHandleCallback.mockResolvedValue({ token: 'jwt' });
-    usersService.oidcBuildFrontendRedirect.mockReturnValue('http://localhost:8080/login#token=jwt');
-    const res = { clearCookie: jest.fn(), redirect: jest.fn(), status: jest.fn().mockReturnThis(), send: jest.fn() };
-    const req = {
-      headers: { cookie: 'oidc_state=state.verifier' },
-      query: { code: 'code', state: 'state', repeated: ['a', 'b'] },
-    };
-
-    await controller.oidcCallback(req as never, res as never);
-
-    expect(usersService.oidcHandleCallback).toHaveBeenCalledWith(
-      { code: 'code', state: 'state' },
-      { state: 'state', codeVerifier: 'verifier' }
-    );
-    expect(res.redirect).toHaveBeenCalledWith('http://localhost:8080/login#token=jwt');
-  });
-
-  it('returns 404 on the callback when OIDC is disabled', async () => {
-    usersService.isOidcEnabled.mockReturnValue(false);
-    const res = { clearCookie: jest.fn(), redirect: jest.fn(), status: jest.fn().mockReturnThis(), send: jest.fn() };
-
-    await controller.oidcCallback({ headers: {}, query: {} } as never, res as never);
-
-    expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalled();
-  });
-
-  describe('OIDC cookie handling', () => {
-    const okResponse = () => ({
+  describe('OIDC', () => {
+    const mockRes = () => ({
+      cookie: jest.fn(),
       clearCookie: jest.fn(),
       redirect: jest.fn(),
       status: jest.fn().mockReturnThis(),
       send: jest.fn(),
     });
+    const callback = (res: ReturnType<typeof mockRes>, headers: object = {}, query: object = {}) =>
+      controller.oidcCallback({ headers, query } as never, res as never);
+    const stateCookie = { cookie: 'oidc_state=state.verifier' };
 
     beforeEach(() => {
       usersService.isOidcEnabled.mockReturnValue(true);
@@ -188,27 +101,14 @@ describe('Users Controller', () => {
       );
     });
 
-    it('finds the state cookie among other cookies and decodes it', async () => {
-      usersService.oidcHandleCallback.mockResolvedValue({ token: 'jwt' });
-      const res = okResponse();
+    it.each([
+      ['is missing', {}],
+      ['is missing among other cookies', { cookie: 'a=1; b=2' }],
+      ['is malformed', { cookie: 'oidc_state=%E0%A4%A' }],
+    ])('redirects to the frontend with an error when the state cookie %s', async (_case, headers) => {
+      const res = mockRes();
 
-      await controller.oidcCallback(
-        { headers: { cookie: 'a=1; oidc_state=st%2Ea.ver=ifier; b=2' }, query: {} } as never,
-        res as never
-      );
-
-      // "=" inside the value is kept; after decoding it is split on every "." and
-      // only the first two parts are used.
-      // NOTE: current behavior — a verifier containing "." (allowed by RFC 7636) would be truncated
-      expect(usersService.oidcHandleCallback).toHaveBeenCalledWith({}, { state: 'st', codeVerifier: 'a' });
-      expect(res.clearCookie).toHaveBeenCalledWith('oidc_state', { path: '/' });
-      expect(res.redirect).toHaveBeenCalledWith('front#token=jwt');
-    });
-
-    it('fails the callback when other cookies are present but not the state cookie', async () => {
-      const res = okResponse();
-
-      await controller.oidcCallback({ headers: { cookie: 'a=1; b=2' }, query: {} } as never, res as never);
+      await callback(res, headers);
 
       expect(usersService.oidcHandleCallback).not.toHaveBeenCalled();
       expect(usersService.oidcBuildFrontendRedirect).toHaveBeenCalledWith(undefined, 'oidc_login_failed');
@@ -216,30 +116,93 @@ describe('Users Controller', () => {
       expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
     });
 
-    it('fails the callback when the identity provider rejects the code', async () => {
-      usersService.oidcHandleCallback.mockRejectedValue(new Error('invalid_grant'));
-      const res = okResponse();
+    it.each([new Error('discovery down'), 'plain failure'])(
+      'redirects to the frontend with an error when the authorization url rejects with %j',
+      async (failure) => {
+        usersService.oidcGetAuthorizationUrl.mockRejectedValue(failure);
+        const res = mockRes();
 
-      await controller.oidcCallback(
-        { headers: { cookie: 'oidc_state=state.verifier' }, query: { code: 'c' } } as never,
-        res as never
+        await controller.oidcLogin(res as never);
+
+        expect(res.cookie).not.toHaveBeenCalled();
+        expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
+      }
+    );
+
+    it('returns 404 on login when OIDC is disabled', async () => {
+      usersService.isOidcEnabled.mockReturnValue(false);
+      const res = mockRes();
+
+      await controller.oidcLogin(res as never);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(usersService.oidcGetAuthorizationUrl).not.toHaveBeenCalled();
+    });
+
+    it('redirects to the identity provider and stores the PKCE state cookie', async () => {
+      usersService.oidcGetAuthorizationUrl.mockResolvedValue({
+        url: 'https://idp.example.com/authorize',
+        state: 'state',
+        codeVerifier: 'verifier',
+      });
+      const res = mockRes();
+
+      await controller.oidcLogin(res as never);
+
+      expect(res.cookie).toHaveBeenCalledWith(
+        'oidc_state',
+        'state.verifier',
+        expect.objectContaining({ httpOnly: true, sameSite: 'lax' })
       );
+      expect(res.redirect).toHaveBeenCalledWith('https://idp.example.com/authorize');
+    });
 
+    it('redirects to the frontend with the token after a successful callback', async () => {
+      usersService.oidcHandleCallback.mockResolvedValue({ token: 'jwt' });
+      const res = mockRes();
+
+      await callback(res, stateCookie, { code: 'code', state: 'state', repeated: ['a', 'b'] });
+
+      expect(usersService.oidcHandleCallback).toHaveBeenCalledWith(
+        { code: 'code', state: 'state' },
+        { state: 'state', codeVerifier: 'verifier' }
+      );
+      expect(res.redirect).toHaveBeenCalledWith('front#token=jwt');
+    });
+
+    it('returns 404 on the callback when OIDC is disabled', async () => {
+      usersService.isOidcEnabled.mockReturnValue(false);
+      const res = mockRes();
+
+      await callback(res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.send).toHaveBeenCalled();
+    });
+
+    it('finds the state cookie among other cookies and splits it at the first dot (generated verifiers are base64url, without dots)', async () => {
+      usersService.oidcHandleCallback.mockResolvedValue({ token: 'jwt' });
+      const res = mockRes();
+
+      await callback(res, { cookie: 'a=1; oidc_state=st%2Ea.ver=ifier; b=2' });
+
+      expect(usersService.oidcHandleCallback).toHaveBeenCalledWith({}, { state: 'st', codeVerifier: 'a' });
       expect(res.clearCookie).toHaveBeenCalledWith('oidc_state', { path: '/' });
-      expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
+      expect(res.redirect).toHaveBeenCalledWith('front#token=jwt');
     });
 
-    it('fails the callback when the identity provider rejects with a non-Error', async () => {
-      usersService.oidcHandleCallback.mockRejectedValue('plain failure');
-      const res = okResponse();
+    it.each([new Error('invalid_grant'), 'plain failure'])(
+      'fails the callback when the identity provider rejects with %j',
+      async (failure) => {
+        usersService.oidcHandleCallback.mockRejectedValue(failure);
+        const res = mockRes();
 
-      await controller.oidcCallback(
-        { headers: { cookie: 'oidc_state=state.verifier' }, query: {} } as never,
-        res as never
-      );
+        await callback(res, stateCookie, { code: 'c' });
 
-      expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
-    });
+        expect(res.clearCookie).toHaveBeenCalledWith('oidc_state', { path: '/' });
+        expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
+      }
+    );
 
     it.each([
       ['https://vrt.example.com/callback', true],
@@ -249,7 +212,7 @@ describe('Users Controller', () => {
         key === 'OIDC_REDIRECT_URI' ? redirectUri : defaultValue
       );
       usersService.oidcGetAuthorizationUrl.mockResolvedValue({ url: 'idp', state: 's', codeVerifier: 'v' });
-      const res = { cookie: jest.fn(), redirect: jest.fn() };
+      const res = mockRes();
 
       await controller.oidcLogin(res as never);
 
@@ -262,15 +225,6 @@ describe('Users Controller', () => {
         path: '/',
       });
     });
-
-    it('redirects to the login page when the authorization url rejects with a non-Error', async () => {
-      usersService.oidcGetAuthorizationUrl.mockRejectedValue('plain failure');
-      const res = { cookie: jest.fn(), redirect: jest.fn() };
-
-      await controller.oidcLogin(res as never);
-
-      expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
-    });
   });
 
   describe('account handlers', () => {
@@ -280,6 +234,21 @@ describe('Users Controller', () => {
 
       await expect(controller.register(dto)).resolves.toBe('registered');
       expect(usersService.create).toHaveBeenCalledWith(dto);
+    });
+
+    it('refuses to register a user when registration is switched off', () => {
+      usersService.isRegistrationAllowedByConfig.mockReturnValue(false);
+
+      expect(() =>
+        controller.register({ email: 'new@example.com', firstName: 'N', lastName: 'U', password: 'secret' })
+      ).toThrow(ForbiddenException);
+      expect(usersService.create).not.toHaveBeenCalled();
+    });
+
+    it('reports whether registration is enabled', () => {
+      usersService.isRegistrationEnabled.mockReturnValue(false);
+
+      expect(controller.registrationEnabled()).toBe(false);
     });
 
     it('logs a user in', async () => {
@@ -300,7 +269,7 @@ describe('Users Controller', () => {
     it('changes the password of the current user', async () => {
       usersService.changePassword.mockResolvedValue(true);
 
-      await expect(controller.changePassword(user, 'new password')).resolves.toBe(true);
+      await expect(controller.changePassword(user, { password: 'new password' })).resolves.toBe(true);
       expect(usersService.changePassword).toHaveBeenCalledWith(user, 'new password');
     });
 
@@ -314,14 +283,18 @@ describe('Users Controller', () => {
   });
 
   describe('admin handlers', () => {
-    it('lists every user as a UserDto without the password', async () => {
-      prismaService.user.findMany.mockResolvedValue([user, { ...user, id: '2', email: 'other@example.com' }]);
+    it('lists every user as a summary without the password and the api key', async () => {
+      const other = { ...user, id: '2', email: 'other@example.com' };
+      prismaService.user.findMany.mockResolvedValue([user, other]);
 
       const result = await controller.userList();
 
       expect(prismaService.user.findMany).toHaveBeenCalledWith();
-      expect(result).toEqual([new UserDto(user), new UserDto({ ...user, id: '2', email: 'other@example.com' })]);
-      expect(result[0]).not.toHaveProperty('password');
+      expect(result).toEqual([toUserSummary(user), toUserSummary(other)]);
+      for (const summary of result) {
+        expect(summary).not.toHaveProperty('password');
+        expect(summary).not.toHaveProperty('apiKey');
+      }
     });
 
     it('deletes the users in one go', async () => {

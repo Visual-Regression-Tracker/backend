@@ -2,7 +2,6 @@ import { Pagination } from '../../shared/dto/pagination.dto';
 import { PaginatedTestRunDto } from './testRun-paginated.dto';
 import { TestRunDto } from './testRun.dto';
 
-// metadata keys @nestjs/swagger stores @ApiProperty under (not exported from the package entry point)
 const API_MODEL_PROPERTIES = 'swagger/apiModelProperties';
 const API_MODEL_PROPERTIES_ARRAY = 'swagger/apiModelPropertiesArray';
 

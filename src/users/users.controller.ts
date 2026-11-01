@@ -11,6 +11,8 @@ import {
   Res,
   HttpStatus,
   Header,
+  Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { UsersService } from './users.service';
@@ -18,7 +20,7 @@ import { ApiOkResponse, ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserLoginResponseDto } from './dto/user-login-response.dto';
 import { CreateUserDto } from './dto/user-create.dto';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
-import { UserDto } from './dto/user.dto';
+import { UserDto, UserSummaryDto, toUserSummary } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
 import { UserLoginRequestDto } from './dto/user-login-request.dto';
 import { CurrentUser } from '../shared/current-user.decorator';
@@ -27,7 +29,7 @@ import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
-import { Logger } from '@nestjs/common';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { ConfigService } from '@nestjs/config';
 
 const OIDC_STATE_COOKIE = 'oidc_state';
@@ -60,7 +62,17 @@ export class UsersController {
   @Post('register')
   @ApiOkResponse({ type: UserLoginResponseDto })
   register(@Body() createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
+    if (!this.usersService.isRegistrationAllowedByConfig()) {
+      throw new ForbiddenException('User registration is disabled.');
+    }
     return this.usersService.create(createUserDto);
+  }
+
+  @Get('registration/enabled')
+  @ApiOkResponse({ type: Boolean })
+  @Header('Content-Type', 'application/json')
+  registrationEnabled(): boolean {
+    return this.usersService.isRegistrationEnabled();
   }
 
   @Post('login')
@@ -88,8 +100,6 @@ export class UsersController {
     try {
       authorization = await this.usersService.oidcGetAuthorizationUrl();
     } catch (e) {
-      // The browser navigated here directly, so send it back to the login page
-      // instead of showing a raw JSON error (e.g. when discovery fails).
       this.logger.warn(`OIDC login failed: ${(e as Error)?.message ?? e}`);
       res.redirect(this.usersService.oidcBuildFrontendRedirect(undefined, 'oidc_login_failed'));
       return;
@@ -114,13 +124,10 @@ export class UsersController {
 
     let target = this.usersService.oidcBuildFrontendRedirect(undefined, 'oidc_login_failed');
     try {
-      // Inside the try: decodeURIComponent throws on a malformed cookie value.
       const [state, codeVerifier] = (readCookie(req, OIDC_STATE_COOKIE) ?? '').split('.');
       if (!state || !codeVerifier) {
         throw new Error('Missing or malformed OIDC state cookie.');
       }
-      // Repeated query keys produce arrays; keep only scalar strings so the
-      // callback sees a plain parameter map.
       const params: Record<string, string> = {};
       for (const [key, value] of Object.entries(req.query)) {
         if (typeof value === 'string') {
@@ -160,8 +167,8 @@ export class UsersController {
   @ApiOkResponse({ type: Boolean })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  changePassword(@CurrentUser() user: User, @Body('password') password: string): Promise<boolean> {
-    return this.usersService.changePassword(user, password);
+  changePassword(@CurrentUser() user: User, @Body() body: ChangePasswordDto): Promise<boolean> {
+    return this.usersService.changePassword(user, body.password);
   }
 
   @Put()
@@ -173,13 +180,13 @@ export class UsersController {
   }
 
   @Get('all')
-  @ApiOkResponse({ type: UserDto, isArray: true })
+  @ApiOkResponse({ type: UserSummaryDto, isArray: true })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin)
-  async userList(): Promise<UserDto[]> {
+  async userList(): Promise<UserSummaryDto[]> {
     const users = await this.prismaService.user.findMany();
-    return users.map((user) => new UserDto(user));
+    return users.map(toUserSummary);
   }
 
   @Delete()
@@ -193,11 +200,11 @@ export class UsersController {
   }
 
   @Patch('assignRole')
-  @ApiOkResponse({ type: UserDto })
+  @ApiOkResponse({ type: UserSummaryDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin)
-  async assignRole(@Body() data: AssignRoleDto): Promise<UserDto> {
+  async assignRole(@Body() data: AssignRoleDto): Promise<UserSummaryDto> {
     this.logger.debug(`Going to assign role ${data.role} to User: ${data.id}`);
     return this.usersService.assignRole(data);
   }

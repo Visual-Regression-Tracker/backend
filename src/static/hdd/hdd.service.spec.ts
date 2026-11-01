@@ -5,8 +5,11 @@ import { PNG } from 'pngjs';
 import { HDD_IMAGE_PATH } from './constants';
 import { HddService } from './hdd.service';
 
-// Keeps the spec out of the real imageUploads/ folder: the directory is a
-// fresh temp one, still named imageUploads so the resolved paths look alike.
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs');
+  return { ...actual, mkdirSync: jest.fn(actual.mkdirSync), existsSync: jest.fn(actual.existsSync) };
+});
+
 jest.mock('./constants', () => ({
   HDD_IMAGE_PATH: `${require('path').join(require('os').tmpdir(), `vrt-hdd-spec-${process.pid}`, 'imageUploads')}/`,
 }));
@@ -16,10 +19,11 @@ const pngBuffer = (width = 2, height = 1) => PNG.sync.write(new PNG({ width, hei
 const writeImage = (name: string, data: Buffer) => fs.writeFile(path.join(imageDir, name), data);
 
 describe('HddService', () => {
-  const service = new HddService();
+  let service: HddService;
   let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    service = new HddService();
     errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
   });
 
@@ -39,7 +43,6 @@ describe('HddService', () => {
     expect(service.getImagePath('ABC123.screenshot.png')).toMatch(/imageUploads\/ABC123\.screenshot\.png$/);
   });
 
-  // a name may begin with dots without climbing out of the directory
   it.each(['..thumbnail.png', '...png', '.hidden.png'])(
     'resolves a dotted name inside the directory: %s',
     (imageName) => {
@@ -67,12 +70,51 @@ describe('HddService', () => {
     expect(existsSync(imageDir)).toBe(true);
   });
 
-  it('returns null for a missing image', async () => {
-    await expect(service.getImageBuffer('definitely-missing.png')).resolves.toBeNull();
+  it('creates the image directory once per instance', () => {
+    (mkdirSync as jest.Mock).mockClear();
+    (existsSync as jest.Mock).mockClear();
+
+    service.getImagePath('a.screenshot.png');
+    service.getImagePath('b.screenshot.png');
+
+    expect(mkdirSync).toHaveBeenCalledTimes(1);
+    expect(existsSync).not.toHaveBeenCalled();
   });
 
-  it('propagates a traversal attempt instead of reading the file', async () => {
-    await expect(service.getImageBuffer('../../etc/passwd')).rejects.toThrow(/outside of the image directory/);
+  it.each([
+    ['getImageBuffer', (name: string) => service.getImageBuffer(name)],
+    ['getImageStream', (name: string) => service.getImageStream(name)],
+  ])('%s returns null for a missing image', async (_, read) => {
+    await expect(read('definitely-missing.png')).resolves.toBeNull();
+  });
+
+  it.each([
+    ['getImageBuffer', (name: string) => service.getImageBuffer(name)],
+    ['getImageStream', (name: string) => service.getImageStream(name)],
+    ['copyImage', (name: string) => service.copyImage('baseline', name)],
+  ])('%s rejects a path outside the image directory instead of reading the file', async (_, read) => {
+    await expect(read('../../etc/passwd')).rejects.toThrow(/outside of the image directory/);
+  });
+
+  describe('getImageStream', () => {
+    const readAll = async (stream: NodeJS.ReadableStream | null) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream!) chunks.push(chunk as Buffer);
+      return Buffer.concat(chunks);
+    };
+
+    it('streams the bytes of the stored file', async () => {
+      const data = pngBuffer(4, 4);
+      await writeImage('streamed.screenshot.png', data);
+
+      await expect(readAll(await service.getImageStream('streamed.screenshot.png'))).resolves.toEqual(data);
+    });
+
+    it('rethrows a failure other than a missing file', async () => {
+      await writeImage('plain-file.png', pngBuffer());
+
+      await expect(service.getImageStream('plain-file.png/inside.png')).rejects.toMatchObject({ code: 'ENOTDIR' });
+    });
   });
 
   describe('generateNewImage', () => {
@@ -90,9 +132,7 @@ describe('HddService', () => {
       await expect(service.getImageUrl('image.png')).resolves.toBe('/image.png');
     });
 
-    // NOTE: current behavior — unlike the other methods, the name is not
-    // checked for traversal here (the URL is only handed to the browser).
-    it('does not validate the image name', async () => {
+    it('builds the URL without validating the name (the controller validates it)', async () => {
       await expect(service.getImageUrl('../secret')).resolves.toBe('/../secret');
     });
   });
@@ -116,37 +156,10 @@ describe('HddService', () => {
       await expect(fs.readFile(path.join(imageDir, imageName), 'utf8')).resolves.toBe('HELLO');
     });
 
-    // NOTE: current behavior — HddService itself does not check the format;
-    // only StaticService rejects non-PNG uploads.
-    it('accepts a buffer that is not a PNG', async () => {
+    it('stores any buffer (StaticService checks the format)', async () => {
       const imageName = await service.saveImage('diff', Buffer.from('not a png'));
 
       await expect(fs.readFile(path.join(imageDir, imageName), 'utf8')).resolves.toBe('not a png');
-    });
-  });
-
-  describe('getImage', () => {
-    it('decodes a stored PNG', async () => {
-      await writeImage('decodable.png', pngBuffer(3, 2));
-
-      const image = await service.getImage('decodable.png');
-
-      expect(image).toMatchObject({ width: 3, height: 2 });
-    });
-
-    it('returns undefined for a missing image', async () => {
-      await expect(service.getImage('missing.png')).resolves.toBeUndefined();
-    });
-
-    it('returns undefined for an empty name', async () => {
-      await expect(service.getImage('')).resolves.toBeUndefined();
-    });
-
-    it('logs and returns undefined for a file that is not a valid PNG', async () => {
-      await writeImage('corrupt.png', Buffer.from('garbage'));
-
-      await expect(service.getImage('corrupt.png')).resolves.toBeUndefined();
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot decode image: corrupt.png.'));
     });
   });
 
@@ -183,10 +196,6 @@ describe('HddService', () => {
     it('rejects when the source image is missing', async () => {
       await expect(service.copyImage('baseline', 'missing.png')).rejects.toMatchObject({ code: 'ENOENT' });
     });
-
-    it('rejects a source name pointing outside the image directory', async () => {
-      await expect(service.copyImage('baseline', '../outside.png')).rejects.toThrow(/outside of the image directory/);
-    });
   });
 
   describe('deleteImage', () => {
@@ -201,8 +210,6 @@ describe('HddService', () => {
       await expect(service.deleteImage('')).resolves.toBeUndefined();
     });
 
-    // NOTE: current behavior — failures are only logged and still reported as
-    // a successful delete.
     it('logs and still returns true when the file is missing', async () => {
       await expect(service.deleteImage('never-existed.png')).resolves.toBe(true);
       expect(errorSpy).toHaveBeenCalledWith(expect.objectContaining({ code: 'ENOENT' }));

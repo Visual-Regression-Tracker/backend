@@ -1,25 +1,26 @@
-import { BlurAmplitudeJobInput, BlurAmplitudeJobOutput, computeBlurAmplitude } from './blur-amplitude.core';
-import { computePatchGate, PatchGateJobInput, PatchGateJobOutput } from './patch-gate.core';
-import { computePixelmatchDiff, PixelmatchJobInput, PixelmatchJobOutput } from './pixelmatch.core';
-import { computeChangeSignature, SignatureJobInput, SignatureJobOutput } from './signature.core';
+import { computeBlurAmplitude } from './blur-amplitude.core';
+import { computeLooksSame } from '../looks-same/looks-same.core';
+import { computePixelmatchDiff } from './pixelmatch.core';
+import { computeVlmInputs } from '../vlm/vlm-inputs.core';
+import { computeChangeSignature } from './signature.core';
 
-/**
- * The jobs {@link DiffWorkerPool} runs off the event loop, discriminated by
- * `kind`. Both the worker thread and the pool's inline fallback go through
- * {@link runWorkerJob}, so the two paths cannot answer a job differently.
- */
-export type WorkerJobInput = PixelmatchJobInput | SignatureJobInput | BlurAmplitudeJobInput | PatchGateJobInput;
-export type WorkerJobOutput = PixelmatchJobOutput | SignatureJobOutput | BlurAmplitudeJobOutput | PatchGateJobOutput;
+const JOBS = {
+  diff: computePixelmatchDiff,
+  signature: computeChangeSignature,
+  'blur-amplitude': computeBlurAmplitude,
+  'looks-same': computeLooksSame,
+  'vlm-inputs': computeVlmInputs,
+} as const;
 
-export function runWorkerJob(input: WorkerJobInput): WorkerJobOutput {
-  switch (input.kind) {
-    case 'signature':
-      return computeChangeSignature(input);
-    case 'blur-amplitude':
-      return computeBlurAmplitude(input);
-    case 'patch-gate':
-      return computePatchGate(input);
-    default:
-      return computePixelmatchDiff(input);
-  }
+type Jobs = typeof JOBS;
+
+export type WorkerJobKind = keyof Jobs;
+export type WorkerJobInput = { [K in WorkerJobKind]: Parameters<Jobs[K]>[0] }[WorkerJobKind];
+export type WorkerJobOutput = { [K in WorkerJobKind]: Awaited<ReturnType<Jobs[K]>> }[WorkerJobKind];
+
+export type WorkerJobResult<K extends WorkerJobKind> = Awaited<ReturnType<Jobs[K]>>;
+export type WorkerJobInputOf<K extends WorkerJobKind> = Parameters<Jobs[K]>[0] & { kind: K };
+
+export function runWorkerJob(input: WorkerJobInput): WorkerJobOutput | Promise<WorkerJobOutput> {
+  return (JOBS[input.kind] as (input: WorkerJobInput) => WorkerJobOutput | Promise<WorkerJobOutput>)(input);
 }

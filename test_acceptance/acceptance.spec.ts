@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 
 axios.defaults.baseURL = 'http://localhost:4200';
 
-let user: Partial<User> = {
+const user: Partial<User> = {
   email: `${randomUUID()}@example.com`,
   password: '123456',
   firstName: 'fName',

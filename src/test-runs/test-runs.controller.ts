@@ -9,11 +9,13 @@ import {
   Post,
   ParseBoolPipe,
   UseInterceptors,
-  UsePipes,
-  ValidationPipe,
   Logger,
   Patch,
   NotFoundException,
+  BadRequestException,
+  ParseArrayPipe,
+  HttpCode,
+  PipeTransform,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -25,9 +27,10 @@ import {
   ApiConsumes,
   ApiBody,
   ApiOperation,
+  ApiNoContentResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
-import { Role, TestRun, TestStatus, User } from '@prisma/client';
+import { Role, TestRun, User } from '@prisma/client';
 import { TestRunsService } from './test-runs.service';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
@@ -41,6 +44,35 @@ import { UpdateTestRunDto } from './dto/update-test.dto';
 import { CurrentUser } from '../shared/current-user.decorator';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
+import { isPngBuffer } from '../static/utils';
+import { positiveNumber } from '../utils/env';
+import { isUUID } from 'class-validator';
+
+const DEFAULT_MULTIPART_FILE_SIZE_LIMIT = 100 * 1024 * 1024;
+
+// read per request: decorators run before ConfigModule has loaded .env
+export const multipartLimits = () => ({
+  fileSize: positiveNumber(process.env.MULTIPART_FILE_SIZE_LIMIT, DEFAULT_MULTIPART_FILE_SIZE_LIMIT),
+});
+
+export const parseIds = () => new ParseArrayPipe({ items: String });
+
+export const parseUuidIds = (): PipeTransform<string[], string[]> => ({
+  transform: (ids) => {
+    const invalid = ids.filter((id) => !isUUID(id));
+    if (invalid.length) {
+      throw new BadRequestException(`Not a uuid: ${invalid.join(', ')}`);
+    }
+    return ids;
+  },
+});
+
+function pngOrBadRequest(imageBuffer: unknown): Buffer {
+  if (!Buffer.isBuffer(imageBuffer) || !isPngBuffer(imageBuffer)) {
+    throw new BadRequestException('Image is not a PNG file');
+  }
+  return imageBuffer;
+}
 
 @ApiTags('test-runs')
 @Controller('test-runs')
@@ -77,7 +109,7 @@ export class TestRunsController {
   @Roles(Role.admin, Role.editor)
   async approveTestRun(
     @CurrentUser() user: User,
-    @Body() ids: string[],
+    @Body(parseIds()) ids: string[],
     @Query('merge', new ParseBoolPipe()) merge: boolean
   ): Promise<void> {
     this.logger.debug(`Going to approve TestRuns: ${ids}`);
@@ -110,11 +142,22 @@ export class TestRunsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  async reject(@Body() ids: string[]): Promise<void> {
+  async reject(@Body(parseIds()) ids: string[]): Promise<void> {
     this.logger.debug(`Going to reject TestRuns: ${ids}`);
     for (const id of ids) {
-      await this.testRunsService.setStatus(id, TestStatus.failed);
+      await this.testRunsService.reject(id);
     }
+  }
+
+  @Post('revert')
+  @HttpCode(204)
+  @ApiNoContentResponse()
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
+  revert(@Body(parseIds(), parseUuidIds()) ids: string[]): Promise<void> {
+    this.logger.debug(`Going to revert TestRuns: ${ids}`);
+    return this.testRunsService.revert(ids);
   }
 
   @Post('delete')
@@ -122,7 +165,7 @@ export class TestRunsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  async delete(@Body() ids: string[]): Promise<void> {
+  async delete(@Body(parseIds()) ids: string[]): Promise<void> {
     this.logger.debug(`Going to delete TestRuns: ${ids}`);
     for (const id of ids) {
       await this.testRunsService.delete(id);
@@ -169,8 +212,8 @@ export class TestRunsController {
   @ApiOkResponse({ type: TestRunResultDto })
   @UseGuards(ApiGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  postTestRun(@Body() createTestRequestDto: CreateTestRequestBase64Dto): Promise<TestRunResultDto> {
-    const imageBuffer = Buffer.from(createTestRequestDto.imageBase64, 'base64');
+  async postTestRun(@Body() createTestRequestDto: CreateTestRequestBase64Dto): Promise<TestRunResultDto> {
+    const imageBuffer = pngOrBadRequest(Buffer.from(createTestRequestDto.imageBase64, 'base64'));
     return this.testRunsService.postTestRun({
       createTestRequestDto,
       imageBuffer,
@@ -184,10 +227,9 @@ export class TestRunsController {
   @ApiConsumes('multipart/form-data')
   @UseGuards(ApiGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  @UseInterceptors(FileInterceptor('image'), FileToBodyInterceptor)
-  @UsePipes(new ValidationPipe({ transform: true, forbidUnknownValues: true }))
-  postTestRunMultipart(@Body() createTestRequestDto: CreateTestRequestMultipartDto): Promise<TestRunResultDto> {
-    const imageBuffer = createTestRequestDto.image.buffer;
+  @UseInterceptors(FileInterceptor('image', { limits: multipartLimits }), FileToBodyInterceptor)
+  async postTestRunMultipart(@Body() createTestRequestDto: CreateTestRequestMultipartDto): Promise<TestRunResultDto> {
+    const imageBuffer = pngOrBadRequest(createTestRequestDto.image.buffer);
     return this.testRunsService.postTestRun({ createTestRequestDto, imageBuffer });
   }
 }

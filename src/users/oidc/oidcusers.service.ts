@@ -3,7 +3,8 @@ import { Client as OidcClient, Issuer, generators, custom, TokenSet } from 'open
 import { CreateUserDto } from '../dto/user-create.dto';
 import { UserLoginResponseDto } from '../dto/user-login-response.dto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Prisma, Role, User } from '@prisma/client';
+import { isPrismaError } from '../../prisma/prisma-errors';
+import { Role, User } from '@prisma/client';
 import { UpdateUserDto } from '../dto/user-update.dto';
 import { AuthService } from '../../auth/auth.service';
 import { UserLoginRequestDto } from '../dto/user-login-request.dto';
@@ -29,6 +30,7 @@ type OIDCConfig = {
 };
 
 export class OidcUsersService implements Users {
+  readonly allowsRegistration = false;
   private readonly logger: Logger = new Logger(OidcUsersService.name);
   private readonly oidcConfig: OIDCConfig;
   private readonly appFrontendUrl: string;
@@ -73,10 +75,6 @@ export class OidcUsersService implements Users {
     }
   }
 
-  /**
-   * Restricts the insecure HTTPS agent to the configured issuer, so a TLS
-   * bypass never applies to unrelated openid-client requests.
-   */
   private getHttpOptions(): ((url: URL, options: Record<string, unknown>) => Record<string, unknown>) | null {
     if (!this.oidcConfig.tlsNoVerify) {
       return null;
@@ -89,16 +87,13 @@ export class OidcUsersService implements Users {
   private async discoverClient(): Promise<OidcClient> {
     const httpOptions = this.getHttpOptions();
     if (httpOptions) {
-      // Static discovery cannot be scoped per instance; the provider itself
-      // only bypasses verification for the configured issuer origin.
-      Issuer[custom.http_options] = httpOptions as never;
+      // Discovery only takes a static option; httpOptions still checks the origin
+      Issuer[custom.http_options] = httpOptions;
     }
 
     const issuer = await Issuer.discover(this.oidcConfig.issuerUrl);
     if (httpOptions) {
-      // The JWKS used to validate the ID token is fetched through the issuer
-      // instance, which does not inherit the static option set above.
-      issuer[custom.http_options] = httpOptions as never;
+      issuer[custom.http_options] = httpOptions;
     }
     const client = new issuer.Client({
       client_id: this.oidcConfig.clientId,
@@ -108,7 +103,7 @@ export class OidcUsersService implements Users {
     });
 
     if (httpOptions) {
-      client[custom.http_options] = httpOptions as never;
+      client[custom.http_options] = httpOptions;
     }
     return client;
   }
@@ -116,7 +111,6 @@ export class OidcUsersService implements Users {
   private getClient(): Promise<OidcClient> {
     if (!this.clientPromise) {
       this.clientPromise = this.discoverClient().catch((error) => {
-        // Allow a later request to retry discovery after a transient failure.
         this.clientPromise = null;
         throw error;
       });
@@ -124,10 +118,6 @@ export class OidcUsersService implements Users {
     return this.clientPromise;
   }
 
-  /**
-   * Builds the IdP authorization URL together with the PKCE/state values that
-   * must be kept (e.g. in a short-lived cookie) until the callback returns.
-   */
   async getAuthorizationUrl(): Promise<{ url: string; state: string; codeVerifier: string }> {
     const client = await this.getClient();
     const state = generators.state();
@@ -141,10 +131,6 @@ export class OidcUsersService implements Users {
     return { url, state, codeVerifier };
   }
 
-  /**
-   * URL the browser is redirected to after OIDC finished (success or error).
-   * The token travels in the URL fragment so it never reaches server logs.
-   */
   buildFrontendRedirect(token?: string | null, error?: string): string {
     const base = `${this.appFrontendUrl}/login`;
     if (token) {
@@ -173,8 +159,6 @@ export class OidcUsersService implements Users {
     const claims: Record<string, unknown> = { ...tokenSet.claims() };
     if (tokenSet.access_token && !this.claimToString(claims, this.oidcConfig.attributeMail)) {
       try {
-        // Passing the whole token set makes openid-client verify that the
-        // userinfo `sub` matches the ID token before the claims are merged.
         Object.assign(claims, await client.userinfo(tokenSet));
       } catch (e) {
         this.logger.warn(`OIDC userinfo request failed: ${e}`);
@@ -187,10 +171,7 @@ export class OidcUsersService implements Users {
       throw new HttpException('OIDC login failed.', HttpStatus.BAD_REQUEST);
     }
 
-    // Never trust an email address the identity provider marks as unverified:
-    // it could otherwise be used to take over an existing VRT account. Can be
-    // disabled for providers that do not emit a reliable email_verified claim.
-    // Some providers serialize the claim as the string "true".
+    // An unverified email could take over an existing VRT account
     const emailVerified = claims.email_verified === true || claims.email_verified === 'true';
     if (this.oidcConfig.requireVerifiedEmail && !emailVerified) {
       this.logger.warn(`OIDC login rejected: email '${email}' is not verified by the identity provider`);
@@ -198,9 +179,7 @@ export class OidcUsersService implements Users {
     }
 
     const role = this.resolveRole(claims);
-    // Without the role claim (e.g. a missing scope or mapper) the provider says
-    // nothing about the role, so keep existing users' roles instead of
-    // demoting every admin to the default role.
+    // Without the claim the provider says nothing about roles: keep existing ones rather than demote every admin
     const hasRoleClaim = this.readRoleClaim(claims) != null;
 
     let user = await this.prismaService.user.findUnique({ where: { email } });
@@ -219,12 +198,6 @@ export class OidcUsersService implements Users {
     return new UserLoginResponseDto(user, token);
   }
 
-  /**
-   * Two first logins for the same email (e.g. two tabs) can both miss the
-   * lookup; the losing insert hits the unique email constraint, so use the
-   * user the other request created. Other unique violations (apiKey) still
-   * surface because the lookup then finds nothing.
-   */
   private async createUserFromClaimsOrFindConcurrent(
     claims: Record<string, unknown>,
     email: string,
@@ -233,7 +206,7 @@ export class OidcUsersService implements Users {
     try {
       return await this.createUserFromClaims(claims, email, role);
     } catch (e) {
-      if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') {
+      if (!isPrismaError(e, 'P2002')) {
         throw e;
       }
       const user = await this.prismaService.user.findUnique({ where: { email } });
@@ -268,7 +241,6 @@ export class OidcUsersService implements Users {
     return value == null ? [] : [value];
   }
 
-  // Objects are ignored rather than stringified to '[object Object]'.
   private scalarToString(value: unknown): string | null {
     if (typeof value === 'string') {
       return value;
@@ -279,11 +251,6 @@ export class OidcUsersService implements Users {
     return null;
   }
 
-  /**
-   * Reads the role claim either by its exact name (which may itself contain
-   * dots, e.g. namespaced claims like 'https://example.com/roles') or as a
-   * dotted path into nested claims (e.g. Keycloak's 'realm_access.roles').
-   */
   private readRoleClaim(claims: Record<string, unknown>): unknown {
     const name = this.oidcConfig.roleClaim;
     if (claims[name] != null) {
@@ -308,13 +275,11 @@ export class OidcUsersService implements Users {
     return isAdmin ? Role.admin : this.oidcConfig.defaultRole;
   }
 
-  create(createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
+  create(_createUserDto: CreateUserDto): Promise<UserLoginResponseDto> {
     return Promise.reject(new HttpException('User creation is disabled. Use SSO to login.', HttpStatus.BAD_REQUEST));
   }
 
   async update(id: string, userDto: UpdateUserDto): Promise<UserLoginResponseDto> {
-    // The email is the account key for OIDC users, so it is owned by the
-    // identity provider and must not be changed here.
     const user = await this.prismaService.user.update({
       where: { id },
       data: {
@@ -326,14 +291,14 @@ export class OidcUsersService implements Users {
     return new UserLoginResponseDto(user, token);
   }
 
-  changePassword(user: User, newPassword: string): Promise<boolean> {
+  changePassword(user: User, _newPassword: string): Promise<boolean> {
     this.logger.warn(`${user.email} tried to change password - this is not supported for OIDC users`);
     return Promise.reject(
       new HttpException('Password changes are disabled. Use SSO to change your password.', HttpStatus.BAD_REQUEST)
     );
   }
 
-  login(userLoginRequestDto: UserLoginRequestDto): Promise<UserLoginResponseDto> {
+  login(_userLoginRequestDto: UserLoginRequestDto): Promise<UserLoginResponseDto> {
     return Promise.reject(new HttpException('Password login is disabled. Use SSO to login.', HttpStatus.BAD_REQUEST));
   }
 }

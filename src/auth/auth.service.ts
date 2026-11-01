@@ -18,16 +18,12 @@ export class AuthService {
     return generateRandomKey();
   }
 
-  async compare(password: string, hashedPassword: string): Promise<boolean> {
-    return await compare(password, hashedPassword);
+  compare(password: string, hashedPassword: string): Promise<boolean> {
+    return compare(password, hashedPassword);
   }
 
   signToken(user: User): string {
-    const payload: JwtPayload = {
-      email: user.email,
-    };
-
-    const token = this.jwtService.sign(payload);
-    return token;
+    const payload: JwtPayload = { sub: user.id, email: user.email };
+    return this.jwtService.sign(payload);
   }
 }

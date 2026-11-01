@@ -1,12 +1,30 @@
-import { forwardRef, HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { BuildsService } from '../builds/builds.service';
-import { TestVariationsService } from '../test-variations/test-variations.service';
+import { BuildDto } from '../builds/dto/build.dto';
+import { EventsGateway } from '../shared/events/events.gateway';
+import { StaticService } from '../static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { Project } from '@prisma/client';
+import { isPrismaError } from '../prisma/prisma-errors';
+import { ImageComparison, Prisma, Project } from '@prisma/client';
 import { isUuidShaped } from '../utils/random-key';
+import { testRunImageNames } from '../utils';
 import { UpdateProjectDto } from './dto/update-project.dto';
-import type { WrapperType } from '../shared/wrapper-type';
+import { isHddStaticServiceConfigured } from '../static/utils';
+
+const MAX_REMOVE_ATTEMPTS = 3;
+const REMOVE_TRANSACTION = { maxWait: 10_000, timeout: 120_000 };
+
+const projectData = (dto: CreateProjectDto | UpdateProjectDto) => ({
+  name: dto.name,
+  mainBranchName: dto.mainBranchName,
+  autoApproveFeature: dto.autoApproveFeature,
+  imageComparison: dto.imageComparison,
+  imageComparisonConfig: dto.imageComparisonConfig,
+  maxBuildAllowed: dto.maxBuildAllowed,
+  maxBranchLifetime: dto.maxBranchLifetime,
+  bulkApproveVariations: dto.bulkApproveVariations,
+  bulkApproveGroupBy: dto.bulkApproveGroupBy,
+});
 
 @Injectable()
 export class ProjectsService {
@@ -14,15 +32,13 @@ export class ProjectsService {
 
   constructor(
     private prismaService: PrismaService,
-    @Inject(forwardRef(() => BuildsService))
-    private buildsService: WrapperType<BuildsService>,
-    @Inject(forwardRef(() => TestVariationsService))
-    private testVariationsService: WrapperType<TestVariationsService>
+    private staticService: StaticService,
+    private eventsGateway: EventsGateway
   ) {}
 
-  async findOne(idOrName: string): Promise<Project | null> {
+  async findOne(idOrName: string): Promise<Project> {
     const isUUID = isUuidShaped(idOrName);
-    const project: Project | null = await this.prismaService.project.findUnique({
+    const project = await this.prismaService.project.findUnique({
       where: {
         id: isUUID ? idOrName : undefined,
         name: !isUUID ? idOrName : undefined,
@@ -48,10 +64,7 @@ export class ProjectsService {
   }
 
   async addFavorite(userId: string, projectId: string): Promise<void> {
-    // connect alone would fail with a Prisma error for an unknown project;
-    // findOne turns that into the API's usual 404
     await this.findOne(projectId);
-    // connecting an already connected project is a no-op, so adding twice is fine
     await this.prismaService.user.update({
       where: { id: userId },
       data: { favoriteProjects: { connect: { id: projectId } } },
@@ -60,8 +73,6 @@ export class ProjectsService {
   }
 
   async removeFavorite(userId: string, projectId: string): Promise<void> {
-    // disconnecting a project that is not connected (or does not exist) is a
-    // no-op, which makes removal idempotent without a lookup
     await this.prismaService.user.update({
       where: { id: userId },
       data: { favoriteProjects: { disconnect: { id: projectId } } },
@@ -69,58 +80,64 @@ export class ProjectsService {
     });
   }
 
+  private assertComparisonSupported(imageComparison: ImageComparison): void {
+    if (imageComparison === ImageComparison.odiff && !isHddStaticServiceConfigured()) {
+      throw new BadRequestException('Odiff can only be used with the HDD static service (STATIC_SERVICE=hdd)');
+    }
+  }
+
   async create(projectDto: CreateProjectDto): Promise<Project> {
-    return this.prismaService.project.create({
-      data: {
-        name: projectDto.name,
-        mainBranchName: projectDto.mainBranchName,
-        autoApproveFeature: projectDto.autoApproveFeature,
-        imageComparison: projectDto.imageComparison,
-        imageComparisonConfig: projectDto.imageComparisonConfig,
-        maxBuildAllowed: projectDto.maxBuildAllowed,
-        maxBranchLifetime: projectDto.maxBranchLifetime,
-        bulkApproveVariations: projectDto.bulkApproveVariations,
-        bulkApproveGroupBy: projectDto.bulkApproveGroupBy,
-      },
-    });
+    this.assertComparisonSupported(projectDto.imageComparison);
+    return this.prismaService.project.create({ data: projectData(projectDto) });
   }
 
   async update(projectDto: UpdateProjectDto): Promise<Project> {
-    return this.prismaService.project.update({
-      where: { id: projectDto.id },
-      data: {
-        name: projectDto.name,
-        mainBranchName: projectDto.mainBranchName,
-        autoApproveFeature: projectDto.autoApproveFeature,
-        imageComparison: projectDto.imageComparison,
-        maxBuildAllowed: projectDto.maxBuildAllowed,
-        maxBranchLifetime: projectDto.maxBranchLifetime,
-        imageComparisonConfig: projectDto.imageComparisonConfig,
-        bulkApproveVariations: projectDto.bulkApproveVariations,
-        bulkApproveGroupBy: projectDto.bulkApproveGroupBy,
-      },
-    });
+    this.assertComparisonSupported(projectDto.imageComparison);
+    return this.prismaService.project.update({ where: { id: projectDto.id }, data: projectData(projectDto) });
   }
 
   async remove(id: string): Promise<Project> {
     this.logger.debug(`Going to remove Project ${id}`);
-    const project = (await this.prismaService.project.findUnique({
-      where: { id },
-      include: {
-        builds: true,
-        testVariations: true,
-      },
-    }))!;
-
-    for (const build of project.builds) {
-      await this.buildsService.remove(build.id);
+    await this.findOne(id);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const { project, builds, fileNames } = await this.prismaService.$transaction(
+          (tx) => this.removeRows(tx, id),
+          REMOVE_TRANSACTION
+        );
+        // Files only after the commit: a failure leaks bytes instead of leaving rows that point at deleted images
+        await this.staticService.deleteImages(fileNames);
+        builds.forEach((build) => this.eventsGateway.buildDeleted(new BuildDto(build)));
+        return project;
+      } catch (e) {
+        if (isPrismaError(e, 'P2025')) {
+          throw new HttpException('Project not found', HttpStatus.NOT_FOUND);
+        }
+        if (!isPrismaError(e, 'P2003')) {
+          throw e;
+        }
+        if (attempt === MAX_REMOVE_ATTEMPTS) {
+          throw new ConflictException(`Project ${id} keeps receiving uploads, try again later`);
+        }
+      }
     }
-    for (const testVariation of project.testVariations) {
-      await this.testVariationsService.delete(testVariation.id);
-    }
+  }
 
-    return this.prismaService.project.delete({
-      where: { id },
+  private async removeRows(tx: Prisma.TransactionClient, projectId: string) {
+    const ofProjectBuilds = { build: { projectId } };
+    const ofProjectVariations = { testVariation: { projectId } };
+    const builds = await tx.build.findMany({ where: { projectId } });
+    const testRuns = await tx.testRun.findMany({
+      where: ofProjectBuilds,
+      select: { imageName: true, diffName: true, imageThumbnailName: true, diffThumbnailName: true },
     });
+    const baselines = await tx.baseline.findMany({ where: ofProjectVariations, select: { baselineName: true } });
+    await tx.testRun.deleteMany({ where: ofProjectBuilds });
+    await tx.baseline.deleteMany({ where: ofProjectVariations });
+    await tx.testVariation.deleteMany({ where: { projectId } });
+    await tx.build.deleteMany({ where: { projectId } });
+    const project = await tx.project.delete({ where: { id: projectId } });
+    const fileNames = [...testRuns.flatMap(testRunImageNames), ...baselines.map((b) => b.baselineName)];
+    return { project, builds, fileNames };
   }
 }

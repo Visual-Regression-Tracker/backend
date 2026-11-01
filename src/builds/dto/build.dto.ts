@@ -64,10 +64,8 @@ export class BuildDto {
       this.failedCount = stats.failedCount;
       this.merge = stats.merge;
     } else if (build.testRuns) {
-      // determine if merge
       this.merge = build.testRuns.some((testRun) => testRun.merge);
 
-      // calculate statistics
       build.testRuns.forEach((testRun) => {
         switch (testRun.status) {
           case TestStatus.autoApproved:

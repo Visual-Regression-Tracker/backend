@@ -1,12 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PNGWithMetadata } from 'pngjs';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { Readable } from 'stream';
 import { StaticFactoryService } from './static.factory';
-import { isPngBuffer } from './utils';
+import { assertPngWithinPixelLimit, isPngBuffer } from './utils';
 import { Static } from './static.interface';
+import { mapWithConcurrency } from '../utils/map-with-concurrency';
 
 @Injectable()
 export class StaticService {
-  private readonly logger: Logger = new Logger(StaticService.name);
   private readonly staticService: Static;
 
   constructor(private staticFactoryService: StaticFactoryService) {
@@ -14,19 +14,21 @@ export class StaticService {
   }
 
   async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
-    // validate here so every storage backend rejects non-PNG uploads
     if (!isPngBuffer(imageBuffer)) {
-      throw new Error('Cannot parse image as PNG file');
+      throw new BadRequestException('Cannot parse image as PNG file');
+    }
+    if (type === 'screenshot') {
+      assertPngWithinPixelLimit(imageBuffer);
     }
     return this.staticService.saveImage(type, imageBuffer);
   }
 
-  async getImage(imageName: string | null): Promise<PNGWithMetadata | null | undefined> {
-    return this.staticService.getImage(imageName);
-  }
-
   async getImageBuffer(imageName: string | null): Promise<Buffer | null> {
     return this.staticService.getImageBuffer(imageName);
+  }
+
+  async getImageStream(imageName: string): Promise<Readable | null> {
+    return this.staticService.getImageStream(imageName);
   }
 
   async copyImage(type: 'screenshot' | 'diff' | 'baseline', sourceImageName: string): Promise<string> {
@@ -35,6 +37,11 @@ export class StaticService {
 
   async deleteImage(imageName: string | null): Promise<boolean | undefined> {
     return this.staticService.deleteImage(imageName);
+  }
+
+  async deleteImages(names: Iterable<string | null | undefined>, concurrency = 16): Promise<void> {
+    const present = [...names].filter((name): name is string => !!name);
+    await mapWithConcurrency(present, concurrency, (name) => this.deleteImage(name));
   }
 
   async getImageUrl(imageName: string): Promise<string> {

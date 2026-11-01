@@ -6,39 +6,71 @@ import { mocked } from 'jest-mock';
 import { StaticService } from '../../../static/static.service';
 import { DiffWorkerPool } from '../../diff-worker-pool';
 import { DIFF_DIMENSION_RESULT, EQUAL_RESULT, NO_BASELINE_RESULT } from '../consts';
+import { ImageCompareInput } from '../ImageCompareInput';
 import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
 import { PixelmatchConfig } from './pixelmatch.types';
+import { computePixelmatchDiff } from './pixelmatch.core';
 import { Dinov2Service } from '../dinov2/dinov2.service';
 
 jest.mock('pixelmatch');
 
-const toBuffer = (png: PNG | undefined): Buffer | undefined => (png ? PNG.sync.write(png) : undefined);
+const pngOf = (width: number, height: number) => PNG.sync.write(new PNG({ width, height }));
+const toBuffer = (png: PNG): Buffer => PNG.sync.write(png);
+const sequence = (...results: unknown[]) => results.reduce<jest.Mock>((m, r) => m.mockResolvedValueOnce(r), jest.fn());
+const pngReader = () => jest.fn().mockResolvedValue(Buffer.from('png'));
+const poolOf = (output: Record<string, unknown>) => ({ run: jest.fn().mockResolvedValue(output) });
 
-const initService = async ({
-  getImageBufferMock = jest.fn(),
-  saveImageMock = jest.fn(),
-  deleteImageMock = jest.fn(),
-}) => {
+interface Deps {
+  getImageBuffer?: jest.Mock;
+  saveImage?: jest.Mock;
+  deleteImage?: jest.Mock;
+  pool?: { run: unknown };
+  confirmsNoiseForGate?: jest.Mock;
+}
+
+const setup = async ({
+  getImageBuffer = jest.fn(),
+  saveImage = jest.fn(),
+  deleteImage = jest.fn(),
+  pool,
+  confirmsNoiseForGate = jest.fn(),
+}: Deps = {}) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       PixelmatchService,
-      DiffWorkerPool,
-      { provide: Dinov2Service, useValue: { confirmsNoise: jest.fn() } },
-      {
-        provide: StaticService,
-        useValue: {
-          getImageBuffer: getImageBufferMock,
-          saveImage: saveImageMock,
-          deleteImage: deleteImageMock,
-        },
-      },
+      pool ? { provide: DiffWorkerPool, useValue: pool } : DiffWorkerPool,
+      { provide: Dinov2Service, useValue: { confirmsNoiseForGate } },
+      { provide: StaticService, useValue: { getImageBuffer, saveImage, deleteImage } },
     ],
   }).compile();
-
-  return module.get<PixelmatchService>(PixelmatchService);
+  return {
+    service: module.get(PixelmatchService),
+    run: pool?.run as jest.Mock,
+    getImageBuffer,
+    saveImage,
+    deleteImage,
+    confirmsNoiseForGate,
+  };
 };
 
-let service: PixelmatchService;
+const compare = (
+  service: PixelmatchService,
+  data: Partial<ImageCompareInput> = {},
+  config: PixelmatchConfig = DEFAULT_CONFIG
+) =>
+  service.getDiff(
+    {
+      baseline: 'baseline.png',
+      image: 'image.png',
+      ignoreAreas: [],
+      diffTollerancePercent: 0,
+      saveDiffAsFile: false,
+      ...data,
+    },
+    config
+  );
+
+const mismatch = { equal: false, isSameDimension: true, pixelMisMatchCount: 10, diffPercent: 5 };
 
 describe('parseConfig', () => {
   it.each<[string, PixelmatchConfig]>([
@@ -50,150 +82,65 @@ describe('parseConfig', () => {
     ['invalid', DEFAULT_CONFIG],
     ['null', DEFAULT_CONFIG],
   ])('should parse config', async (json, expected) => {
-    service = await initService({});
+    const { service } = await setup();
 
-    const config = service.parseConfig(json);
-
-    expect(config).toStrictEqual(expected);
+    expect(service.parseConfig(json)).toStrictEqual(expected);
   });
 });
 
 describe('getDiff', () => {
-  const image = new PNG({
-    width: 20,
-    height: 20,
-  });
+  const image = new PNG({ width: 20, height: 20 });
+  const flagged = (baseline: number | undefined = undefined) => {
+    const png = new PNG({ width: 100, height: 100 });
+    if (baseline !== undefined) png.data[0] = baseline;
+    return toBuffer(png);
+  };
 
   it('no baseline', async () => {
-    const getImageBufferMock = jest.fn().mockReturnValueOnce(undefined).mockReturnValueOnce(toBuffer(image));
-    service = await initService({ getImageBufferMock });
+    const { service } = await setup({ getImageBuffer: sequence(undefined, toBuffer(image)) });
 
-    const result = await service.getDiff(
-      {
-        baseline: null,
-        image: 'image',
-        diffTollerancePercent: 0.1,
-        ignoreAreas: [],
-        saveDiffAsFile: true,
-      },
-      DEFAULT_CONFIG
-    );
-
-    expect(result).toStrictEqual(NO_BASELINE_RESULT);
+    expect(await compare(service, { baseline: null, saveDiffAsFile: true })).toStrictEqual(NO_BASELINE_RESULT);
   });
 
   it('throws when the image cannot be read', async () => {
-    const getImageBufferMock = jest.fn().mockResolvedValueOnce(toBuffer(image)).mockResolvedValueOnce(undefined);
-    service = await initService({ getImageBufferMock });
+    const { service, getImageBuffer } = await setup({ getImageBuffer: sequence(toBuffer(image), undefined) });
 
-    await expect(
-      service.getDiff(
-        {
-          baseline: 'baseline',
-          image: 'missing.png',
-          diffTollerancePercent: 0.1,
-          ignoreAreas: [],
-          saveDiffAsFile: true,
-        },
-        DEFAULT_CONFIG
-      )
-    ).rejects.toThrow('Cannot get image: missing.png');
-    expect(getImageBufferMock).toHaveBeenNthCalledWith(2, 'missing.png');
+    await expect(compare(service, { image: 'missing.png', saveDiffAsFile: true })).rejects.toThrow(
+      'Cannot get image: missing.png'
+    );
+    expect(getImageBuffer).toHaveBeenNthCalledWith(2, 'missing.png');
   });
 
   it('diff not found', async () => {
-    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(image)).mockReturnValueOnce(toBuffer(image));
-    service = await initService({ getImageBufferMock });
+    const { service } = await setup({ getImageBuffer: sequence(toBuffer(image), toBuffer(image)) });
 
-    const result = await service.getDiff(
-      {
-        baseline: 'image',
-        image: 'image',
-        diffTollerancePercent: 0.1,
-        ignoreAreas: [],
-        saveDiffAsFile: true,
-      },
-      DEFAULT_CONFIG
-    );
-
-    expect(result).toStrictEqual(EQUAL_RESULT);
+    expect(await compare(service, { saveDiffAsFile: true })).toStrictEqual(EQUAL_RESULT);
   });
 
   it('diff image dimensions mismatch', async () => {
-    const baseline = new PNG({
-      width: 10,
-      height: 10,
-    });
-    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(baseline)).mockReturnValueOnce(toBuffer(image));
-    service = await initService({ getImageBufferMock });
+    const { service } = await setup({ getImageBuffer: sequence(pngOf(10, 10), toBuffer(image)) });
 
-    const result = await service.getDiff(
-      {
-        baseline: 'image',
-        image: 'image',
-        diffTollerancePercent: 0.1,
-        ignoreAreas: [],
-        saveDiffAsFile: true,
-      },
-      DEFAULT_CONFIG
-    );
-
-    expect(result).toStrictEqual(DIFF_DIMENSION_RESULT);
+    expect(await compare(service, { saveDiffAsFile: true })).toStrictEqual(DIFF_DIMENSION_RESULT);
   });
 
   it('diff image dimensions mismatch ALLOWED', async () => {
-    const baseline = new PNG({
-      width: 1,
-      height: 5,
-    });
-    const image = new PNG({
-      width: 2,
-      height: 4,
-    });
-    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(baseline)).mockReturnValueOnce(toBuffer(image));
     const diffName = 'diff name';
-    const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
     mocked(Pixelmatch).mockReturnValueOnce(5);
-    service = await initService({ saveImageMock, getImageBufferMock });
+    const { service, saveImage } = await setup({
+      getImageBuffer: sequence(pngOf(1, 5), pngOf(2, 4)),
+      saveImage: sequence(diffName),
+    });
 
-    const result = await service.getDiff(
-      {
-        baseline: 'image',
-        image: 'image',
-        diffTollerancePercent: 0.1,
-        ignoreAreas: [],
-        saveDiffAsFile: true,
-      },
-      {
-        allowDiffDimensions: true,
-        ignoreAntialiasing: true,
-        threshold: 0.1,
-      }
+    const result = await compare(
+      service,
+      { diffTollerancePercent: 0.1, saveDiffAsFile: true },
+      { allowDiffDimensions: true, ignoreAntialiasing: true, threshold: 0.1 }
     );
 
-    expect(mocked(Pixelmatch)).toHaveBeenCalledWith(
-      new PNG({
-        width: 2,
-        height: 5,
-      }).data,
-      new PNG({
-        width: 2,
-        height: 5,
-      }).data,
-      new PNG({
-        width: 2,
-        height: 5,
-      }).data,
-      2,
-      5,
-      {
-        includeAA: true,
-        threshold: 0.1,
-      }
-    );
-    // the full-size diff first, then the two thumbnails made beside it
-    expect(saveImageMock.mock.calls[0][0]).toBe('diff');
-    expect(saveImageMock).toHaveBeenCalledTimes(3);
+    const padded = new PNG({ width: 2, height: 5 }).data;
+    expect(mocked(Pixelmatch)).toHaveBeenCalledWith(padded, padded, padded, 2, 5, { includeAA: true, threshold: 0.1 });
+    expect(saveImage.mock.calls[0][0]).toBe('diff');
+    expect(saveImage).toHaveBeenCalledTimes(3);
     expect(result).toStrictEqual({
       status: TestStatus.unresolved,
       diffName,
@@ -203,141 +150,150 @@ describe('getDiff', () => {
     });
   });
 
-  it('diff found < tollerance', async () => {
-    const baseline = new PNG({
-      width: 100,
-      height: 100,
-    });
-    baseline.data[0] = 1;
-    const image = new PNG({
-      width: 100,
-      height: 100,
-    });
-    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(baseline)).mockReturnValueOnce(toBuffer(image));
-    const saveImageMock = jest.fn();
-    service = await initService({ saveImageMock, getImageBufferMock });
-    const pixelMisMatchCount = 150;
-    mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
+  it.each([
+    ['below', 2, false, 150, 1.5, TestStatus.ok, null, 0],
+    ['above', 0.5, true, 200, 2, TestStatus.unresolved, 'diff name', 3],
+  ])(
+    'diff found %s tollerance',
+    async (_, diffTollerancePercent, saveDiffAsFile, pixelMisMatchCount, diffPercent, status, diffName, saves) => {
+      mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
+      const { service, saveImage } = await setup({
+        getImageBuffer: sequence(flagged(1), flagged()),
+        saveImage: sequence('diff name'),
+      });
 
-    const result = await service.getDiff(
-      {
-        baseline: 'image',
-        image: 'image',
-        diffTollerancePercent: 2,
-        ignoreAreas: [],
-        saveDiffAsFile: false,
-      },
-      DEFAULT_CONFIG
-    );
+      const result = await compare(service, { diffTollerancePercent, saveDiffAsFile });
 
-    expect(saveImageMock).toHaveBeenCalledTimes(0);
-    expect(result).toStrictEqual({
-      status: TestStatus.ok,
-      diffName: null,
-      pixelMisMatchCount,
-      diffPercent: 1.5,
-      isSameDimension: true,
-    });
+      if (saves) expect(saveImage.mock.calls[0][0]).toBe('diff');
+      expect(saveImage).toHaveBeenCalledTimes(saves);
+      expect(result).toStrictEqual({ status, diffName, pixelMisMatchCount, diffPercent, isSameDimension: true });
+    }
+  );
+});
+
+describe('byte-equal fast path', () => {
+  const valid = pngOf(4, 4);
+
+  it('answers EQUAL for byte-equal well-formed PNGs without queueing a job', async () => {
+    const pool = { run: jest.fn() };
+    const { service } = await setup({ pool, getImageBuffer: sequence(Buffer.from(valid), Buffer.from(valid)) });
+
+    await expect(compare(service, { saveDiffAsFile: true })).resolves.toStrictEqual(EQUAL_RESULT);
+    expect(pool.run).not.toHaveBeenCalled();
   });
 
-  it('diff found > tollerance', async () => {
-    const baseline = new PNG({
-      width: 100,
-      height: 100,
+  it('still sends a byte-equal pair to the worker when the PNG is not well formed', async () => {
+    const truncated = valid.subarray(0, valid.length - 20);
+    const pool = new DiffWorkerPool();
+    const run = jest.spyOn(pool, 'run');
+    const { service } = await setup({ pool, getImageBuffer: sequence(Buffer.from(truncated), Buffer.from(truncated)) });
+
+    await expect(compare(service, { saveDiffAsFile: true })).rejects.toThrow();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends different buffers to the worker', async () => {
+    const other = new PNG({ width: 4, height: 4 });
+    other.data.fill(255);
+    const pool = poolOf({ equal: true });
+    const { service } = await setup({ pool, getImageBuffer: sequence(Buffer.from(valid), toBuffer(other)) });
+
+    await compare(service, { saveDiffAsFile: true });
+
+    expect(pool.run).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('image already in memory', () => {
+  it('uses the image it is given and reads only the baseline', async () => {
+    const pool = poolOf({ equal: true });
+    const { service, getImageBuffer } = await setup({
+      pool,
+      getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('baseline bytes')),
     });
-    baseline.data[0] = 1;
-    const image = new PNG({
-      width: 100,
-      height: 100,
-    });
-    const getImageBufferMock = jest.fn().mockReturnValueOnce(toBuffer(baseline)).mockReturnValueOnce(toBuffer(image));
-    const pixelMisMatchCount = 200;
-    mocked(Pixelmatch).mockReturnValueOnce(pixelMisMatchCount);
-    const diffName = 'diff name';
-    const saveImageMock = jest.fn().mockReturnValueOnce(diffName);
-    service = await initService({
-      saveImageMock,
-      getImageBufferMock,
+    const imageBuffer = Buffer.from('image bytes');
+
+    await compare(service, { imageBuffer });
+
+    expect(getImageBuffer).toHaveBeenCalledTimes(1);
+    expect(getImageBuffer).toHaveBeenCalledWith('baseline.png');
+    expect(pool.run.mock.calls[0][0].image).toBe(imageBuffer);
+  });
+
+  it('reads the image itself when none is given and fails as before when it is missing', async () => {
+    const { service, getImageBuffer } = await setup({
+      pool: { run: jest.fn() },
+      getImageBuffer: sequence(Buffer.from('baseline bytes'), undefined),
     });
 
-    const result = await service.getDiff(
-      {
-        baseline: 'image',
-        image: 'image',
-        diffTollerancePercent: 0.5,
-        ignoreAreas: [],
-        saveDiffAsFile: true,
-      },
-      DEFAULT_CONFIG
-    );
+    await expect(compare(service)).rejects.toThrow('Cannot get image: image.png');
+    expect(getImageBuffer).toHaveBeenNthCalledWith(2, 'image.png');
+  });
+});
 
-    // the full-size diff first, then the two thumbnails made beside it
-    expect(saveImageMock.mock.calls[0][0]).toBe('diff');
-    expect(saveImageMock).toHaveBeenCalledTimes(3);
-    expect(result).toStrictEqual({
-      status: TestStatus.unresolved,
-      diffName,
-      pixelMisMatchCount,
-      diffPercent: 2,
-      isSameDimension: true,
+describe('screenshots of another size', () => {
+  const setupSizes = (baseline: Buffer, image: Buffer, run: jest.Mock) =>
+    setup({ pool: { run }, getImageBuffer: sequence(baseline, image) });
+
+  it('answers different sizes from the headers without the worker', async () => {
+    const run = jest.fn();
+    const { service } = await setupSizes(pngOf(2, 3), pngOf(3, 2), run);
+
+    expect(await compare(service)).toBe(DIFF_DIMENSION_RESULT);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('still sends different sizes to the worker when they are allowed', async () => {
+    const run = jest
+      .fn()
+      .mockResolvedValue({ equal: false, isSameDimension: false, pixelMisMatchCount: 1, diffPercent: 1 });
+    const { service } = await setupSizes(pngOf(2, 3), pngOf(3, 2), run);
+
+    await compare(service, {}, { ...DEFAULT_CONFIG, allowDiffDimensions: true });
+
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends buffers without a readable header to the worker', async () => {
+    const run = jest.fn().mockResolvedValue({ equal: false, isSameDimension: false });
+    const { service } = await setupSizes(Buffer.from('a'), Buffer.from('b'), run);
+
+    expect(await compare(service)).toBe(DIFF_DIMENSION_RESULT);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives the result the worker gave for screenshots of different sizes', async () => {
+    const baseline = pngOf(2, 3);
+    const image = pngOf(3, 2);
+    const output = computePixelmatchDiff({
+      kind: 'diff',
+      baseline,
+      image,
+      ignoreAreas: [],
+      threshold: DEFAULT_CONFIG.threshold,
+      includeAA: DEFAULT_CONFIG.ignoreAntialiasing,
+      diffTolerancePercent: 0,
+      saveDiff: false,
     });
+    expect(output.isSameDimension).toBe(false);
+    expect(output.equal).toBeFalsy();
+
+    const run = jest.fn().mockImplementation(async (input) => computePixelmatchDiff(input));
+    const { service } = await setupSizes(baseline, image, run);
+    expect(await compare(service)).toStrictEqual(DIFF_DIMENSION_RESULT);
   });
 });
 
 describe('change signature', () => {
-  // Correctness of the signature itself is pinned in pixelmatch.core.spec
-  // against the real pixelmatch; Pixelmatch is mocked in this file, so what is
-  // worth testing here is only the plumbing — that the service asks for one and
-  // carries what comes back into the result.
-  const initWithPool = async (output: Record<string, unknown>) => {
-    const run = jest.fn().mockResolvedValue(output);
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        PixelmatchService,
-        { provide: DiffWorkerPool, useValue: { run } },
-        { provide: Dinov2Service, useValue: { confirmsNoise: jest.fn() } },
-        {
-          provide: StaticService,
-          useValue: {
-            getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('png')),
-            saveImage: jest.fn(),
-            deleteImage: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
-    return { service: module.get<PixelmatchService>(PixelmatchService), run };
-  };
-
-  const compare = (service: PixelmatchService, saveDiffAsFile = false) =>
-    service.getDiff(
-      {
-        baseline: 'baseline.png',
-        image: 'image.png',
-        ignoreAreas: [],
-        diffTollerancePercent: 0,
-        saveDiffAsFile,
-      },
-      DEFAULT_CONFIG
-    );
-
-  // Asked for on every comparison, not only when the project has bulk approve
-  // switched on: computing it lazily would leave every run ingested before the
-  // flag was turned on without one.
   it('asks for a signature and carries it into the result', async () => {
-    const { service, run } = await initWithPool({
-      equal: false,
-      isSameDimension: true,
-      pixelMisMatchCount: 10,
-      diffPercent: 5,
-      signature: [0.25, 0.75],
+    const { service, run } = await setup({
+      pool: poolOf({ ...mismatch, signature: [0.25, 0.75] }),
+      getImageBuffer: pngReader(),
     });
 
-    const result = await compare(service);
+    const result = await compare(service, { saveDiffAsFile: true });
 
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ kind: 'diff', withSignature: true }));
-    // stamped with the settings it was computed under, so a stored one can be
-    // discarded when the project's config moves on
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ kind: 'diff', saveDiff: true }));
     expect(result.changeSignature).toEqual({
       threshold: DEFAULT_CONFIG.threshold,
       includeAA: DEFAULT_CONFIG.ignoreAntialiasing,
@@ -345,144 +301,113 @@ describe('change signature', () => {
     });
   });
 
-  const initSaving = async (output: Record<string, unknown>) => {
-    const saveImage = jest
-      .fn()
-      .mockResolvedValueOnce('diff.png')
-      .mockResolvedValueOnce('image.thumb.png')
-      .mockResolvedValueOnce('diff.thumb.png');
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        PixelmatchService,
-        { provide: DiffWorkerPool, useValue: { run: jest.fn().mockResolvedValue(output) } },
-        { provide: Dinov2Service, useValue: { confirmsNoise: jest.fn() } },
-        {
-          provide: StaticService,
-          useValue: {
-            getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('png')),
-            saveImage,
-            deleteImage: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
-    return { service: module.get<PixelmatchService>(PixelmatchService), saveImage };
-  };
+  it('does not ask for a signature for a comparison whose diff is thrown away', async () => {
+    const { service, run } = await setup({ pool: poolOf(mismatch), getImageBuffer: pngReader() });
 
-  const overTolerance = {
-    equal: false,
-    isSameDimension: true,
-    pixelMisMatchCount: 10,
-    diffPercent: 5,
-    imageThumbnail: Buffer.from('small image'),
-    diffThumbnail: Buffer.from('small diff'),
-  };
+    const result = await compare(service);
 
-  it('saves the thumbnails and reports the names they went under', async () => {
-    const { service } = await initSaving({ ...overTolerance, diffBuffer: Buffer.from('the diff') });
-
-    const result = await compare(service, true);
-
-    expect(result.imageThumbnailName).toBe('image.thumb.png');
-    expect(result.diffThumbnailName).toBe('diff.thumb.png');
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ saveDiff: false }));
+    expect(result.changeSignature).toBeUndefined();
   });
 
-  // shouldAutoApprove compares against past baselines with saveDiffAsFile off
-  // and throws the result away. Storing thumbnails for those comparisons would
-  // leave two objects per attempt that nothing ever references or deletes.
-  it('stores nothing when the caller is not keeping the diff', async () => {
-    const { service, saveImage } = await initSaving(overTolerance);
+  describe('thumbnails', () => {
+    const overTolerance = {
+      ...mismatch,
+      imageThumbnail: Buffer.from('small image'),
+      diffThumbnail: Buffer.from('small diff'),
+      diffBuffer: Buffer.from('the diff'),
+    };
+    const setupSaving = (saveImage: jest.Mock, output: Record<string, unknown> = overTolerance) =>
+      setup({ pool: poolOf(output), getImageBuffer: pngReader(), saveImage });
+    const savedAs = (...names: (string | Error)[]) =>
+      names.reduce<jest.Mock>(
+        (m, name) => (name instanceof Error ? m.mockRejectedValueOnce(name) : m.mockResolvedValueOnce(name)),
+        jest.fn()
+      );
 
-    const result = await compare(service, false);
+    it('saves the thumbnails and reports the names they went under', async () => {
+      const { service } = await setupSaving(savedAs('diff.png', 'image.thumb.png', 'diff.thumb.png'));
 
-    expect(saveImage).not.toHaveBeenCalled();
-    expect(result.imageThumbnailName).toBeUndefined();
-    expect(result.diffThumbnailName).toBeUndefined();
-  });
+      const result = await compare(service, { saveDiffAsFile: true });
 
-  it('leaves it out when the comparison produced none', async () => {
-    const { service } = await initWithPool({
-      equal: false,
-      isSameDimension: true,
-      pixelMisMatchCount: 10,
-      diffPercent: 5,
+      expect(result.imageThumbnailName).toBe('image.thumb.png');
+      expect(result.diffThumbnailName).toBe('diff.thumb.png');
     });
 
-    expect((await compare(service)).changeSignature).toBeUndefined();
+    it('keeps the diff and the verdict when a thumbnail cannot be saved, and deletes the one that was', async () => {
+      const { service, deleteImage } = await setupSaving(savedAs('diff.png', new Error('disk full'), 'diff.thumb.png'));
+
+      const result = await compare(service, { saveDiffAsFile: true });
+
+      expect(result).toMatchObject({ status: TestStatus.unresolved, diffName: 'diff.png' });
+      expect(result.imageThumbnailName).toBeUndefined();
+      expect(result.diffThumbnailName).toBeUndefined();
+      expect(deleteImage).toHaveBeenCalledTimes(1);
+      expect(deleteImage).toHaveBeenCalledWith('diff.thumb.png');
+    });
+
+    it('drops a thumbnail pair when one of the names comes back empty', async () => {
+      const { service, deleteImage } = await setupSaving(savedAs('diff.png', '', 'diff.thumb.png'));
+
+      const result = await compare(service, { saveDiffAsFile: true });
+
+      expect(result.diffName).toBe('diff.png');
+      expect(result.diffThumbnailName).toBeUndefined();
+      expect(deleteImage).toHaveBeenCalledWith('diff.thumb.png');
+    });
+
+    it('stores nothing when the caller is not keeping the diff', async () => {
+      const saveImage = savedAs('diff.png', 'image.thumb.png', 'diff.thumb.png');
+      const { service } = await setupSaving(saveImage, { ...overTolerance, diffBuffer: undefined });
+
+      const result = await compare(service);
+
+      expect(saveImage).not.toHaveBeenCalled();
+      expect(result.imageThumbnailName).toBeUndefined();
+      expect(result.diffThumbnailName).toBeUndefined();
+    });
   });
 });
 
 describe('blur-amplitude filter', () => {
-  // The filter itself is pinned in pixelmatch.core.spec and
-  // blur-amplitude.core.spec, and whether a project has it on is
-  // CompareService's business; here only the plumbing: what the service asks
-  // the worker for, and what it makes of the answer.
-  const init = async (output: Record<string, unknown>, confirmsNoise = jest.fn()) => {
-    const run = jest.fn().mockResolvedValue(output);
-    const saveImage = jest.fn().mockResolvedValue('diff.png');
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        PixelmatchService,
-        { provide: DiffWorkerPool, useValue: { run } },
-        { provide: Dinov2Service, useValue: { confirmsNoise } },
-        {
-          provide: StaticService,
-          useValue: {
-            getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('png')),
-            saveImage,
-            deleteImage: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
-    return { service: module.get<PixelmatchService>(PixelmatchService), run, saveImage, confirmsNoise };
-  };
+  const init = (output: Record<string, unknown>, confirmsNoiseForGate = jest.fn()) =>
+    setup({
+      pool: poolOf(output),
+      getImageBuffer: pngReader(),
+      saveImage: jest.fn().mockResolvedValue('diff.png'),
+      confirmsNoiseForGate,
+    });
 
-  const filter: { sigma: number; threshold: number; dinov2?: { threshold: number } } = { sigma: 1, threshold: 80 };
-  const compare = (service: PixelmatchService, blurAmplitude?: typeof filter) =>
-    service.getDiff(
-      {
-        baseline: 'baseline.png',
-        image: 'image.png',
-        ignoreAreas: [],
-        diffTollerancePercent: 0,
-        saveDiffAsFile: true,
-        ...(blurAmplitude ? { blurAmplitude } : {}),
-      },
-      DEFAULT_CONFIG
-    );
+  const filter: { threshold: number; dinov2?: { threshold: number } } = { threshold: 80 };
+  const compareWith = (service: PixelmatchService, blurAmplitude?: typeof filter) =>
+    compare(service, { saveDiffAsFile: true, ...(blurAmplitude ? { blurAmplitude } : {}) });
 
-  const overTolerance = { equal: false, isSameDimension: true, pixelMisMatchCount: 10, diffPercent: 5 };
-
-  // so CompareService does not measure the same pair a second time
   it('applies the filter itself', async () => {
-    const { service } = await init(overTolerance);
+    const { service } = await init(mismatch);
 
     expect(service.appliesBlurAmplitudeFilter).toBe(true);
   });
 
   it('asks for no measurement when the comparison does not carry the filter', async () => {
-    const { service, run } = await init(overTolerance);
+    const { service, run } = await init(mismatch);
 
-    await compare(service);
+    await compareWith(service);
 
     expect(run.mock.calls[0][0].blurAmplitude).toBeUndefined();
   });
 
   it('measures with the settings the comparison carries', async () => {
-    const { service, run } = await init(overTolerance);
+    const { service, run } = await init(mismatch);
 
-    await compare(service, { sigma: 2, threshold: 50 });
+    await compareWith(service, { threshold: 50 });
 
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ blurAmplitude: { sigma: 2, threshold: 50 } }));
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ blurAmplitude: { threshold: 50 } }));
   });
 
-  // the measured mismatch stays on the run, so a reviewer can still see the
-  // pixels moved; only the verdict changes
   it('passes a run whose change is only rendering noise', async () => {
-    const { service, saveImage } = await init({ ...overTolerance, blurAmplitude: 40, renderingNoiseOnly: true });
+    const { service, saveImage } = await init({ ...mismatch, blurAmplitude: 40, renderingNoiseOnly: true });
 
-    const result = await compare(service, filter);
+    const result = await compareWith(service, filter);
 
     expect(result.status).toBe(TestStatus.ok);
     expect(result.diffPercent).toBe(5);
@@ -492,13 +417,13 @@ describe('blur-amplitude filter', () => {
 
   it('fails a run whose change is stronger than rendering noise', async () => {
     const { service } = await init({
-      ...overTolerance,
+      ...mismatch,
       blurAmplitude: 200,
       renderingNoiseOnly: false,
       diffBuffer: Buffer.from('the diff'),
     });
 
-    const result = await compare(service, filter);
+    const result = await compareWith(service, filter);
 
     expect(result.status).toBe(TestStatus.unresolved);
     expect(result.diffName).toBe('diff.png');
@@ -506,71 +431,80 @@ describe('blur-amplitude filter', () => {
 
   describe('with the DINOv2 check', () => {
     const checked = { ...filter, dinov2: { threshold: 0.15 } };
+    const gate = { width: 5, height: 3, cells: [7] };
     const noise = {
-      ...overTolerance,
+      ...mismatch,
       blurAmplitude: 40,
       renderingNoiseOnly: true,
       diffBuffer: Buffer.from('the diff'),
+      gate,
     };
 
-    // what the blur would pass, DINOv2 looks at once more
-    it('passes a run DINOv2 confirms is only noise', async () => {
-      const confirmsNoise = jest.fn().mockResolvedValue({ noise: true, score: 0.05 });
-      const { service, saveImage } = await init(noise, confirmsNoise);
+    it('passes a run DINOv2 confirms is only noise, with the gate the diff job computed', async () => {
+      const confirmsNoiseForGate = jest.fn().mockResolvedValue({ noise: true, score: 0.05 });
+      const { service, saveImage } = await init(noise, confirmsNoiseForGate);
 
-      const result = await compare(service, checked);
+      const result = await compareWith(service, checked);
 
-      expect(confirmsNoise).toHaveBeenCalledWith(Buffer.from('png'), Buffer.from('png'), [], 0.15);
+      expect(confirmsNoiseForGate).toHaveBeenCalledWith(gate, Buffer.from('png'), Buffer.from('png'), 0.15);
       expect(result.status).toBe(TestStatus.ok);
       expect(saveImage).not.toHaveBeenCalled();
     });
 
     it('fails a run in which DINOv2 sees a change of content, with its diff', async () => {
-      const confirmsNoise = jest.fn().mockResolvedValue({ noise: false, score: 0.56 });
-      const { service, saveImage } = await init(noise, confirmsNoise);
+      const confirmsNoiseForGate = jest.fn().mockResolvedValue({ noise: false, score: 0.56 });
+      const { service, saveImage } = await init(noise, confirmsNoiseForGate);
 
-      const result = await compare(service, checked);
+      const result = await compareWith(service, checked);
 
       expect(result.status).toBe(TestStatus.unresolved);
       expect(result.diffName).toBe('diff.png');
       expect(saveImage).toHaveBeenCalledWith('diff', Buffer.from('the diff'));
     });
 
-    // the worker must keep the diff of a noise-like change, or a run DINOv2
-    // sends to review would arrive with nothing to show
+    it('fails a run whose diff job returned no gate, without asking DINOv2', async () => {
+      const confirmsNoiseForGate = jest.fn();
+      const { service, saveImage } = await init({ ...noise, gate: undefined }, confirmsNoiseForGate);
+
+      const result = await compareWith(service, checked);
+
+      expect(confirmsNoiseForGate).not.toHaveBeenCalled();
+      expect(result.status).toBe(TestStatus.unresolved);
+      expect(saveImage).toHaveBeenCalledWith('diff', Buffer.from('the diff'));
+    });
+
     it('asks the worker to keep the diff when a check will follow', async () => {
       const { service, run } = await init(noise, jest.fn().mockResolvedValue({ noise: true }));
 
-      await compare(service, checked);
+      await compareWith(service, checked);
 
       expect(run).toHaveBeenCalledWith(expect.objectContaining({ blurAmplitude: checked }));
     });
 
-    // a check that could not look answers without a score: still to review
     it('fails a run DINOv2 could not confirm', async () => {
       const { service } = await init(noise, jest.fn().mockResolvedValue({ noise: false }));
 
-      expect((await compare(service, checked)).status).toBe(TestStatus.unresolved);
+      expect((await compareWith(service, checked)).status).toBe(TestStatus.unresolved);
     });
 
     it('does not ask DINOv2 about a change the blur already fails', async () => {
-      const confirmsNoise = jest.fn();
+      const confirmsNoiseForGate = jest.fn();
       const { service } = await init(
-        { ...overTolerance, blurAmplitude: 200, renderingNoiseOnly: false },
-        confirmsNoise
+        { ...mismatch, blurAmplitude: 200, renderingNoiseOnly: false },
+        confirmsNoiseForGate
       );
 
-      await compare(service, checked);
+      await compareWith(service, checked);
 
-      expect(confirmsNoise).not.toHaveBeenCalled();
+      expect(confirmsNoiseForGate).not.toHaveBeenCalled();
     });
 
     it('does not ask DINOv2 when the project did not turn the check on', async () => {
-      const confirmsNoise = jest.fn();
-      const { service } = await init(noise, confirmsNoise);
+      const confirmsNoiseForGate = jest.fn();
+      const { service } = await init(noise, confirmsNoiseForGate);
 
-      expect((await compare(service, filter)).status).toBe(TestStatus.ok);
-      expect(confirmsNoise).not.toHaveBeenCalled();
+      expect((await compareWith(service, filter)).status).toBe(TestStatus.ok);
+      expect(confirmsNoiseForGate).not.toHaveBeenCalled();
     });
   });
 });

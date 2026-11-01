@@ -2,8 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenAI } from '@google/genai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { VlmProvider, VlmProviderResponse } from '../../vlm-provider.interface';
-import { VlmConfig, GeminiVlmConfig } from '../../vlm.types';
+import { VlmConfig } from '../../vlm.types';
 import { VlmComparisonResultSchema } from '../../vlm-result.schema';
+import { positiveNumber } from '../../../../../utils/env';
+
+const DEFAULT_TIMEOUT_MS = 300_000;
 
 @Injectable()
 export class GeminiService implements VlmProvider {
@@ -13,47 +16,32 @@ export class GeminiService implements VlmProvider {
     if (!apiKey) {
       throw new Error('Gemini API key is required');
     }
-    return new GoogleGenAI({ apiKey });
-  }
-
-  private imageToBase64(imageBytes: Uint8Array): string {
-    const base64 = Buffer.from(imageBytes).toString('base64');
-    return base64;
+    return new GoogleGenAI({
+      apiKey,
+      httpOptions: { timeout: positiveNumber(process.env.GEMINI_TIMEOUT_MS, DEFAULT_TIMEOUT_MS) },
+    });
   }
 
   async generate(config: VlmConfig, images: Uint8Array[]): Promise<VlmProviderResponse> {
-    // Type guard: ensure this is Gemini config
     if (config.provider !== 'gemini') {
       throw new Error(`GeminiService requires GeminiVlmConfig, got ${config.provider}`);
     }
-
-    const geminiConfig: GeminiVlmConfig = config;
-
-    const genAI = this.getGenAI(geminiConfig.apiKey);
+    const genAI = this.getGenAI(config.apiKey);
 
     try {
       const imageParts = images.map((img) => ({
-        inlineData: {
-          data: this.imageToBase64(img),
-          mimeType: 'image/png',
-        },
+        inlineData: { data: Buffer.from(img).toString('base64'), mimeType: 'image/png' },
       }));
-
-      const parts = [{ text: geminiConfig.prompt }, ...imageParts];
-
       const result = await genAI.models.generateContent({
-        model: geminiConfig.model,
-        contents: parts,
+        model: config.model,
+        contents: [{ text: config.prompt }, ...imageParts],
         config: {
-          temperature: geminiConfig.temperature,
-          responseMimeType: 'application/json' as const,
+          temperature: config.temperature,
+          responseMimeType: 'application/json',
           responseJsonSchema: zodToJsonSchema(VlmComparisonResultSchema),
         },
       });
-
-      return {
-        content: result.text,
-      };
+      return { content: result.text };
     } catch (error) {
       this.logger.error(`Gemini generate request failed: ${(error as Error).message}`, (error as Error).stack);
       throw error;

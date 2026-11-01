@@ -1,11 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { GoogleGenAI } from '@google/genai';
 import { GeminiService } from './gemini.service';
 import { GeminiVlmConfig } from '../../vlm.types';
-
-jest.mock('zod/v3', () => {
-  const actualZod = jest.requireActual('zod');
-  return actualZod;
-});
 
 const mockGenerateContent = jest.fn();
 
@@ -104,8 +100,45 @@ describe('GeminiService', () => {
       const callArgs = mockGenerateContent.mock.calls[0][0];
       expect(callArgs.config.responseMimeType).toBe('application/json');
       const schema = callArgs.config.responseJsonSchema;
-      expect(schema).toBeDefined();
-      expect(schema).toBeTruthy();
+      expect(schema).toEqual({
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'object',
+        properties: { identical: { type: 'boolean' }, description: { type: 'string' } },
+        required: ['identical', 'description'],
+        additionalProperties: false,
+      });
+    });
+
+    describe('request timeout', () => {
+      afterEach(() => {
+        delete process.env.GEMINI_TIMEOUT_MS;
+      });
+
+      it('defaults to five minutes', async () => {
+        mockGenerateContent.mockResolvedValue(createMockResponse('{}'));
+
+        await service.generate(createConfig(), []);
+
+        expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: 'test-api-key', httpOptions: { timeout: 300000 } });
+      });
+
+      it('falls back to five minutes for a negative GEMINI_TIMEOUT_MS', async () => {
+        process.env.GEMINI_TIMEOUT_MS = '-1';
+        mockGenerateContent.mockResolvedValue(createMockResponse('{}'));
+
+        await service.generate(createConfig(), []);
+
+        expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: 'test-api-key', httpOptions: { timeout: 300000 } });
+      });
+
+      it('is set by GEMINI_TIMEOUT_MS', async () => {
+        process.env.GEMINI_TIMEOUT_MS = '5000';
+        mockGenerateContent.mockResolvedValue(createMockResponse('{}'));
+
+        await service.generate(createConfig(), []);
+
+        expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: 'test-api-key', httpOptions: { timeout: 5000 } });
+      });
     });
 
     it.each([

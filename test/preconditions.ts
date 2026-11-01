@@ -10,7 +10,6 @@ import { Build, Role } from '@prisma/client';
 import { CreateUserDto } from 'src/users/dto/user-create.dto';
 import { UserLoginResponseDto } from 'src/users/dto/user-login-response.dto';
 
-/** A signed-in user: login always issues a token, only creating a user answers without one. */
 export type LoggedUser = UserLoginResponseDto & { token: string };
 
 export const generateUser = (password: string): CreateUserDto => ({
@@ -47,6 +46,19 @@ export const haveUserLogged = async (usersService: UsersService, role: Role = 'a
     email: user.email,
     password,
   }) as Promise<LoggedUser>;
+};
+
+export const withUser = async <T>(
+  usersService: UsersService,
+  role: Role,
+  fn: (user: LoggedUser) => PromiseLike<T>
+): Promise<T> => {
+  const user = await haveUserLogged(usersService, role);
+  try {
+    return await fn(user);
+  } finally {
+    await usersService.delete(user.id);
+  }
 };
 
 export const haveTestRunCreated = async (

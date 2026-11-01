@@ -1,10 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Ollama, ChatRequest, ChatResponse, ListResponse, ModelResponse } from 'ollama';
+import { Ollama, ModelResponse } from 'ollama';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { VlmProvider, VlmProviderResponse } from '../../vlm-provider.interface';
-import { VlmConfig, OllamaVlmConfig } from '../../vlm.types';
+import { VlmConfig } from '../../vlm.types';
 import { VlmComparisonResultSchema } from '../../vlm-result.schema';
+import { positiveNumber } from '../../../../../utils/env';
+
+const DEFAULT_TIMEOUT_MS = 300_000;
 
 @Injectable()
 export class OllamaService implements VlmProvider {
@@ -16,44 +19,36 @@ export class OllamaService implements VlmProvider {
   private getOllamaClient(): Ollama {
     if (!this.ollamaClient) {
       const baseUrl = this.configService.getOrThrow<string>('OLLAMA_BASE_URL');
-      this.ollamaClient = new Ollama({ host: baseUrl });
+      const timeoutMs = positiveNumber(this.configService.get<string>('OLLAMA_TIMEOUT_MS'), DEFAULT_TIMEOUT_MS);
+      this.ollamaClient = new Ollama({
+        host: baseUrl,
+        // non-streaming chat sends headers only when done: without this a stalled model holds the upload for good
+        fetch: (url, init) =>
+          fetch(url, {
+            ...init,
+            signal: init?.signal
+              ? AbortSignal.any([init.signal, AbortSignal.timeout(timeoutMs)])
+              : AbortSignal.timeout(timeoutMs),
+          }),
+      });
     }
     return this.ollamaClient;
   }
 
   async generate(config: VlmConfig, images: Uint8Array[]): Promise<VlmProviderResponse> {
-    // Type guard: ensure this is Ollama config
     if (config.provider && config.provider !== 'ollama') {
       throw new Error(`OllamaService requires OllamaVlmConfig, got ${config.provider}`);
     }
-
-    const ollamaConfig = config as OllamaVlmConfig;
     const client = this.getOllamaClient();
 
     try {
-      const format = zodToJsonSchema(VlmComparisonResultSchema);
-
-      const chatRequest: ChatRequest = {
-        model: ollamaConfig.model,
-        messages: [
-          {
-            role: 'user',
-            content: ollamaConfig.prompt,
-            images,
-          },
-        ],
+      const response = await client.chat({
+        model: config.model,
+        messages: [{ role: 'user', content: config.prompt, images }],
         stream: false,
-        format,
-        options: {
-          temperature: ollamaConfig.temperature,
-        },
-      };
-
-      const response: ChatResponse = await client.chat({
-        ...chatRequest,
-        stream: false,
+        format: zodToJsonSchema(VlmComparisonResultSchema),
+        options: { temperature: config.temperature },
       });
-
       return {
         content: response.message.content,
         thinking: response.message.thinking,
@@ -67,8 +62,7 @@ export class OllamaService implements VlmProvider {
   async listModels(): Promise<ModelResponse[]> {
     const client = this.getOllamaClient();
     try {
-      const response: ListResponse = await client.list();
-      return response.models;
+      return (await client.list()).models;
     } catch (error) {
       this.logger.error(`Failed to list models: ${(error as Error).message}`);
       throw error;

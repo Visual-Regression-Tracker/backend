@@ -35,7 +35,6 @@ describe('Dinov2Controller', () => {
     expect(guards()).toContain(JwtAuthGuard);
   });
 
-  // the people who can edit a project's config
   it('is limited to admins and editors', () => {
     expect(guards()).toContain(RoleGuard);
     expect(new Reflector().getAllAndOverride('roles', [Dinov2Controller.prototype.status, Dinov2Controller])).toEqual([

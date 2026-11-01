@@ -42,9 +42,7 @@ export class ProjectsController {
     return this.projectsService.findAll();
   }
 
-  // Favourites are personal, not project settings, so every role (guests
-  // included) may use them: no RoleGuard. Declared before any `:id` route so
-  // "favorites" is never read as a project id.
+  // No RoleGuard: favourites are personal. Declared before any `:id` route so "favorites" is not read as an id
   @Get('favorites')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)

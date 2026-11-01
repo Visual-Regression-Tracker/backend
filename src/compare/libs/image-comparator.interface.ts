@@ -8,12 +8,6 @@ import { VlmConfig } from './vlm/vlm.types';
 export type ImageCompareConfig = PixelmatchConfig | LooksSameConfig | OdiffConfig | VlmConfig;
 
 export interface ImageComparator {
-  /**
-   * True when getDiff applies `data.blurAmplitude` itself — cheaper inside a
-   * pass that has the images decoded already, and before anything expensive
-   * (a diff written to storage, a VLM call). Otherwise CompareService measures
-   * the pair afterwards and may overturn a failing verdict.
-   */
   readonly appliesBlurAmplitudeFilter?: boolean;
   getDiff(data: ImageCompareInput, config: ImageCompareConfig): Promise<DiffResult>;
   parseConfig(configJson: string): ImageCompareConfig;

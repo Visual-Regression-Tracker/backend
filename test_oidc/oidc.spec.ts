@@ -3,9 +3,6 @@ import { UserLoginRequestDto } from 'src/users/dto/user-login-request.dto';
 
 axios.defaults.baseURL = 'http://localhost:4200';
 
-// These tests run against a running api that was started with OIDC enabled
-// (see docker-compose.oidc.yml). The full browser redirect flow cannot be
-// automated here, so we verify the pieces the backend owns.
 describe('Oidc', () => {
   test('reports OIDC as enabled', async () => {
     const response = await axios.get<boolean>('/users/oidc/enabled');

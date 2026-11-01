@@ -1,4 +1,3 @@
-/** @returns {Promise<import('jest').Config>} */
 module.exports = async () => {
   return {
     displayName: 'E2E Tests',
@@ -6,7 +5,7 @@ module.exports = async () => {
     testTimeout: 30000,
     testRegex: '.e2e-spec.ts$',
     transform: {
-      '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/../tsconfig.jest.json' }],
+      '^.+\\.(t|j)s$': '@swc/jest',
     },
     coverageDirectory: '../coverage',
     testEnvironment: 'node',

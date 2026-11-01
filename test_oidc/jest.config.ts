@@ -1,4 +1,3 @@
-/** @returns {Promise<import('jest').Config>} */
 module.exports = async () => {
   return {
     displayName: 'Oidc',
@@ -7,7 +6,7 @@ module.exports = async () => {
     testRegex: '.spec.ts$',
     moduleFileExtensions: ['js', 'json', 'ts'],
     transform: {
-      '^.+\\.(t|j)s$': 'ts-jest',
+      '^.+\\.(t|j)s$': '@swc/jest',
     },
     testEnvironment: 'node',
   };

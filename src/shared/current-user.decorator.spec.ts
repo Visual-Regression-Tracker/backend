@@ -2,7 +2,6 @@ import { ExecutionContext } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { CurrentUser } from './current-user.decorator';
 
-// a param decorator only exposes its factory through the route metadata
 const getFactory = () => {
   class Controller {
     handler(@CurrentUser() _user: unknown) {}

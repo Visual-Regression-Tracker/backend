@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { mkdtempSync, writeFileSync } from 'fs';
 import { availableParallelism, tmpdir } from 'os';
 import { join, relative, resolve } from 'path';
-import { Client } from 'pg';
+import { Client, ClientConfig } from 'pg';
 import { getPgOptions, negotiatePreferredSsl, physicalCpuCount, PrismaService } from './prisma.service';
 
 describe('PrismaService', () => {
@@ -63,7 +63,6 @@ describe('physicalCpuCount', () => {
     `processor\t: ${id}\nmodel name\t: x86\nphysical id\t: ${physicalId}\ncore id\t\t: ${coreId}\n`;
 
   it('counts each physical core once, however many hyper-threads it runs', () => {
-    // two sockets, two cores each, two threads per core
     const cpuinfo = [0, 1, 2, 3, 4, 5, 6, 7]
       .map((id) => processor(id, Math.floor(id / 4), Math.floor(id / 2) % 2))
       .join('\n');
@@ -90,6 +89,11 @@ describe('getPgOptions', () => {
   const url = 'postgresql://user:secret@db:5432/vrt';
   const defaultMax = physicalCpuCount() * 2 + 1;
   const noVerify = { rejectUnauthorized: false };
+  const writeCa = (content: string) => {
+    const ca = join(mkdtempSync(join(tmpdir(), 'vrt-ca-')), 'server-ca.pem');
+    writeFileSync(ca, content);
+    return ca;
+  };
 
   it('keeps the Prisma 6 pool defaults when the URL sets none', () => {
     expect(getPgOptions(url)).toEqual({
@@ -129,24 +133,21 @@ describe('getPgOptions', () => {
   });
 
   describe('TLS, as Prisma 6 read the URL', () => {
-    it('tries TLS without checking the certificate when the URL names no sslmode (prefer)', () => {
-      expect(getPgOptions(url)).toMatchObject({ pool: { ssl: noVerify }, preferSsl: true });
-    });
+    it.each([
+      ['takes sslmode=prefer out of the URL for pg', '?sslmode=prefer&schema=vrt', true, '?schema=vrt'],
+      ['insists on TLS under sslmode=require, unchecked', '?sslmode=require', false, ''],
+      [
+        'drops sslcert without sslaccept=strict (Prisma 6 accepted any certificate)',
+        '?sslmode=require&sslcert=a.pem',
+        false,
+        '',
+      ],
+    ])('%s', (_, query, preferSsl, remainingQuery) => {
+      const { pool, preferSsl: prefer } = getPgOptions(`${url}${query}`);
 
-    it('treats an explicit sslmode=prefer the same, and takes it out of the URL for pg', () => {
-      const { pool, preferSsl } = getPgOptions(`${url}?sslmode=prefer&schema=vrt`);
-
-      expect(preferSsl).toBe(true);
+      expect(prefer).toBe(preferSsl);
       expect(pool.ssl).toEqual(noVerify);
-      expect(pool.connectionString).toBe(`${url}?schema=vrt`);
-    });
-
-    it('insists on TLS under sslmode=require, still without checking the certificate', () => {
-      const { pool, preferSsl } = getPgOptions(`${url}?sslmode=require`);
-
-      expect(preferSsl).toBe(false);
-      expect(pool.ssl).toEqual(noVerify);
-      expect(pool.connectionString).toBe(url);
+      expect(pool.connectionString).toBe(`${url}${remainingQuery}`);
     });
 
     it('checks the certificate against the system CAs under sslaccept=strict', () => {
@@ -154,31 +155,21 @@ describe('getPgOptions', () => {
     });
 
     it('checks it against sslcert, the server certificate to Prisma, under sslaccept=strict', () => {
-      const ca = join(mkdtempSync(join(tmpdir(), 'vrt-ca-')), 'server-ca.pem');
-      writeFileSync(ca, 'ca-pem');
+      const ca = writeCa('ca-pem');
 
       const { pool } = getPgOptions(`${url}?sslmode=require&sslaccept=strict&sslcert=${encodeURIComponent(ca)}`);
 
       expect(pool.ssl).toEqual({ ca: Buffer.from('ca-pem') });
-      // pg would read sslcert as a client certificate
       expect(pool.connectionString).toBe(url);
     });
 
     it('resolves a relative sslcert from the prisma/ folder, as Prisma did', () => {
-      const ca = join(mkdtempSync(join(tmpdir(), 'vrt-ca-')), 'server-ca.pem');
-      writeFileSync(ca, 'relative-ca');
+      const ca = writeCa('relative-ca');
       const fromPrismaFolder = relative(resolve('prisma'), ca);
 
       const { pool } = getPgOptions(`${url}?sslaccept=strict&sslcert=${encodeURIComponent(fromPrismaFolder)}`);
 
       expect(pool.ssl).toEqual({ ca: Buffer.from('relative-ca') });
-    });
-
-    it('drops sslcert without sslaccept=strict, where Prisma 6 accepted any certificate', () => {
-      const { pool } = getPgOptions(`${url}?sslmode=require&sslcert=server-ca.pem`);
-
-      expect(pool.ssl).toEqual(noVerify);
-      expect(pool.connectionString).toBe(url);
     });
 
     it('connects without TLS under sslmode=disable', () => {
@@ -216,14 +207,16 @@ describe('negotiatePreferredSsl', () => {
   afterEach(() => jest.restoreAllMocks());
 
   const stubClient = (connect: () => Promise<void>) => {
-    jest.spyOn(Client.prototype, 'connect').mockImplementation(connect as never);
+    jest.spyOn(Client.prototype, 'connect').mockImplementation(connect);
     return jest.spyOn(Client.prototype, 'end').mockResolvedValue(undefined as never);
   };
+
+  const preferringConfig = () => ({ connectionString: 'postgresql://db/vrt', ssl: { rejectUnauthorized: false } });
 
   it('falls back to plaintext when the server has no TLS', async () => {
     const end = stubClient(() => Promise.reject(new Error('The server does not support SSL connections')));
     const log = jest.fn();
-    const config = { connectionString: 'postgresql://db/vrt', ssl: { rejectUnauthorized: false } };
+    const config: ClientConfig = preferringConfig();
 
     await negotiatePreferredSsl(config, { log } as unknown as Logger);
 
@@ -234,7 +227,7 @@ describe('negotiatePreferredSsl', () => {
 
   it('keeps TLS when the trial connection succeeds', async () => {
     const end = stubClient(() => Promise.resolve());
-    const config = { connectionString: 'postgresql://db/vrt', ssl: { rejectUnauthorized: false } };
+    const config = preferringConfig();
 
     await negotiatePreferredSsl(config);
 
@@ -244,7 +237,7 @@ describe('negotiatePreferredSsl', () => {
 
   it('keeps TLS when the connection fails for another reason, left for the real connection to report', async () => {
     stubClient(() => Promise.reject(new Error('password authentication failed')));
-    const config = { connectionString: 'postgresql://db/vrt', ssl: { rejectUnauthorized: false } };
+    const config = preferringConfig();
 
     await expect(negotiatePreferredSsl(config)).resolves.toBeUndefined();
 

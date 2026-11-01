@@ -1,14 +1,5 @@
 name: Docker images
 
-# Builds visualregressiontracker/api, visualregressiontracker/migration and
-# visualregressiontracker/dinov2 for linux/amd64 and linux/arm64 (Apple
-# Silicon, Graviton), so docker compose runs them natively instead of under
-# emulation.
-# - pushing an api-vX.Y.Z, migration-vX.Y.Z or dinov2-vX.Y.Z tag publishes that image as X.Y.Z
-# - "Run workflow" with an existing tag (re)publishes it, e.g. to add arm64 to a released version
-# - pull requests that touch the images only build them, without pushing
-# Publishing needs the DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets.
-
 on:
   push:
     tags:
@@ -29,13 +20,12 @@ on:
         description: Existing tag to publish, e.g. api-v5.7.0, migration-v5.5.0 or dinov2-v1.0.0
         required: true
 
-# GITHUB_TOKEN is only used to check out the code; image pushes use the Docker Hub secrets
 permissions:
   contents: read
 
 jobs:
   docker:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -66,12 +56,11 @@ jobs:
             echo "build=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.version.outputs.build == 'true'
         with:
           # a manual run checks out the tag itself, never a branch with the same name
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
-          # keep the token out of .git/config, which is part of the build context
           persist-credentials: false
 
       - name: Set up QEMU
