@@ -13,19 +13,19 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
-    "bcryptjs": "^2.4.3",
+    "bcryptjs": "^3.0.3",
     "pg": "^8.16.3"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.2",
+    "@types/bcryptjs": "^3.0.0",
     "@types/jest": "^30.0.0",
-    "dotenv": "^17.2.3",
+    "dotenv": "^18.0.9",
     "jest": "^30.5.2",
     "jest-mock-extended": "^4.0.2",
     "prisma": "^7.10.1",
     "ts-jest": "^29.4.15",
     "ts-node": "^10.9.2",
-    "typescript": "~6.0.3"
+    "typescript": "~7.0.2"
   },
   "engines": {
     "node": ">=24.15"
