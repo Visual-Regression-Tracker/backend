@@ -1,6 +1,7 @@
 services:
   api:
     container_name: vrt_api
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile

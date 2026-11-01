@@ -96,6 +96,9 @@ export async function negotiatePreferredSsl(config: ClientConfig, logger?: Logge
     if (error instanceof Error && error.message === SSL_NOT_SUPPORTED) {
       config.ssl = false;
       logger?.log('Database server has no TLS, connecting without it (sslmode=prefer)');
+    } else {
+      // The pool never revisits this choice, so guessing TLS here would break every later query
+      throw error;
     }
   } finally {
     await client.end().catch((): undefined => undefined);

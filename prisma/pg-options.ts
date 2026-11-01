@@ -43,6 +43,8 @@ export async function negotiatePreferredSsl(config: ClientConfig): Promise<void>
   } catch (error) {
     if (error instanceof Error && error.message === 'The server does not support SSL connections') {
       config.ssl = false;
+    } else {
+      throw error;
     }
   } finally {
     await client.end().catch(() => undefined);
