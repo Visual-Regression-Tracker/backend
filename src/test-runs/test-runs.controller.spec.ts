@@ -98,6 +98,15 @@ describe('TestRuns Controller', () => {
       expect(result).toEqual({ succeeded: ['1', '2'], failed: [] });
     });
 
+    it('reports the details of an HTTP error as its message', async () => {
+      const { controller, mock } = await stub('approve');
+      mock.mockRejectedValueOnce(new BadRequestException(['first problem', 'second problem']));
+
+      const result = await controller.approveTestRun(user, ['1'], false);
+
+      expect(result.failed).toEqual([{ id: '1', message: 'first problem, second problem' }]);
+    });
+
     it('goes on past a failing id and reports it with its message', async () => {
       const { controller, mock } = await stub('approve');
       mock.mockRejectedValueOnce(new NotFoundException('Test run not found: 1'));

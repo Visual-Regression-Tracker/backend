@@ -1,7 +1,13 @@
 import { Project } from '@prisma/client';
 import { TEST_PROJECT } from '../_data_';
 import { lastValueFrom, of } from 'rxjs';
-import { keepStoredApiKey, maskApiKey, MaskApiKeyInterceptor, maskProjectApiKey } from './api-key-mask';
+import {
+  hasMaskedApiKey,
+  keepStoredApiKey,
+  maskApiKey,
+  MaskApiKeyInterceptor,
+  maskProjectApiKey,
+} from './api-key-mask';
 
 const KEY = 'AIzaSyD-secret-gemini-key-1234';
 const config = (extra: object) => JSON.stringify({ provider: 'gemini', model: 'gemini-2.5-flash', ...extra });
@@ -86,11 +92,14 @@ describe('keepStoredApiKey', () => {
 
   it.each([
     ['a new key', config({ apiKey: 'AIzaSy-new-key-9999' })],
-    ['a mask of another key', config({ apiKey: '••••9999' })],
     ['no key', config({})],
     ['a config that is not JSON', '{not json'],
   ])('keeps %s as sent', (_case, incoming) => {
     expect(keepStoredApiKey(incoming, stored)).toBe(incoming);
+  });
+
+  it.each(['••••9999', '••••'])('puts the stored key back for a mask of an older key %p', (mask) => {
+    expect(JSON.parse(keepStoredApiKey(config({ apiKey: mask }), stored)).apiKey).toBe(KEY);
   });
 
   it.each([
@@ -101,5 +110,17 @@ describe('keepStoredApiKey', () => {
     const incoming = config({ apiKey: '••••' });
 
     expect(keepStoredApiKey(incoming, storedConfig)).toBe(incoming);
+  });
+});
+
+describe('hasMaskedApiKey', () => {
+  it.each([
+    [config({ apiKey: '••••1234' }), true],
+    [config({ apiKey: '••••' }), true],
+    [config({ apiKey: KEY }), false],
+    [config({}), false],
+    ['{not json', false],
+  ])('%s: %s', (incoming, masked) => {
+    expect(hasMaskedApiKey(incoming)).toBe(masked);
   });
 });

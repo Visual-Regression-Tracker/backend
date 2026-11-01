@@ -122,6 +122,15 @@ describe('ProjectsService', () => {
     expect(result).toBe(TEST_PROJECT);
   });
 
+  it('update does not read the stored config when no masked key comes in', async () => {
+    const { service, prisma } = await setup();
+    prisma.project.update.mockResolvedValue(TEST_PROJECT);
+
+    await service.update({ ...TEST_PROJECT, imageComparisonConfig: JSON.stringify({ apiKey: 'AIzaSy-new-key-5678' }) });
+
+    expect(prisma.project.findUnique).not.toHaveBeenCalled();
+  });
+
   it('update keeps the stored Gemini key when the masked key comes back', async () => {
     const { service, prisma } = await setup();
     const key = 'AIzaSy-stored-gemini-key-1234';

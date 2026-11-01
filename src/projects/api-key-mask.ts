@@ -38,9 +38,11 @@ export class MaskApiKeyInterceptor implements NestInterceptor {
   }
 }
 
+export const hasMaskedApiKey = (config: string): boolean => apiKeyOf(parseObject(config))?.startsWith(MASK) ?? false;
+
 export const keepStoredApiKey = (incomingConfig: string, storedConfig: string | undefined): string => {
   const incoming = parseObject(incomingConfig);
   const storedKey = apiKeyOf(parseObject(storedConfig));
-  if (storedKey === undefined || apiKeyOf(incoming) !== maskApiKey(storedKey)) return incomingConfig;
+  if (storedKey === undefined || !apiKeyOf(incoming)?.startsWith(MASK)) return incomingConfig;
   return JSON.stringify({ ...incoming, apiKey: storedKey });
 };

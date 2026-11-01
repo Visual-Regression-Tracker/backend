@@ -53,6 +53,15 @@ describe('booleanFlag', () => {
   });
 
   it.each([
+    [true, true],
+    [false, false],
+    [1, true],
+    [0, false],
+  ])('reads the non-string value %p', (raw, expected) => {
+    expect(booleanFlag(raw, !expected)).toBe(expected);
+  });
+
+  it.each([
     ['unset', undefined],
     ['blank', '  '],
     ['not a flag', 'maybe'],

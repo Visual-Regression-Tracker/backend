@@ -10,7 +10,7 @@ import { isUuidShaped } from '../utils/random-key';
 import { testRunImageNames } from '../utils';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { isHddStaticServiceConfigured } from '../static/utils';
-import { keepStoredApiKey } from './api-key-mask';
+import { hasMaskedApiKey, keepStoredApiKey } from './api-key-mask';
 
 const MAX_REMOVE_ATTEMPTS = 3;
 const REMOVE_TRANSACTION = { maxWait: 10_000, timeout: 120_000 };
@@ -94,14 +94,14 @@ export class ProjectsService {
 
   async update(projectDto: UpdateProjectDto): Promise<Project> {
     this.assertComparisonSupported(projectDto.imageComparison);
-    const stored = await this.prismaService.project.findUnique({
-      where: { id: projectDto.id },
-      select: { imageComparisonConfig: true },
-    });
-    const data = {
-      ...projectData(projectDto),
-      imageComparisonConfig: keepStoredApiKey(projectDto.imageComparisonConfig, stored?.imageComparisonConfig),
-    };
+    const data = projectData(projectDto);
+    if (hasMaskedApiKey(data.imageComparisonConfig)) {
+      const stored = await this.prismaService.project.findUnique({
+        where: { id: projectDto.id },
+        select: { imageComparisonConfig: true },
+      });
+      data.imageComparisonConfig = keepStoredApiKey(data.imageComparisonConfig, stored?.imageComparisonConfig);
+    }
     return this.prismaService.project.update({ where: { id: projectDto.id }, data });
   }
 
