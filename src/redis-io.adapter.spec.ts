@@ -144,19 +144,12 @@ describe('RedisIoAdapter', () => {
       await expect(makeAdapter().connectToRedis('redis://localhost:6379')).rejects.toThrow('redis down');
     });
 
-    it.each([
-      ['2000', 2_000],
-      ['abc', 30_000],
-      ['', 30_000],
-      ['0', 30_000],
-      ['-1', 30_000],
-    ])('gives up after the REDIS_CONNECT_TIMEOUT_MS=%p it reads (%p ms)', async (value, ms) => {
-      process.env.REDIS_CONNECT_TIMEOUT_MS = value;
+    it('gives up after 30 seconds by default', async () => {
       const { strategy, finish } = connectPending('redis://localhost:6379');
 
-      now.mockReturnValue(1_000_000 + ms - 1);
+      now.mockReturnValue(1_000_000 + 30_000 - 1);
       expect(typeof strategy(1, new Error('x'))).toBe('number');
-      now.mockReturnValue(1_000_000 + ms);
+      now.mockReturnValue(1_000_000 + 30_000);
       expect(strategy(2, new Error('x'))).toBeInstanceOf(Error);
       await finish();
     });

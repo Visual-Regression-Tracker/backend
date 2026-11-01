@@ -162,8 +162,7 @@ describe('OllamaService', () => {
       global.fetch = realFetch;
     });
 
-    const sdkFetch = async (timeoutMs?: string): Promise<Fetch> => {
-      mockConfigService.get.mockReturnValue(timeoutMs);
+    const sdkFetch = async (): Promise<Fetch> => {
       mockChat.mockResolvedValue(createMockResponse('{}'));
       const fresh = new OllamaService(mockConfigService as any);
       await fresh.generate(createConfig(), []);
@@ -194,11 +193,14 @@ describe('OllamaService', () => {
       expect(init.signal.aborted).toBe(false);
     });
 
-    it('aborts a request that outlasts OLLAMA_TIMEOUT_MS', async () => {
+    it('aborts a request that outlasts its timeout', async () => {
+      const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+      const timeout = jest.spyOn(AbortSignal, 'timeout').mockImplementation(() => realTimeout(1));
       global.fetch = stalledFetch();
-      const fetchForSdk = await sdkFetch('1');
+      const fetchForSdk = await sdkFetch();
 
       await expect(fetchForSdk('http://localhost:11434/api/chat')).rejects.toMatchObject({ name: 'TimeoutError' });
+      timeout.mockRestore();
     });
 
     it('defaults to five minutes', async () => {
@@ -212,20 +214,9 @@ describe('OllamaService', () => {
       timeout.mockRestore();
     });
 
-    it('falls back to five minutes for a negative OLLAMA_TIMEOUT_MS', async () => {
-      const timeout = jest.spyOn(AbortSignal, 'timeout');
-      global.fetch = jest.fn().mockResolvedValue({});
-      const fetchForSdk = await sdkFetch('-1');
-
-      await fetchForSdk('http://localhost:11434/api/chat');
-
-      expect(timeout).toHaveBeenCalledWith(300_000);
-      timeout.mockRestore();
-    });
-
     it('still honours the signal of the caller', async () => {
       global.fetch = stalledFetch();
-      const fetchForSdk = await sdkFetch('60000');
+      const fetchForSdk = await sdkFetch();
       const controller = new AbortController();
 
       const request = fetchForSdk('http://localhost:11434/api/chat', { signal: controller.signal });

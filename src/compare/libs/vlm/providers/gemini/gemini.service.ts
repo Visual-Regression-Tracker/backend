@@ -4,9 +4,8 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { VlmProvider, VlmProviderResponse } from '../../vlm-provider.interface';
 import { VlmConfig } from '../../vlm.types';
 import { VlmComparisonResultSchema } from '../../vlm-result.schema';
-import { positiveNumber } from '../../../../../utils/env';
 
-const DEFAULT_TIMEOUT_MS = 300_000;
+const TIMEOUT_MS = 300_000;
 
 @Injectable()
 export class GeminiService implements VlmProvider {
@@ -18,7 +17,7 @@ export class GeminiService implements VlmProvider {
     }
     return new GoogleGenAI({
       apiKey,
-      httpOptions: { timeout: positiveNumber(process.env.GEMINI_TIMEOUT_MS, DEFAULT_TIMEOUT_MS) },
+      httpOptions: { timeout: TIMEOUT_MS },
     });
   }
 

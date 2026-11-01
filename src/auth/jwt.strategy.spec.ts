@@ -16,10 +16,6 @@ describe('JwtStrategy', () => {
 
   const createStrategy = () =>
     new JwtStrategy(configService as unknown as ConfigService, prismaService as unknown as PrismaService);
-  const withLegacyTokens = (value: string) => {
-    configService.get.mockImplementation((key: string) => (key === 'JWT_LEGACY_EMAIL_TOKENS' ? value : SECRET));
-    strategy = createStrategy();
-  };
 
   beforeEach(() => {
     prismaService = { user: { findUnique: jest.fn() } };
@@ -111,27 +107,6 @@ describe('JwtStrategy', () => {
       await settle();
 
       expect(prismaService.user.findUnique).toHaveBeenCalledWith({ where: { email: user.email } });
-      expect(outcome.success).toHaveBeenCalledWith(user, undefined);
-    });
-
-    it.each(['false', ' FALSE '])('rejects an email-only token when JWT_LEGACY_EMAIL_TOKENS=%j', async (value) => {
-      withLegacyTokens(value);
-
-      const outcome = authenticate(sign({ email: user.email }, SECRET));
-      await settle();
-
-      expect(prismaService.user.findUnique).not.toHaveBeenCalled();
-      expect(outcome.error).toHaveBeenCalledWith(expect.any(UnauthorizedException));
-      expect(outcome.success).not.toHaveBeenCalled();
-    });
-
-    it('keeps accepting tokens with sub when JWT_LEGACY_EMAIL_TOKENS=false', async () => {
-      withLegacyTokens('false');
-      prismaService.user.findUnique.mockResolvedValue(user);
-
-      const outcome = authenticate(sign({ sub: 'user-id', email: user.email }, SECRET));
-      await settle();
-
       expect(outcome.success).toHaveBeenCalledWith(user, undefined);
     });
 

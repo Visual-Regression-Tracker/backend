@@ -109,36 +109,12 @@ describe('GeminiService', () => {
       });
     });
 
-    describe('request timeout', () => {
-      afterEach(() => {
-        delete process.env.GEMINI_TIMEOUT_MS;
-      });
+    it('gives the SDK a five-minute request timeout', async () => {
+      mockGenerateContent.mockResolvedValue(createMockResponse('{}'));
 
-      it('defaults to five minutes', async () => {
-        mockGenerateContent.mockResolvedValue(createMockResponse('{}'));
+      await service.generate(createConfig(), []);
 
-        await service.generate(createConfig(), []);
-
-        expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: 'test-api-key', httpOptions: { timeout: 300000 } });
-      });
-
-      it('falls back to five minutes for a negative GEMINI_TIMEOUT_MS', async () => {
-        process.env.GEMINI_TIMEOUT_MS = '-1';
-        mockGenerateContent.mockResolvedValue(createMockResponse('{}'));
-
-        await service.generate(createConfig(), []);
-
-        expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: 'test-api-key', httpOptions: { timeout: 300000 } });
-      });
-
-      it('is set by GEMINI_TIMEOUT_MS', async () => {
-        process.env.GEMINI_TIMEOUT_MS = '5000';
-        mockGenerateContent.mockResolvedValue(createMockResponse('{}'));
-
-        await service.generate(createConfig(), []);
-
-        expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: 'test-api-key', httpOptions: { timeout: 5000 } });
-      });
+      expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: 'test-api-key', httpOptions: { timeout: 300000 } });
     });
 
     it.each([

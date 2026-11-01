@@ -5,9 +5,8 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { VlmProvider, VlmProviderResponse } from '../../vlm-provider.interface';
 import { VlmConfig } from '../../vlm.types';
 import { VlmComparisonResultSchema } from '../../vlm-result.schema';
-import { positiveNumber } from '../../../../../utils/env';
 
-const DEFAULT_TIMEOUT_MS = 300_000;
+const TIMEOUT_MS = 300_000;
 
 @Injectable()
 export class OllamaService implements VlmProvider {
@@ -19,7 +18,6 @@ export class OllamaService implements VlmProvider {
   private getOllamaClient(): Ollama {
     if (!this.ollamaClient) {
       const baseUrl = this.configService.getOrThrow<string>('OLLAMA_BASE_URL');
-      const timeoutMs = positiveNumber(this.configService.get<string>('OLLAMA_TIMEOUT_MS'), DEFAULT_TIMEOUT_MS);
       this.ollamaClient = new Ollama({
         host: baseUrl,
         // non-streaming chat sends headers only when done: without this a stalled model holds the upload for good
@@ -27,8 +25,8 @@ export class OllamaService implements VlmProvider {
           fetch(url, {
             ...init,
             signal: init?.signal
-              ? AbortSignal.any([init.signal, AbortSignal.timeout(timeoutMs)])
-              : AbortSignal.timeout(timeoutMs),
+              ? AbortSignal.any([init.signal, AbortSignal.timeout(TIMEOUT_MS)])
+              : AbortSignal.timeout(TIMEOUT_MS),
           }),
       });
     }

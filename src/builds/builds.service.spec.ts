@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { BuildsService, retentionGraceMinutes } from './builds.service';
+import { BuildsService } from './builds.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
@@ -605,7 +605,6 @@ describe('BuildsService', () => {
     };
 
     afterEach(() => {
-      delete process.env.BUILD_RETENTION_GRACE_MINUTES;
       jest.useRealTimers();
     });
 
@@ -633,23 +632,6 @@ describe('BuildsService', () => {
       expect(prisma.build.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 0 }));
     });
 
-    it.each([
-      [undefined, 60],
-      ['', 60],
-      ['15', 15],
-      ['0', 0],
-      ['-5', 60],
-      ['abc', 60],
-    ])('retentionGraceMinutes with %p is %p', (raw, expected) => {
-      if (raw === undefined) {
-        delete process.env.BUILD_RETENTION_GRACE_MINUTES;
-      } else {
-        process.env.BUILD_RETENTION_GRACE_MINUTES = raw;
-      }
-
-      expect(retentionGraceMinutes()).toBe(expected);
-    });
-
     it('passes the grace cutoff to remove', async () => {
       jest.useFakeTimers({ now: new Date('2026-05-01T12:00:00Z'), doNotFake: ['setImmediate', 'nextTick'] });
       const { service } = await init(ids('build1'));
@@ -657,15 +639,6 @@ describe('BuildsService', () => {
       await service.deleteOldBuilds(projectId, 1, 'b-new');
 
       expect(service.remove).toHaveBeenCalledWith('build1', { onlyIfIdleSince: new Date('2026-05-01T11:00:00Z') });
-    });
-
-    it('with grace 0 removes without the idle check', async () => {
-      process.env.BUILD_RETENTION_GRACE_MINUTES = '0';
-      const { service } = await init(ids('build1'));
-
-      await service.deleteOldBuilds(projectId, 1, 'b-new');
-
-      expect(service.remove).toHaveBeenCalledWith('build1', { onlyIfIdleSince: undefined });
     });
 
     it('runs a separate pruning for another kept build of the same project', async () => {

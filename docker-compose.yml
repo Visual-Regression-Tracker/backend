@@ -19,7 +19,6 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       DINOV2_URL: ${DINOV2_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      BUILD_RETENTION_GRACE_MINUTES: ${BUILD_RETENTION_GRACE_MINUTES}
     ports:
       - "${APP_PORT}:3000"
     expose:

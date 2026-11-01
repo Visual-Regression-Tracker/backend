@@ -14,7 +14,7 @@ can_drop_root() {
   done
 }
 
-if [ "$(id -u)" = "0" ] && [ "${VRT_RUN_AS_ROOT:-false}" != "true" ]; then
+if [ "$(id -u)" = "0" ]; then
   if can_drop_root; then
     exec setpriv --reuid=node --regid=node --init-groups "$@"
   fi

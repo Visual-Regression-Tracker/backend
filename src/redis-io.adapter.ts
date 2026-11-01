@@ -3,13 +3,9 @@ import { IoAdapter } from '@nestjs/platform-socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
 import { ServerOptions } from 'socket.io';
-import { positiveNumber } from './utils/env';
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
 const MAX_RECONNECT_DELAY_MS = 5_000;
-
-const connectTimeoutFromEnv = (): number =>
-  positiveNumber(process.env.REDIS_CONNECT_TIMEOUT_MS, DEFAULT_CONNECT_TIMEOUT_MS);
 
 const describeUrl = (url: string): string => {
   try {
@@ -23,7 +19,7 @@ export class RedisIoAdapter extends IoAdapter {
   private static readonly logger = new Logger(RedisIoAdapter.name);
   private adapterConstructor!: ReturnType<typeof createAdapter>;
 
-  async connectToRedis(url: string, connectTimeoutMs = connectTimeoutFromEnv()): Promise<void> {
+  async connectToRedis(url: string, connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS): Promise<void> {
     const startedAt = Date.now();
     let connected = false;
     const reconnectStrategy = (retries: number, cause: Error): number | Error =>

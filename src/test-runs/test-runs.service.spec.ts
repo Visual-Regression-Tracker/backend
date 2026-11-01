@@ -1,5 +1,4 @@
-import { BadRequestException, ConflictException, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import { mocked } from 'jest-mock';
 import { Test } from '@nestjs/testing';
 import { SIGNATURE_CONCURRENCY, TestRunsService } from './test-runs.service';
@@ -35,7 +34,6 @@ const createMocks = () => {
     baseline: { count: jest.fn().mockResolvedValue(0) },
     project: { findUnique: jest.fn() },
     build: { findUnique: jest.fn() },
-    config: { get: jest.fn((_key: string, fallback?: string) => fallback) },
     static: { getImageBuffer: jest.fn(), copyImage: jest.fn(), saveImage: jest.fn(), deleteImage: jest.fn() },
     events: { testRunUpdated: jest.fn(), testRunCreated: jest.fn(), testRunDeleted: jest.fn() },
     tv: {
@@ -74,7 +72,6 @@ const build = async () => {
           build: m.build,
         },
       },
-      { provide: ConfigService, useValue: m.config },
       {
         provide: StaticService,
         useValue: {
@@ -941,7 +938,7 @@ describe('TestRunsService', () => {
     describe('a build of another project', () => {
       const message = `Build ${createTestRequestDto.buildId} does not belong to project ${createTestRequestDto.projectId}`;
 
-      it('is accepted with a warning by default', async () => {
+      it('is accepted with a warning', async () => {
         const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
         const { service, diffed, createdVariation } = await initPostService({ buildRow: { projectId: 'other' } });
 
@@ -950,15 +947,6 @@ describe('TestRunsService', () => {
         expect(warn).toHaveBeenCalledWith(message);
         expect(mocked(TestRunResultDto)).toHaveBeenCalledWith(diffed, createdVariation);
         warn.mockRestore();
-      });
-
-      it('is rejected when STRICT_BUILD_PROJECT_CHECK is true', async () => {
-        const { service, m } = await initPostService({ buildRow: { projectId: 'other' } });
-        m.config.get.mockReturnValue('TRUE');
-
-        await expect(post(service)).rejects.toThrow(new BadRequestException(message));
-        expect(m.config.get).toHaveBeenCalledWith('STRICT_BUILD_PROJECT_CHECK', 'false');
-        expect(m.static.saveImage).not.toHaveBeenCalled();
       });
     });
 

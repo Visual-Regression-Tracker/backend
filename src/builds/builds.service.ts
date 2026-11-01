@@ -15,7 +15,6 @@ import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { getBuildsStats } from './build-stats';
 import { testRunImageNames } from '../utils';
-import { nonNegativeNumber } from '../utils/env';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
 import type { WrapperType } from '../shared/wrapper-type';
@@ -25,11 +24,7 @@ const TEST_RUN_CHUNK = 500;
 const MAX_REMOVE_ATTEMPTS = 3;
 const BUILD_ORDER: Prisma.BuildOrderByWithRelationInput[] = [{ createdAt: 'desc' }, { id: 'desc' }];
 
-const DEFAULT_RETENTION_GRACE_MINUTES = 60;
-
-export function retentionGraceMinutes(): number {
-  return nonNegativeNumber(process.env.BUILD_RETENTION_GRACE_MINUTES, DEFAULT_RETENTION_GRACE_MINUTES);
-}
+const RETENTION_GRACE_MS = 60 * 60_000;
 
 class BuildAlreadyNumbered extends Error {}
 
@@ -218,8 +213,7 @@ export class BuildsService implements BeforeApplicationShutdown {
 
     const deletionPromise = (async () => {
       this.logger.debug(`Starting to delete old builds for project ${projectId}, keeping ${keepBuilds} builds.`);
-      const graceMinutes = retentionGraceMinutes();
-      const onlyIfIdleSince = graceMinutes > 0 ? new Date(Date.now() - graceMinutes * 60_000) : undefined;
+      const onlyIfIdleSince = new Date(Date.now() - RETENTION_GRACE_MS);
       const oldBuilds = await this.prismaService.build.findMany({
         where: { projectId, id: { not: keepBuildId } },
         orderBy: BUILD_ORDER,

@@ -188,32 +188,9 @@ describe('AWSS3Service', () => {
 
   describe('constructor', () => {
     it('creates one S3 client with the default credential chain and request timeouts', () => {
-      delete process.env.S3_CONNECTION_TIMEOUT_MS;
-      delete process.env.S3_REQUEST_TIMEOUT_MS;
-
       new AWSS3Service();
 
       expect(S3Client).toHaveBeenCalledTimes(1);
-      expect(S3Client).toHaveBeenCalledWith(defaultTimeouts);
-    });
-
-    it('reads the timeouts from S3_CONNECTION_TIMEOUT_MS and S3_REQUEST_TIMEOUT_MS', () => {
-      process.env.S3_CONNECTION_TIMEOUT_MS = '2000';
-      process.env.S3_REQUEST_TIMEOUT_MS = '1000';
-
-      new AWSS3Service();
-
-      expect(S3Client).toHaveBeenCalledWith({
-        requestHandler: { connectionTimeout: 2000, requestTimeout: 1000, throwOnRequestTimeout: true },
-      });
-    });
-
-    it.each(['abc', '', '0', '-5'])('falls back to the default timeout for %p', (value) => {
-      process.env.S3_CONNECTION_TIMEOUT_MS = value;
-      process.env.S3_REQUEST_TIMEOUT_MS = value;
-
-      new AWSS3Service();
-
       expect(S3Client).toHaveBeenCalledWith(defaultTimeouts);
     });
 

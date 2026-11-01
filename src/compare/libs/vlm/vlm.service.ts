@@ -35,7 +35,7 @@ export const DEFAULT_CONFIG: OllamaVlmConfig = {
 export class VlmService implements ImageComparator {
   private readonly logger: Logger = new Logger(VlmService.name);
   readonly appliesBlurAmplitudeFilter = true;
-  private readonly limiter = new ConcurrencyLimiter(Math.max(1, Number(process.env.VLM_CONCURRENCY) || 4));
+  private readonly limiter = new ConcurrencyLimiter(4);
 
   constructor(
     private readonly staticService: StaticService,

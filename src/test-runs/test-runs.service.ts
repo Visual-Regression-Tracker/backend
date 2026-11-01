@@ -1,13 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  forwardRef,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConflictException, forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CreateTestRequestDto } from './dto/create-test-request.dto';
 import { IgnoreAreaDto } from './dto/ignore-area.dto';
 import { StaticService } from '../static/static.service';
@@ -41,8 +32,7 @@ export class TestRunsService {
     private prismaService: PrismaService,
     private staticService: StaticService,
     private compareService: CompareService,
-    private eventsGateway: EventsGateway,
-    private configService: ConfigService
+    private eventsGateway: EventsGateway
   ) {}
 
   async findMany(buildId: string): Promise<TestRunDto[]> {
@@ -87,7 +77,7 @@ export class TestRunsService {
       throw new NotFoundException(`Build not found: ${createTestRequestDto.buildId}`);
     }
     if (build.projectId !== createTestRequestDto.projectId) {
-      this.rejectForeignBuild(createTestRequestDto);
+      this.warnForeignBuild(createTestRequestDto);
     }
     this.compareService.getComparator(project.imageComparison);
 
@@ -157,12 +147,8 @@ export class TestRunsService {
     );
   }
 
-  private rejectForeignBuild({ buildId, projectId }: CreateTestRequestDto): void {
-    const message = `Build ${buildId} does not belong to project ${projectId}`;
-    if (this.configService.get<string>('STRICT_BUILD_PROJECT_CHECK', 'false').toLowerCase() === 'true') {
-      throw new BadRequestException(message);
-    }
-    this.logger.warn(message);
+  private warnForeignBuild({ buildId, projectId }: CreateTestRequestDto): void {
+    this.logger.warn(`Build ${buildId} does not belong to project ${projectId}`);
   }
 
   async approve(id: string, merge = false, autoApprove = false, userId?: string): Promise<TestRun> {

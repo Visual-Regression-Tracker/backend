@@ -21,16 +21,9 @@ type LDAPConfig = {
   attributeFirstName: string;
   attributeLastName: string;
   tlsNoVerify: boolean;
-  timeoutMs: number;
-  connectTimeoutMs: number;
 };
 
 const invalidCredentials = () => new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST);
-
-const positiveInt = (value: unknown, fallback: number): number => {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-};
 
 export class LdapUsersService implements Users {
   readonly allowsRegistration = false;
@@ -52,8 +45,6 @@ export class LdapUsersService implements Users {
       attributeFirstName: this.configService.getOrThrow<string>('LDAP_ATTRIBUTE_FIRST_NAME'),
       attributeLastName: this.configService.getOrThrow<string>('LDAP_ATTRIBUTE_LAST_NAME'),
       tlsNoVerify: this.configService.get<string>('LDAP_TLS_NO_VERIFY', 'false').toLowerCase() === 'true',
-      timeoutMs: positiveInt(this.configService.get('LDAP_TIMEOUT_MS'), 10_000),
-      connectTimeoutMs: positiveInt(this.configService.get('LDAP_CONNECT_TIMEOUT_MS'), 5_000),
     };
   }
 
@@ -61,8 +52,8 @@ export class LdapUsersService implements Users {
   private createClient(): LdapClient {
     return new LdapClient({
       url: this.ldapConfig.url,
-      timeout: this.ldapConfig.timeoutMs,
-      connectTimeout: this.ldapConfig.connectTimeoutMs,
+      timeout: 10_000,
+      connectTimeout: 5_000,
       tlsOptions: { rejectUnauthorized: !this.ldapConfig.tlsNoVerify },
     });
   }

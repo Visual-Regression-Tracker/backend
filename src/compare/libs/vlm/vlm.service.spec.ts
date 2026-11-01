@@ -427,12 +427,7 @@ describe('VlmService', () => {
   });
 
   describe('model concurrency', () => {
-    afterEach(() => {
-      delete process.env.VLM_CONCURRENCY;
-    });
-
-    it('asks the model at most VLM_CONCURRENCY times at once', async () => {
-      process.env.VLM_CONCURRENCY = '1';
+    it('asks the model at most four times at once', async () => {
       const gates: { resolve: (value: { content: string }) => void }[] = [];
       const ollama = jest.fn().mockImplementation(
         () =>
@@ -446,27 +441,16 @@ describe('VlmService', () => {
       });
       const answer = reply(true, 'ok');
 
-      const first = service.getDiff(input, DEFAULT_CONFIG);
-      const second = service.getDiff(input, DEFAULT_CONFIG);
+      const diffs = [1, 2, 3, 4, 5].map(() => service.getDiff(input, DEFAULT_CONFIG));
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(ollama).toHaveBeenCalledTimes(1);
+      expect(ollama).toHaveBeenCalledTimes(4);
 
       gates[0].resolve(answer);
-      await first;
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(ollama).toHaveBeenCalledTimes(2);
+      expect(ollama).toHaveBeenCalledTimes(5);
 
-      gates[1].resolve(answer);
-      await second;
-    });
-
-    it('falls back to the default when VLM_CONCURRENCY is zero', async () => {
-      process.env.VLM_CONCURRENCY = '0';
-      const { service } = await setup({ ollama: modelSaying(true) });
-
-      const result = await service.getDiff(input, DEFAULT_CONFIG);
-
-      expect(result.status).toBe(TestStatus.ok);
+      gates.slice(1).forEach((gate) => gate.resolve(answer));
+      await Promise.all(diffs);
     });
   });
 

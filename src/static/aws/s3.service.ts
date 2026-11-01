@@ -10,11 +10,8 @@ import {
 import { Readable } from 'stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { generateNewImageName } from '../utils';
-import { positiveNumber } from '../../utils/env';
 
 export const URL_WINDOW_SECONDS = 3600;
-
-const msFromEnv = (name: string, fallback: number): number => positiveNumber(process.env[name], fallback);
 
 export class AWSS3Service implements Static {
   private readonly logger: Logger = new Logger(AWSS3Service.name);
@@ -25,8 +22,8 @@ export class AWSS3Service implements Static {
   constructor() {
     this.s3Client = new S3Client({
       requestHandler: {
-        connectionTimeout: msFromEnv('S3_CONNECTION_TIMEOUT_MS', 5_000),
-        requestTimeout: msFromEnv('S3_REQUEST_TIMEOUT_MS', 60_000),
+        connectionTimeout: 5_000,
+        requestTimeout: 60_000,
         throwOnRequestTimeout: true,
       },
     });

@@ -49,11 +49,9 @@ describe('LdapUsersService', () => {
     lastAttr: 'Roe',
   };
 
-  const createService = (tlsNoVerify = 'false', overrides: Record<string, string> = {}) => {
+  const createService = (tlsNoVerify = 'false') => {
     const configService = {
-      get: jest.fn((key: string, defaultValue: string) =>
-        key === 'LDAP_TLS_NO_VERIFY' ? tlsNoVerify : (overrides[key] ?? defaultValue)
-      ),
+      get: jest.fn((key: string, defaultValue: string) => (key === 'LDAP_TLS_NO_VERIFY' ? tlsNoVerify : defaultValue)),
       getOrThrow: jest.fn((key: string) => config[key]),
     };
     return new LdapUsersService(
@@ -111,22 +109,6 @@ describe('LdapUsersService', () => {
       2,
       expect.objectContaining({ url: 'ldaps://ldap.example.com', timeout: 10000, connectTimeout: 5000 })
     );
-  });
-
-  it('takes the timeouts from LDAP_TIMEOUT_MS and LDAP_CONNECT_TIMEOUT_MS', async () => {
-    found();
-
-    await login(createService('false', { LDAP_TIMEOUT_MS: '2500', LDAP_CONNECT_TIMEOUT_MS: '700' }));
-
-    expect(LdapClient).toHaveBeenCalledWith(expect.objectContaining({ timeout: 2500, connectTimeout: 700 }));
-  });
-
-  it.each(['0', '-5', 'abc', '1.5', ''])('falls back to the default timeouts for %j', async (value) => {
-    found();
-
-    await login(createService('false', { LDAP_TIMEOUT_MS: value, LDAP_CONNECT_TIMEOUT_MS: value }));
-
-    expect(LdapClient).toHaveBeenCalledWith(expect.objectContaining({ timeout: 10000, connectTimeout: 5000 }));
   });
 
   it('never changes a password', async () => {

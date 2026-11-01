@@ -334,19 +334,18 @@ describe('Builds API (e2e)', () => {
   });
 
   describe('POST /builds retention (maxBuildAllowed)', () => {
-    beforeAll(() => {
-      process.env.BUILD_RETENTION_GRACE_MINUTES = '0';
-    });
-
-    afterAll(() => {
-      delete process.env.BUILD_RETENTION_GRACE_MINUTES;
-    });
+    const idleForTwoHours = async () => {
+      const then = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      await prisma.$executeRaw`UPDATE "Build" SET "updatedAt" = ${then} WHERE "projectId" = ${project.id}`;
+      await prisma.testRun.updateMany({ where: { build: { projectId: project.id } }, data: { createdAt: then } });
+    };
 
     it('keeps at most maxBuildAllowed builds and removes the files of the dropped ones', async () => {
       await prisma.project.update({ where: { id: project.id }, data: { maxBuildAllowed: 2 } });
       const oldest = (await createBuild()).body;
       const run = await postRun({ ...oldest, projectId: project.id } as Build, WHITE);
       await createBuild();
+      await idleForTwoHours();
 
       const newest = (await createBuild()).body;
 
@@ -362,6 +361,7 @@ describe('Builds API (e2e)', () => {
 
       await createBuild();
       await createBuild();
+      await idleForTwoHours();
       const newest = (await createBuild()).body;
 
       expect(await listOrder()).toEqual([newest.id]);
@@ -372,6 +372,7 @@ describe('Builds API (e2e)', () => {
       const joinShared = () => createBuild('shared');
       const shared = (await joinShared()).body;
       const newer = (await createBuild()).body;
+      await idleForTwoHours();
 
       const joined = (await joinShared()).body;
 

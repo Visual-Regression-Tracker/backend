@@ -88,13 +88,11 @@ describe('DiffWorkerPool with worker threads', () => {
   const createPool = ({
     workers = '1',
     queueLimit,
-    jobTimeout,
     maxHeap,
-  }: { workers?: string; queueLimit?: string; jobTimeout?: string; maxHeap?: string } = {}) => {
+  }: { workers?: string; queueLimit?: string; maxHeap?: string } = {}) => {
     const env = {
       DIFF_WORKER_MAX_HEAP_MB: maxHeap,
       DIFF_WORKERS_COUNT: workers,
-      DIFF_JOB_TIMEOUT_MS: jobTimeout,
       DIFF_QUEUE_LIMIT: queueLimit,
     };
     for (const [name, value] of Object.entries(env)) {
@@ -567,29 +565,29 @@ describe('DiffWorkerPool with worker threads', () => {
       jest.useRealTimers();
     });
 
-    it('rejects a job that runs longer than DIFF_JOB_TIMEOUT_MS and replaces its worker', async () => {
-      createPool({ jobTimeout: '1000' });
+    it('rejects a job that runs longer than 120 s and replaces its worker', async () => {
+      createPool();
 
       const hung = settle(pool.run(job(1)));
       ready(mockWorkers[0]);
-      jest.advanceTimersByTime(1000);
+      jest.advanceTimersByTime(120_000);
 
       expect((await hung).error).toBeInstanceOf(ImageDiffJobTimeoutError);
-      expect((await hung).error?.message).toBe('Image diff job timed out after 1000 ms');
+      expect((await hung).error?.message).toBe('Image diff job timed out after 120000 ms');
       expect(mockWorkers[0].terminate).toHaveBeenCalledTimes(1);
       expect(mockWorkers).toHaveLength(2);
-      expect(loggerErrorSpy).toHaveBeenCalledWith('Image diff job ran over 1000 ms, replacing its worker');
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Image diff job ran over 120000 ms, replacing its worker');
 
       void settle(pool.run(job(2)));
       expect(mockWorkers[1].postMessage).toHaveBeenCalledWith(job(2));
     });
 
     it('does not time out a job answered in time', async () => {
-      createPool({ jobTimeout: '1000' });
+      createPool();
 
       const result = pool.run(job(1));
       ready(mockWorkers[0]);
-      jest.advanceTimersByTime(999);
+      jest.advanceTimersByTime(119_999);
       mockWorkers[0].emit('message', output(1));
       jest.advanceTimersByTime(5000);
 
@@ -598,43 +596,11 @@ describe('DiffWorkerPool with worker threads', () => {
       expect(mockWorkers).toHaveLength(1);
     });
 
-    it('defaults to 120 s', async () => {
+    it('ignores the exit of the worker it terminated', async () => {
       createPool();
 
-      const result = settle(pool.run(job(1)));
-      jest.advanceTimersByTime(119_999);
-      expect(mockWorkers[0].terminate).not.toHaveBeenCalled();
-      jest.advanceTimersByTime(1);
-
-      expect((await result).error).toBeInstanceOf(ImageDiffJobTimeoutError);
-    });
-
-    it.each([
-      ['turns off with 0', '0'],
-      ['falls back to the default for garbage', 'abc'],
-      ['falls back to the default for a negative number', '-5'],
-      ['falls back to the default for an empty value', ''],
-    ])('%s', async (title, jobTimeout) => {
-      createPool({ jobTimeout });
-
-      const result = settle(pool.run(job(1)));
-      jest.advanceTimersByTime(600_000);
-
-      if (jobTimeout === '0') {
-        expect(mockWorkers[0].terminate).not.toHaveBeenCalled();
-        mockWorkers[0].emit('message', output(1));
-        expect((await result).value).toEqual(output(1));
-      } else {
-        expect((await result).error).toBeInstanceOf(ImageDiffJobTimeoutError);
-        expect((await result).error?.message).toBe('Image diff job timed out after 120000 ms');
-      }
-    });
-
-    it('ignores the exit of the worker it terminated', async () => {
-      createPool({ jobTimeout: '1000' });
-
       const hung = settle(pool.run(job(1)));
-      jest.advanceTimersByTime(1000);
+      jest.advanceTimersByTime(120_000);
       await hung;
       mockWorkers[0].emit('exit', 1);
       mockWorkers[0].emit('error', new Error('terminated'));
@@ -643,11 +609,11 @@ describe('DiffWorkerPool with worker threads', () => {
     });
 
     it('does not retry the timed-out job and does not count it as a load failure', async () => {
-      createPool({ jobTimeout: '1000' });
+      createPool();
 
       for (const id of [1, 2, 3]) {
         const hung = settle(pool.run(job(id)));
-        jest.advanceTimersByTime(1000);
+        jest.advanceTimersByTime(120_000);
         expect((await hung).error).toBeInstanceOf(ImageDiffJobTimeoutError);
       }
 
@@ -657,7 +623,7 @@ describe('DiffWorkerPool with worker threads', () => {
     });
 
     it('does not spawn a replacement for a pool that is shut down while the job runs', async () => {
-      createPool({ jobTimeout: '1000' });
+      createPool();
 
       const pending = settle(pool.run(job(1)));
       await pool.onApplicationShutdown();

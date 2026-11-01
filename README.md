@@ -50,16 +50,12 @@ lines in `.env` (section `# optional`) show the same variables.
 | `BODY_PARSER_JSON_LIMIT` | body-parser default | Maximum JSON request body size, e.g. `5mb`. |
 | `JWT_SECRET` | none, required | Key that signs login tokens; startup fails when it is unset. Public sample values (`jwtPrivateKey`, the one in `.env`) log a warning. Generate one with `openssl rand -hex 32`. |
 | `JWT_LIFE_TIME` | `1d` | Token lifetime as a timespan such as `1d`, `12h` or `3600s`. An invalid value falls back to `1d` with a warning. |
-| `JWT_LEGACY_EMAIL_TOKENS` | `true` | Accept tokens issued before the `sub` claim existed (they carry only the email). Set `false` once those tokens have expired. |
 | `SERVER_TIMEOUT` | Node.js default | HTTP `server.timeout`, in milliseconds. |
 | `SERVER_HEADERS_TIMEOUT` | Node.js default | HTTP `headersTimeout`, in milliseconds. |
 | `SERVER_KEEP_ALIVE_TIMEOUT` | Node.js default | HTTP `keepAliveTimeout`, in milliseconds. |
-| `BUILD_RETENTION_GRACE_MINUTES` | `60` | Automatic build pruning keeps builds active within this many minutes. `0` turns that protection off. |
-| `STRICT_BUILD_PROJECT_CHECK` | `false` | `true` (case-insensitive) makes `POST /test-runs` reject a build that belongs to another project with `400`. By default such a request is accepted with a warning, because older clients may send such pairs. |
 | `LOG_LEVEL` | all levels | Comma-separated Nest log levels to keep, e.g. `log,warn,error,fatal`. |
 | `HTTPS_KEY_PATH` | `./secrets/ssl.key` | TLS private key. HTTPS is used only when both files exist; otherwise the API serves HTTP. |
 | `HTTPS_CERT_PATH` | `./secrets/ssl.cert` | TLS certificate. |
-| `VRT_RUN_AS_ROOT` | `false` | Read by `docker-entrypoint.sh`, not by the app. The container drops to the `node` user when the image volume and TLS files allow it; `true` keeps root. |
 
 ### Storage
 
@@ -69,8 +65,6 @@ lines in `.env` (section `# optional`) show the same variables.
 | `AWS_S3_BUCKET_NAME` | none | Bucket for `STATIC_SERVICE=s3`; required then. |
 | `AWS_REGION` | from the AWS SDK | Read by the AWS SDK v3 default chain, not by VRT code. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from the AWS SDK | Same chain. An IAM role or shared AWS config works without them. |
-| `S3_CONNECTION_TIMEOUT_MS` | `5000` | S3 connection timeout, in milliseconds. |
-| `S3_REQUEST_TIMEOUT_MS` | `60000` | S3 request timeout, in milliseconds. A request that exceeds it fails. |
 
 ### Image comparison
 
@@ -80,12 +74,8 @@ lines in `.env` (section `# optional`) show the same variables.
 | `MULTIPART_FILE_SIZE_LIMIT` | `104857600` (100 MiB) | Largest accepted multipart file upload, in bytes. |
 | `DIFF_WORKERS_COUNT` | CPUs minus 1, between 1 and 8 | Number of diff worker threads. |
 | `DIFF_QUEUE_LIMIT` | `256` | Diff jobs allowed to wait for a worker. When the queue is full the API answers `503` with `Retry-After: 5`. |
-| `DIFF_JOB_TIMEOUT_MS` | `120000` | Timeout for one diff job, in milliseconds. `0` turns it off. |
 | `DIFF_WORKER_MAX_HEAP_MB` | `512` | Heap limit of each diff worker, in MB. |
-| `VLM_CONCURRENCY` | `4` | Concurrent VLM requests per API instance (minimum 1). |
 | `OLLAMA_BASE_URL` | none | Ollama server for VLM comparisons; required when the Ollama provider is used. |
-| `OLLAMA_TIMEOUT_MS` | `300000` | Timeout for one Ollama request, in milliseconds. |
-| `GEMINI_TIMEOUT_MS` | `300000` | Timeout for one Gemini request, in milliseconds. The API key comes from the project's VLM settings. |
 | `DINOV2_URL` | none | DINOv2 service for the `dinov2Check` noise filter. With the filter on and this unset, runs go to review. |
 | `DINOV2_TIMEOUT_MS` | `60000` | Timeout for one DINOv2 request, in milliseconds. |
 
@@ -102,8 +92,6 @@ lines in `.env` (section `# optional`) show the same variables.
 | `LDAP_USERS_SEARCH_FILTER` | none | User search filter; `{{email}}` is replaced by the login email. Required when LDAP is enabled. |
 | `LDAP_ATTRIBUTE_MAIL`, `LDAP_ATTRIBUTE_FIRST_NAME`, `LDAP_ATTRIBUTE_LAST_NAME` | none | Attributes that hold the email, first name and last name. Required when LDAP is enabled. |
 | `LDAP_TLS_NO_VERIFY` | `false` | Skip TLS certificate verification for LDAP. Test servers only. |
-| `LDAP_TIMEOUT_MS` | `10000` | LDAP operation timeout, in milliseconds. |
-| `LDAP_CONNECT_TIMEOUT_MS` | `5000` | LDAP connection timeout, in milliseconds. |
 | `OIDC_ENABLED` | `false` | Enables OIDC (SSO) login; see the OIDC section. |
 | `OIDC_ISSUER_URL` | none | Issuer URL of the identity provider. Required when OIDC is enabled. |
 | `OIDC_CLIENT_ID` | none | OIDC client ID. Required when OIDC is enabled. |
@@ -124,7 +112,6 @@ lines in `.env` (section `# optional`) show the same variables.
 | Variable | Default | What it does |
 |---|---|---|
 | `REDIS_URL` | unset, in-memory adapter | Redis for socket.io fan-out between instances (see Scaling to multiple instances). |
-| `REDIS_CONNECT_TIMEOUT_MS` | `30000` | How long the first Redis connection may take before the API exits instead of waiting. |
 
 ### Seed
 
@@ -141,7 +128,7 @@ Read by `prisma db seed`.
 - **Redis** runs several API instances behind one socket.io fan-out. Set `REDIS_URL`; see [Scaling to multiple instances](#scaling-to-multiple-instances-real-time-updates).
 - **DINOv2** serves the `dinov2Check` rendering-noise filter (see `dinov2/README.md`). Start it with `docker compose --profile dinov2 up -d`. The service listens on port 8000 inside the compose network only, so the API container uses `DINOV2_URL=http://dinov2:8000`.
 - **Ollama** runs the VLM comparison locally. Set `OLLAMA_BASE_URL`; from the API container, which is started by compose, the host is `http://host.docker.internal:11434`.
-- **Gemini** runs the VLM comparison in the cloud. Its API key is set in the project's VLM settings, not in the environment; `GEMINI_TIMEOUT_MS` sets the request timeout.
+- **Gemini** runs the VLM comparison in the cloud. Its API key is set in the project's VLM settings, not in the environment.
 
 ## Scaling to multiple instances (real-time updates)
 

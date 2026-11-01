@@ -39,7 +39,7 @@ export class ImageDiffJobTimeoutError extends Error {
   }
 }
 
-const DEFAULT_JOB_TIMEOUT_MS = 120_000;
+const JOB_TIMEOUT_MS = 120_000;
 const DEFAULT_WORKER_MAX_HEAP_MB = 512;
 
 interface Job {
@@ -58,7 +58,6 @@ export class DiffWorkerPool implements OnApplicationShutdown {
     Math.min(Number(process.env.DIFF_WORKERS_COUNT) || availableParallelism() - 1, 8)
   );
   private readonly queueLimit = Number(process.env.DIFF_QUEUE_LIMIT) || 256;
-  private readonly jobTimeoutMs = nonNegativeNumber(process.env.DIFF_JOB_TIMEOUT_MS, DEFAULT_JOB_TIMEOUT_MS);
   private readonly maxHeapMb = nonNegativeNumber(process.env.DIFF_WORKER_MAX_HEAP_MB, DEFAULT_WORKER_MAX_HEAP_MB);
   private inline = !existsSync(WORKER_FILE);
   private workers: Worker[] = [];
@@ -205,18 +204,16 @@ export class DiffWorkerPool implements OnApplicationShutdown {
       const job = this.queue.shift()!;
       this.inFlight.set(worker, job);
       worker.postMessage(job.input);
-      if (this.jobTimeoutMs > 0) {
-        job.timer = setTimeout(() => this.timeOut(worker, job), this.jobTimeoutMs);
-        job.timer.unref();
-      }
+      job.timer = setTimeout(() => this.timeOut(worker, job), JOB_TIMEOUT_MS);
+      job.timer.unref();
     }
   }
 
   private timeOut(worker: Worker, job: Job): void {
     if (this.inFlight.get(worker) !== job) return;
     this.forget(worker);
-    this.logger.error(`Image diff job ran over ${this.jobTimeoutMs} ms, replacing its worker`);
-    job.reject(new ImageDiffJobTimeoutError(this.jobTimeoutMs));
+    this.logger.error(`Image diff job ran over ${JOB_TIMEOUT_MS} ms, replacing its worker`);
+    job.reject(new ImageDiffJobTimeoutError(JOB_TIMEOUT_MS));
     worker.terminate().catch(() => undefined);
     this.spawn();
     this.dispatch();
