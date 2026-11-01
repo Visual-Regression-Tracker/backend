@@ -1,18 +1,21 @@
 import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Build, TestStatus } from '@prisma/client';
-import { Server } from 'socket.io';
+import { ConfigService } from '@nestjs/config';
+import { Server, Socket } from 'socket.io';
 import { EventsGateway } from './events.gateway';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SocketAuthService } from '../../auth/socket-auth.service';
 import { BuildDto } from '../../builds/dto/build.dto';
 import { TestRunDto } from '../../test-runs/dto/testRun.dto';
 import { generateTestRun, TEST_BUILD } from '../../_data_';
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
-const initGateway = async () => {
+const initGateway = async (env: Record<string, string> = {}) => {
   const buildFindManyMock = jest.fn().mockResolvedValue([]);
   const testRunGroupByMock = jest.fn().mockResolvedValue([]);
+  const authMiddleware = jest.fn();
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       EventsGateway,
@@ -23,13 +26,19 @@ const initGateway = async () => {
           testRun: { groupBy: testRunGroupByMock },
         },
       },
+      { provide: SocketAuthService, useValue: { middleware: () => authMiddleware } },
+      { provide: ConfigService, useValue: { get: (key: string) => env[key] } },
     ],
   }).compile();
 
   const gateway = module.get<EventsGateway>(EventsGateway);
   const emitMock = jest.fn();
-  gateway.server = { emit: emitMock } as unknown as Server;
-  return { gateway, emitMock, buildFindManyMock, testRunGroupByMock };
+  const roomEmitMock = jest.fn();
+  const toMock = jest.fn((room: string) => ({
+    emit: (event: string, payload: unknown) => roomEmitMock(room, event, payload),
+  }));
+  gateway.server = { emit: emitMock, to: toMock } as unknown as Server;
+  return { gateway, emitMock, roomEmitMock, toMock, buildFindManyMock, testRunGroupByMock, authMiddleware };
 };
 
 const emitsOf = (emitMock: jest.Mock, event: string) =>
@@ -360,6 +369,115 @@ describe('EventsGateway', () => {
       await flushPromises();
 
       expect(emitsOf(emitMock, 'build_updated')).toEqual([]);
+    });
+  });
+  describe('connections', () => {
+    it('checks the token of every connection with the socket auth middleware', async () => {
+      const { gateway, authMiddleware } = await initGateway();
+      const use = jest.fn();
+
+      gateway.afterInit({ use } as unknown as Server);
+
+      expect(use).toHaveBeenCalledWith(authMiddleware);
+    });
+  });
+
+  describe('rooms', () => {
+    const projectId = '2f3c5c8e-3b5e-4b1a-9c3e-1f2a3b4c5d6e';
+    const buildId = '7a8b9c0d-1e2f-4a3b-8c5d-6e7f8a9b0c1d';
+    const socketMock = () => ({ join: jest.fn(), leave: jest.fn() });
+
+    it('join puts the socket into the rooms of the project and the build', async () => {
+      const { gateway } = await initGateway();
+      const socket = socketMock();
+
+      await gateway.join(socket as unknown as Socket, { projectId, buildId });
+
+      expect(socket.join).toHaveBeenCalledWith([`project:${projectId}`, `build:${buildId}`]);
+    });
+
+    it('leave takes the socket out of the rooms of the project and the build', async () => {
+      const { gateway } = await initGateway();
+      const socket = socketMock();
+
+      await gateway.leave(socket as unknown as Socket, { projectId, buildId });
+
+      expect(socket.leave.mock.calls).toEqual([[`project:${projectId}`], [`build:${buildId}`]]);
+    });
+
+    it.each([
+      ['only a project', { projectId }, [`project:${projectId}`]],
+      ['only a build', { buildId }, [`build:${buildId}`]],
+      ['ids that are not uuids', { projectId: 'x', buildId: 42 }, []],
+      ['no body', undefined, []],
+      ['a body that is not an object', 'abc', []],
+    ])('join with %s', async (_case, body, rooms) => {
+      const { gateway } = await initGateway();
+      const socket = socketMock();
+
+      await gateway.join(socket as unknown as Socket, body);
+
+      expect(socket.join).toHaveBeenCalledWith(rooms);
+    });
+
+    it('sends every event to all clients and to no room while WS_BROADCAST is on (the default)', async () => {
+      const { gateway, emitMock, toMock } = await initGateway();
+
+      gateway.buildCreated(new BuildDto(TEST_BUILD));
+      gateway.testRunCreated(testRunA);
+
+      expect(emitMock).toHaveBeenCalledTimes(2);
+      expect(toMock).not.toHaveBeenCalled();
+    });
+
+    describe('with WS_BROADCAST=false', () => {
+      const env = { WS_BROADCAST: 'false' };
+
+      it.each([
+        ['buildCreated', 'build_created'],
+        ['buildDeleted', 'build_deleted'],
+      ] as const)('%s sends %s to the project room only', async (method, event) => {
+        const { gateway, emitMock, roomEmitMock } = await initGateway(env);
+        const build = new BuildDto(TEST_BUILD);
+
+        gateway[method](build);
+
+        expect(emitMock).not.toHaveBeenCalled();
+        expect(roomEmitMock.mock.calls).toEqual([[`project:${TEST_BUILD.projectId}`, event, build]]);
+      });
+
+      it('sends a batch of test runs to the room of each build, with the runs of that build', async () => {
+        const { gateway, emitMock, roomEmitMock } = await initGateway(env);
+
+        gateway.testRunUpdated(testRunA);
+        gateway.testRunUpdated(testRunB);
+        gateway.testRunUpdated(testRunC);
+        jest.advanceTimersByTime(1500);
+
+        expect(emitMock).not.toHaveBeenCalled();
+        expect(roomEmitMock.mock.calls.filter(([, event]) => event === 'testRun_updated')).toEqual([
+          ['build:buildX', 'testRun_updated', [new TestRunDto(testRunA)]],
+          ['build:buildX', 'testRun_updated', [new TestRunDto(testRunB)]],
+          ['build:buildY', 'testRun_updated', [new TestRunDto(testRunC)]],
+        ]);
+      });
+
+      it('sends build_updated to the room of each project, with the builds of that project', async () => {
+        const one: Build = { ...TEST_BUILD, id: 'one', projectId: 'projectP' };
+        const two: Build = { ...TEST_BUILD, id: 'two', projectId: 'projectQ' };
+        const three: Build = { ...TEST_BUILD, id: 'three', projectId: 'projectP' };
+        const { gateway, emitMock, roomEmitMock, buildFindManyMock } = await initGateway(env);
+        buildFindManyMock.mockResolvedValue([one, two, three]);
+
+        gateway.buildUpdated('one');
+        await flushPromises();
+
+        expect(emitMock).not.toHaveBeenCalled();
+        expect(roomEmitMock.mock.calls).toEqual([
+          ['project:projectP', 'build_updated', [new BuildDto(one), new BuildDto(three)]],
+          ['project:projectQ', 'build_updated', [new BuildDto(two)]],
+        ]);
+      });
     });
   });
 });

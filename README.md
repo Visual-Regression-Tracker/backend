@@ -84,6 +84,7 @@ lines in `.env` (section `# optional`) show the same variables.
 | Variable | Default | What it does |
 |---|---|---|
 | `REGISTRATION_ENABLED` | `true` | `false` (also `0`, `no`, `off`) disables self-registration. |
+| `WS_AUTH_REQUIRED` | `false` | `true` refuses socket.io connections without a valid JWT in `auth.token`. With `false`, a sent token is still checked, and a connection without one is let in with a warning. |
 | `LDAP_ENABLED` | `false` | Enables LDAP login. When OIDC is enabled too, OIDC is used. |
 | `LDAP_URL` | none | LDAP server URL, e.g. `ldaps://ldap.example.com:636/`. Required when LDAP is enabled. |
 | `LDAP_BIND_USER` | none | DN of the service account used for the user search. Required when LDAP is enabled. |
@@ -112,6 +113,7 @@ lines in `.env` (section `# optional`) show the same variables.
 | Variable | Default | What it does |
 |---|---|---|
 | `REDIS_URL` | unset, in-memory adapter | Redis for socket.io fan-out between instances (see Scaling to multiple instances). |
+| `WS_BROADCAST` | `true` | Sends every socket.io event to every client. `false` sends build events only to clients that sent `join` with the `projectId`, and test run events only to those that joined the `buildId`. |
 
 ### Seed
 
