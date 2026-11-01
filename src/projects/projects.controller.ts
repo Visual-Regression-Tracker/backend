@@ -10,6 +10,7 @@ import {
   Put,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -28,9 +29,11 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
 import { CurrentUser } from '../shared/current-user.decorator';
+import { MaskApiKeyInterceptor } from './api-key-mask';
 
 @Controller('projects')
 @ApiTags('projects')
+@UseInterceptors(MaskApiKeyInterceptor)
 export class ProjectsController {
   constructor(private projectsService: ProjectsService) {}
 

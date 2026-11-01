@@ -295,9 +295,12 @@ describe('TestRuns review API (e2e)', () => {
 
       const res = await requestWithAuth(app, 'post', `/test-runs/approve?merge=false`, user.token)
         .send([run.id])
-        .expect(409);
+        .expect(200);
 
-      expect(res.body.message).toBe('No test variation found. Re-create test run');
+      expect(res.body).toEqual({
+        succeeded: [],
+        failed: [{ id: run.id, message: 'No test variation found. Re-create test run' }],
+      });
       expect((await runOf(run.id)).status).toBe(TestStatus.new);
     });
 
@@ -310,8 +313,19 @@ describe('TestRuns review API (e2e)', () => {
       expect((await runOf(run.id)).status).toBe(TestStatus.new);
     });
 
-    it('404 for an unknown id', async () => {
-      await requestWithAuth(app, 'post', `/test-runs/approve?merge=false`, user.token).send([randomUUID()]).expect(404);
+    it('approves the ids it can and reports each unknown id as sent', async () => {
+      const run = await postRun(await newBuild(), WHITE);
+      const unknown = randomUUID().toUpperCase();
+
+      const res = await requestWithAuth(app, 'post', `/test-runs/approve?merge=false`, user.token)
+        .send([unknown, run.id])
+        .expect(200);
+
+      expect(res.body).toEqual({
+        succeeded: [run.id],
+        failed: [{ id: unknown, message: `Test run not found: ${unknown}` }],
+      });
+      expect((await runOf(run.id)).status).toBe(TestStatus.approved);
     });
   });
 
@@ -321,7 +335,9 @@ describe('TestRuns review API (e2e)', () => {
       const a = await postRun(build, WHITE, { name: 'A' });
       const b = await postRun(build, WHITE, { name: 'B' });
 
-      await requestWithAuth(app, 'post', `/test-runs/reject`, user.token).send([a.id, b.id]).expect(201);
+      const res = await requestWithAuth(app, 'post', `/test-runs/reject`, user.token).send([a.id, b.id]).expect(200);
+
+      expect(res.body).toEqual({ succeeded: [a.id, b.id], failed: [] });
 
       const runs = await prisma.testRun.findMany({ where: { buildId: build.id } });
       expect(runs.map((run) => run.status)).toEqual([TestStatus.failed, TestStatus.failed]);
@@ -356,7 +372,7 @@ describe('TestRuns review API (e2e)', () => {
 
     it('reject, then revert: the status is restored', async () => {
       const run = await runAgainstBaseline(await newBuild(), WHITE, pngBuffer([redAt(0, 0)]));
-      await requestWithAuth(app, 'post', '/test-runs/reject', user.token).send([run.id]).expect(201);
+      await requestWithAuth(app, 'post', '/test-runs/reject', user.token).send([run.id]).expect(200);
       expect((await runOf(run.id)).status).toBe(TestStatus.failed);
 
       await revert([run.id]).expect(204);
@@ -447,15 +463,19 @@ describe('TestRuns review API (e2e)', () => {
       expect(files.every((name) => imageExists(name))).toBe(true);
       const baselineName = stored.baselineName;
 
-      await requestWithAuth(app, 'post', `/test-runs/delete`, user.token).send([run.id]).expect(201);
+      await requestWithAuth(app, 'post', `/test-runs/delete`, user.token).send([run.id]).expect(200);
 
       expect(await prisma.testRun.findUnique({ where: { id: run.id } })).toBeNull();
       expect(files.some((name) => imageExists(name))).toBe(false);
       expect(imageExists(baselineName)).toBe(true);
     });
 
-    it('ignores ids that do not exist', async () => {
-      await requestWithAuth(app, 'post', `/test-runs/delete`, user.token).send([randomUUID()]).expect(201);
+    it('counts an id that does not exist as deleted', async () => {
+      const id = randomUUID();
+
+      const res = await requestWithAuth(app, 'post', `/test-runs/delete`, user.token).send([id]).expect(200);
+
+      expect(res.body).toEqual({ succeeded: [id], failed: [] });
     });
   });
 
