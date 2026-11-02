@@ -81,14 +81,14 @@ describe('SocketAuthService', () => {
     });
   });
 
-  describe.each([undefined, 'false'])('with WS_AUTH_REQUIRED %p', (flag) => {
+  describe('with WS_AUTH_REQUIRED false', () => {
     it.each([
       ['no auth', undefined],
       ['no token', {}],
       ['a null token', { token: null }],
       ['an empty token', { token: '' }],
     ])('lets in a socket with %s and warns', async (_case, auth) => {
-      const { connect } = setup(flag);
+      const { connect } = setup('false');
 
       await expect(connect(auth)).resolves.toBeUndefined();
 
@@ -96,7 +96,7 @@ describe('SocketAuthService', () => {
     });
   });
 
-  describe.each(['true'])('with WS_AUTH_REQUIRED %p', (flag) => {
+  describe.each([undefined, 'true'])('with WS_AUTH_REQUIRED %p', (flag) => {
     it.each([
       ['no auth', undefined],
       ['no token', {}],

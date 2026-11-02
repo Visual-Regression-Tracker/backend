@@ -110,8 +110,8 @@ describe('global whitelist', () => {
     });
   });
 
-  it('MergeParams keeps its three query parameters', async () => {
-    const body = await run({ projectId: PROJECT_ID, fromBranch: 'a', toBranch: 'b', junk: 'x' }, MergeParams, 'query');
+  it('MergeParams keeps its three body fields', async () => {
+    const body = await run({ projectId: PROJECT_ID, fromBranch: 'a', toBranch: 'b', junk: 'x' }, MergeParams);
     expect(body).toEqual({ projectId: PROJECT_ID, fromBranch: 'a', toBranch: 'b' });
   });
 

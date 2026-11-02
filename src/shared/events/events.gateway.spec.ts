@@ -12,7 +12,7 @@ import { generateTestRun, TEST_BUILD } from '../../_data_';
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
-const initGateway = async (env: Record<string, string> = {}) => {
+const initGateway = async (env: Record<string, string> = { WS_BROADCAST: 'true' }) => {
   const buildFindManyMock = jest.fn().mockResolvedValue([]);
   const testRunGroupByMock = jest.fn().mockResolvedValue([]);
   const authMiddleware = jest.fn();
@@ -421,8 +421,8 @@ describe('EventsGateway', () => {
       expect(socket.join).toHaveBeenCalledWith(rooms);
     });
 
-    it('sends every event to all clients and to no room while WS_BROADCAST is on (the default)', async () => {
-      const { gateway, emitMock, toMock } = await initGateway();
+    it('sends every event to all clients and to no room with WS_BROADCAST=true', async () => {
+      const { gateway, emitMock, toMock } = await initGateway({ WS_BROADCAST: 'true' });
 
       gateway.buildCreated(new BuildDto(TEST_BUILD));
       gateway.testRunCreated(testRunA);
@@ -431,9 +431,10 @@ describe('EventsGateway', () => {
       expect(toMock).not.toHaveBeenCalled();
     });
 
-    describe('with WS_BROADCAST=false', () => {
-      const env = { WS_BROADCAST: 'false' };
-
+    describe.each([
+      ['unset', {}],
+      ['false', { WS_BROADCAST: 'false' }],
+    ])('with WS_BROADCAST %s', (_title, env) => {
       it.each([
         ['buildCreated', 'build_created'],
         ['buildDeleted', 'build_deleted'],

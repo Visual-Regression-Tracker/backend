@@ -67,7 +67,7 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
     private socketAuthService: SocketAuthService,
     configService: ConfigService
   ) {
-    this.broadcast = booleanFlag(configService.get('WS_BROADCAST'), true);
+    this.broadcast = booleanFlag(configService.get('WS_BROADCAST'), false);
   }
 
   afterInit(server: Server): void {
