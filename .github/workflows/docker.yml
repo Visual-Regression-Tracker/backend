@@ -16,66 +16,111 @@ permissions:
   contents: read
 
 jobs:
-  docker:
+  resolve:
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: api
-            context: .
-          - image: migration
-            context: prisma
-          - image: dinov2
-            context: dinov2
-
+    outputs:
+      image: ${{ steps.version.outputs.image }}
+      context: ${{ steps.version.outputs.context }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Resolve version
+      - name: Resolve image and version
         id: version
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
-          PREFIX: ${{ matrix.image }}-v
         run: |
-          if [ "${TAG#"$PREFIX"}" != "$TAG" ]; then
-            {
-              echo "build=true"
-              echo "push=true"
-              echo "version=${TAG#"$PREFIX"}"
-            } >> "$GITHUB_OUTPUT"
-          else
-            echo "Tag $TAG is not a ${{ matrix.image }} release, skipping"
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
+          case "$TAG" in
+            api-v*) image=api context=. ;;
+            migration-v*) image=migration context=prisma ;;
+            dinov2-v*) image=dinov2 context=dinov2 ;;
+            *) echo "::error::$TAG is not an api-v, migration-v or dinov2-v tag"; exit 1 ;;
+          esac
+          {
+            echo "image=$image"
+            echo "context=$context"
+            echo "version=${TAG#"$image"-v}"
+          } >> "$GITHUB_OUTPUT"
 
+  # each platform builds on its own runner: prisma generate crashes under QEMU arm64 emulation
+  build:
+    needs: resolve
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      IMAGE: visualregressiontracker/${{ needs.resolve.outputs.image }}
+
+    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.version.outputs.build == 'true'
         with:
           # a manual run checks out the tag itself, never a branch with the same name
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
           persist-credentials: false
 
-      - name: Set up QEMU
-        if: steps.version.outputs.build == 'true'
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-
       - name: Set up Docker Buildx
-        if: steps.version.outputs.build == 'true'
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to Docker Hub
-        if: steps.version.outputs.push == 'true'
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
-        if: steps.version.outputs.build == 'true'
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: ${{ matrix.context }}
-          platforms: linux/amd64,linux/arm64
-          push: ${{ steps.version.outputs.push == 'true' }}
-          tags: visualregressiontracker/${{ matrix.image }}:${{ steps.version.outputs.version }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          context: ${{ needs.resolve.outputs.context }}
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ needs.resolve.outputs.image }}-${{ runner.arch }}
+          cache-to: type=gha,mode=max,scope=${{ needs.resolve.outputs.image }}-${{ runner.arch }}
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digests-${{ runner.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [resolve, build]
+    runs-on: ubuntu-24.04
+    env:
+      IMAGE: visualregressiontracker/${{ needs.resolve.outputs.image }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digests-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/digests
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag the multi-platform image
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          refs=()
+          for digest in *; do refs+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create -t "$IMAGE:$VERSION" "${refs[@]}"
+          docker buildx imagetools inspect "$IMAGE:$VERSION"
