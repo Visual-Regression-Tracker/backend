@@ -81,4 +81,15 @@ describe('negotiatePreferredSsl', () => {
 
     expect(config.ssl).toEqual({ rejectUnauthorized: false });
   });
+
+  it('fails when the server cannot be reached, so the seed does not run on a guessed TLS setting', async () => {
+    jest
+      .spyOn(Client.prototype, 'connect')
+      .mockRejectedValue(new Error('connect ECONNREFUSED 172.18.0.2:5432') as never);
+    const end = jest.spyOn(Client.prototype, 'end').mockResolvedValue(undefined as never);
+    const config = { connectionString: 'postgresql://db/vrt', ssl: { rejectUnauthorized: false } };
+
+    await expect(negotiatePreferredSsl(config)).rejects.toThrow('ECONNREFUSED');
+    expect(end).toHaveBeenCalled();
+  });
 });
