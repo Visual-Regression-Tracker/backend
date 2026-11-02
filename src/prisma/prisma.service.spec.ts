@@ -235,13 +235,14 @@ describe('negotiatePreferredSsl', () => {
     expect(end).toHaveBeenCalled();
   });
 
-  it('keeps TLS when the connection fails for another reason, left for the real connection to report', async () => {
-    stubClient(() => Promise.reject(new Error('password authentication failed')));
+  it('fails when the server cannot be reached, so TLS is not settled on a guess', async () => {
+    const end = stubClient(() => Promise.reject(new Error('connect ECONNREFUSED 172.18.0.2:5432')));
     const config = preferringConfig();
 
-    await expect(negotiatePreferredSsl(config)).resolves.toBeUndefined();
+    await expect(negotiatePreferredSsl(config)).rejects.toThrow('ECONNREFUSED');
 
     expect(config.ssl).toEqual({ rejectUnauthorized: false });
+    expect(end).toHaveBeenCalled();
   });
 });
 
@@ -275,6 +276,17 @@ describe('PrismaService construction', () => {
     expect(end).toHaveBeenCalled();
     expect(connect).toHaveBeenCalledTimes(1);
     expect((service as unknown as { pgConfig: { ssl: unknown } }).pgConfig.ssl).toBe(false);
+  });
+
+  it('does not connect when the TLS probe cannot reach the database', async () => {
+    jest.spyOn(Client.prototype, 'end').mockResolvedValue(undefined as never);
+    jest.spyOn(Client.prototype, 'connect').mockRejectedValue(new Error('getaddrinfo ENOTFOUND db') as never);
+    process.env.DATABASE_URL = 'postgresql://user:secret@db:5432/vrt';
+    const service = new PrismaService();
+    const connect = jest.spyOn(service, '$connect').mockResolvedValue(undefined);
+
+    await expect(service.onModuleInit()).rejects.toThrow('ENOTFOUND');
+    expect(connect).not.toHaveBeenCalled();
   });
 
   it('does not try TLS first when the URL settles it', async () => {
