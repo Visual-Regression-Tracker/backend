@@ -68,8 +68,8 @@ export class UsersService {
     return this.oidcUsersService.handleCallback(params, checks);
   }
 
-  oidcBuildFrontendRedirect(token?: string | null, error?: string): string {
-    return this.oidcUsersService.buildFrontendRedirect(token, error);
+  oidcBuildFrontendRedirect(token?: string | null): string {
+    return this.oidcUsersService.buildFrontendRedirect(token);
   }
 
   private get oidcUsersService(): OidcUsersService {

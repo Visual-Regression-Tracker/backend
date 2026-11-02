@@ -6,7 +6,7 @@ import { StaticService } from './static.service';
 
 const REDIRECT_MAX_AGE_SECONDS = 3000;
 
-export const IMAGE_NAME_PATTERN = /^[0-9A-Za-z_-]{1,64}\.(screenshot|diff|baseline)\.png$/;
+const IMAGE_NAME_PATTERN = /^[0-9A-Za-z_-]{1,64}\.(screenshot|diff|baseline)\.png$/;
 
 const assertImageName = (fileName: string): void => {
   if (!IMAGE_NAME_PATTERN.test(fileName)) {

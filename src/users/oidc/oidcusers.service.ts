@@ -131,12 +131,9 @@ export class OidcUsersService implements Users {
     return { url, state, codeVerifier };
   }
 
-  buildFrontendRedirect(token?: string | null, error?: string): string {
+  buildFrontendRedirect(token?: string | null): string {
     const base = `${this.appFrontendUrl}/login`;
-    if (token) {
-      return `${base}#token=${encodeURIComponent(token)}`;
-    }
-    return `${base}#error=${encodeURIComponent(error ?? 'oidc_login_failed')}`;
+    return token ? `${base}#token=${encodeURIComponent(token)}` : `${base}#error=oidc_login_failed`;
   }
 
   async handleCallback(

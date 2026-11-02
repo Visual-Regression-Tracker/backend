@@ -128,6 +128,13 @@ describe('Dinov2Service', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('sends a gate it cannot read to review instead of throwing', async () => {
+    const { service } = await init();
+
+    expect(await confirm(service, { width: WIDTH, height: HEIGHT } as typeof gate)).toEqual({ noise: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('does not confirm noise without a service configured', async () => {
     const { service } = await init({ DINOV2_URL: '' });
 

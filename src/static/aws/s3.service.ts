@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { Static } from '../static.interface';
+import { ImageType, Static } from '../static.interface';
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -30,7 +30,7 @@ export class AWSS3Service implements Static {
     this.logger.log('AWS S3 service is being used for file storage.');
   }
 
-  async saveImage(type: 'screenshot' | 'diff' | 'baseline', imageBuffer: Buffer): Promise<string> {
+  async saveImage(type: ImageType, imageBuffer: Buffer): Promise<string> {
     const imageName = generateNewImageName(type);
     try {
       await this.s3Client.send(
@@ -80,7 +80,7 @@ export class AWSS3Service implements Static {
     return error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404;
   }
 
-  async copyImage(type: 'screenshot' | 'diff' | 'baseline', sourceImageName: string): Promise<string> {
+  async copyImage(type: ImageType, sourceImageName: string): Promise<string> {
     const imageName = generateNewImageName(type);
     try {
       await this.s3Client.send(

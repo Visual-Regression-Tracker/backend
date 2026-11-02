@@ -31,6 +31,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ConfigService } from '@nestjs/config';
+import { messageOf } from '../utils/errors';
 
 const OIDC_STATE_COOKIE = 'oidc_state';
 
@@ -100,8 +101,8 @@ export class UsersController {
     try {
       authorization = await this.usersService.oidcGetAuthorizationUrl();
     } catch (e) {
-      this.logger.warn(`OIDC login failed: ${(e as Error)?.message ?? e}`);
-      res.redirect(this.usersService.oidcBuildFrontendRedirect(undefined, 'oidc_login_failed'));
+      this.logger.warn(`OIDC login failed: ${messageOf(e)}`);
+      res.redirect(this.usersService.oidcBuildFrontendRedirect());
       return;
     }
     const { url, state, codeVerifier } = authorization;
@@ -122,7 +123,7 @@ export class UsersController {
       return;
     }
 
-    let target = this.usersService.oidcBuildFrontendRedirect(undefined, 'oidc_login_failed');
+    let target = this.usersService.oidcBuildFrontendRedirect();
     try {
       const [state, codeVerifier] = (readCookie(req, OIDC_STATE_COOKIE) ?? '').split('.');
       if (!state || !codeVerifier) {
@@ -140,7 +141,7 @@ export class UsersController {
       });
       target = this.usersService.oidcBuildFrontendRedirect(token);
     } catch (e) {
-      this.logger.warn(`OIDC callback failed: ${(e as Error)?.message ?? e}`);
+      this.logger.warn(`OIDC callback failed: ${messageOf(e)}`);
     } finally {
       res.clearCookie(OIDC_STATE_COOKIE, { path: '/' });
     }

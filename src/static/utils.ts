@@ -2,12 +2,13 @@ import { UnprocessableEntityException } from '@nestjs/common';
 import { crc32 } from 'zlib';
 import { generateRandomKey } from '../utils/random-key';
 import { nonNegativeNumber } from '../utils/env';
+import type { ImageType } from './static.interface';
 
 export function isHddStaticServiceConfigured() {
   return !process.env.STATIC_SERVICE || process.env.STATIC_SERVICE === 'hdd';
 }
 
-export function generateNewImageName(type: 'screenshot' | 'diff' | 'baseline'): string {
+export function generateNewImageName(type: ImageType): string {
   return `${generateRandomKey()}.${type}.png`;
 }
 

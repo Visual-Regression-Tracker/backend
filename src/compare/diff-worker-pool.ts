@@ -19,7 +19,7 @@ const WORKER_FILE = join(__dirname, 'libs', 'pixelmatch', 'pixelmatch.worker.js'
 const MAX_SPAWN_FAILURES = 3;
 const MAX_JOB_CRASHES = 2;
 
-export const QUEUE_FULL_RETRY_AFTER_SECONDS = 5;
+const QUEUE_FULL_RETRY_AFTER_SECONDS = 5;
 
 export class ImageDiffQueueFullException extends ServiceUnavailableException {
   readonly retryAfterSeconds = QUEUE_FULL_RETRY_AFTER_SECONDS;
@@ -70,7 +70,7 @@ export class DiffWorkerPool implements OnApplicationShutdown {
   private spawnFailures = 0;
 
   async run<K extends WorkerJobKind>(input: WorkerJobInputOf<K>): Promise<WorkerJobResult<K>> {
-    this.assertWithinPixelLimit(input);
+    this.checkPixelLimits(input);
     if (this.inline) {
       return (await runWorkerJob(input)) as WorkerJobResult<K>;
     }
@@ -88,7 +88,7 @@ export class DiffWorkerPool implements OnApplicationShutdown {
   }
 
   // a 69-byte PNG can claim 30000x30000: check IHDR before decoding
-  private assertWithinPixelLimit(input: WorkerJobInput): void {
+  private checkPixelLimits(input: WorkerJobInput): void {
     const sizes = [input.baseline, input.image].map((bytes) => readPngDimensions(bytes));
     for (const size of sizes) {
       if (size) assertWithinPixelLimit(size.width, size.height);
@@ -121,9 +121,7 @@ export class DiffWorkerPool implements OnApplicationShutdown {
         }
         return;
       }
-      const job = this.inFlight.get(worker);
-      this.inFlight.delete(worker);
-      clearTimeout(job?.timer);
+      const job = this.takeInFlight(worker);
       if (this.workers.includes(worker)) {
         this.idle.push(worker);
         this.spawnFailures = 0;
@@ -182,6 +180,10 @@ export class DiffWorkerPool implements OnApplicationShutdown {
     this.ready.delete(worker);
     this.workers = this.workers.filter((w) => w !== worker);
     this.idle = this.idle.filter((w) => w !== worker);
+    return this.takeInFlight(worker);
+  }
+
+  private takeInFlight(worker: Worker): Job | undefined {
     const job = this.inFlight.get(worker);
     this.inFlight.delete(worker);
     clearTimeout(job?.timer);

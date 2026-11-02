@@ -1,8 +1,7 @@
 import { config } from 'dotenv';
 import { defineConfig } from 'prisma/config';
 
-// Prisma 6 read both env files on its own; DATABASE_URL lives in prisma/.env.
-// dotenv never overrides a variable that is already set, so .env wins.
+// dotenv never overrides a variable that is already set, so .env wins over prisma/.env
 config({ quiet: true });
 config({ path: 'prisma/.env', quiet: true });
 
@@ -13,8 +12,7 @@ export default defineConfig({
     seed: 'ts-node prisma/seed.ts',
   },
   datasource: {
-    // generating the client needs no database, so a missing URL is only an
-    // error for the commands that actually connect
+    // generating the client needs no database; only commands that connect need the URL
     url: process.env.DATABASE_URL ?? '',
   },
 });

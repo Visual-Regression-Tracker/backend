@@ -1,6 +1,6 @@
 import { PNG } from 'pngjs';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { applyIgnoreAreas, readPng } from '../../utils';
+import { applyIgnoreAreas, tryReadPng } from '../../utils';
 
 export interface VlmInputsJobInput {
   kind: 'vlm-inputs';
@@ -15,10 +15,8 @@ export interface VlmInputsJobOutput {
 }
 
 const masked = (bytes: Buffer | Uint8Array, ignoreAreas: IgnoreAreaDto[]): Uint8Array | null => {
-  let png: PNG;
-  try {
-    png = readPng(bytes);
-  } catch {
+  const png = tryReadPng(bytes);
+  if (!png) {
     return null;
   }
   return new Uint8Array(PNG.sync.write(applyIgnoreAreas(png, ignoreAreas), { filterType: 1 }));

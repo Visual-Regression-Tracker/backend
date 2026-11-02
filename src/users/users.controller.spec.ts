@@ -96,8 +96,8 @@ describe('Users Controller', () => {
 
     beforeEach(() => {
       usersService.isOidcEnabled.mockReturnValue(true);
-      usersService.oidcBuildFrontendRedirect.mockImplementation((token?: string, error?: string) =>
-        token ? `front#token=${token}` : `front#error=${error}`
+      usersService.oidcBuildFrontendRedirect.mockImplementation((token?: string) =>
+        token ? `front#token=${token}` : 'front#error=oidc_login_failed'
       );
     });
 
@@ -111,7 +111,7 @@ describe('Users Controller', () => {
       await callback(res, headers);
 
       expect(usersService.oidcHandleCallback).not.toHaveBeenCalled();
-      expect(usersService.oidcBuildFrontendRedirect).toHaveBeenCalledWith(undefined, 'oidc_login_failed');
+      expect(usersService.oidcBuildFrontendRedirect).toHaveBeenCalledWith();
       expect(res.clearCookie).toHaveBeenCalledWith('oidc_state', { path: '/' });
       expect(res.redirect).toHaveBeenCalledWith('front#error=oidc_login_failed');
     });

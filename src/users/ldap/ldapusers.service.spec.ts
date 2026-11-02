@@ -9,7 +9,7 @@ import { Client as LdapClient } from 'ldapts';
 
 jest.mock('ldapts', () => {
   const mockLdapClient = { search: jest.fn(), bind: jest.fn(), unbind: jest.fn().mockResolvedValue(undefined) };
-  return { Client: jest.fn(() => mockLdapClient) };
+  return { ...jest.requireActual<object>('ldapts'), Client: jest.fn(() => mockLdapClient) };
 });
 
 const user: User = {

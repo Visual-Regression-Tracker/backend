@@ -6,7 +6,7 @@ import { Role, User } from '@prisma/client';
 import { UpdateUserDto } from '../dto/user-update.dto';
 import { AuthService } from '../../auth/auth.service';
 import { UserLoginRequestDto } from '../dto/user-login-request.dto';
-import { Entry as LdapEntry, Client as LdapClient } from 'ldapts';
+import { Entry as LdapEntry, Client as LdapClient, Filter } from 'ldapts';
 import { Users } from '../users.interface';
 import { ConfigService } from '@nestjs/config';
 import { genSaltSync } from 'bcryptjs';
@@ -59,7 +59,7 @@ export class LdapUsersService implements Users {
   }
 
   private async findUserInLdap(email: string): Promise<LdapEntry> {
-    email = this.escapeLdap(email.trim());
+    email = Filter.escape(email.trim());
     this.logger.verbose(`search '${email}' in LDAP`);
     const client = this.createClient();
     try {
@@ -169,32 +169,5 @@ export class LdapUsersService implements Users {
 
     const token = this.authService.signToken(user);
     return new UserLoginResponseDto(user, token);
-  }
-
-  private escapeLdap(input: string): string {
-    let escapedResult = '';
-    for (const inputChar of input) {
-      switch (inputChar) {
-        case '*':
-          escapedResult += '\\2a';
-          break;
-        case '(':
-          escapedResult += '\\28';
-          break;
-        case ')':
-          escapedResult += '\\29';
-          break;
-        case '\\':
-          escapedResult += '\\5c';
-          break;
-        case '\0':
-          escapedResult += '\\00';
-          break;
-        default:
-          escapedResult += inputChar;
-          break;
-      }
-    }
-    return escapedResult;
   }
 }

@@ -8,6 +8,7 @@ import { LdapUsersService } from './ldapusers.service';
 const mockClients: { generation: number; unbind: jest.Mock }[] = [];
 
 jest.mock('ldapts', () => ({
+  ...jest.requireActual<object>('ldapts'),
   Client: jest.fn(() => {
     const client = {
       generation: 0,

@@ -278,9 +278,7 @@ describe('TestVariationsService', () => {
     it('create stores the project, branch and screen', async () => {
       const { service, m } = await build();
 
-      await service.create({
-        createTestRequestDto: { ...baselineData, projectId: 'projectId', branchName: 'develop' },
-      });
+      await service.create({ ...baselineData, projectId: 'projectId', branchName: 'develop' });
 
       expect(m.prisma.testVariation.create.mock.calls[0][0].data).toStrictEqual({
         project: { connect: { id: 'projectId' } },
@@ -292,9 +290,7 @@ describe('TestVariationsService', () => {
     it('create stores missing optional fields as empty strings', async () => {
       const { service, m } = await build();
 
-      await service.create({
-        createTestRequestDto: { name: 'only name', projectId: 'projectId', branchName: 'develop' },
-      });
+      await service.create({ name: 'only name', projectId: 'projectId', branchName: 'develop' });
 
       expect(m.prisma.testVariation.create.mock.calls[0][0].data).toMatchObject({
         name: 'only name',
@@ -656,10 +652,7 @@ describe('TestVariationsService', () => {
       const { service, m } = await build();
       const txCreate = jest.fn();
 
-      await service.create(
-        { createTestRequestDto: { projectId: 'p', branchName: 'b', name: 'n' } },
-        txWith({ create: txCreate })
-      );
+      await service.create({ projectId: 'p', branchName: 'b', name: 'n' }, txWith({ create: txCreate }));
 
       expect(txCreate).toHaveBeenCalledTimes(1);
       expect(m.prisma.testVariation.create).not.toHaveBeenCalled();

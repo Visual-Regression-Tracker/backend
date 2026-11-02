@@ -1,12 +1,10 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { ProjectsController } from './projects.controller';
-import { BuildsModule } from '../builds/builds.module';
-import { TestVariationsModule } from '../test-variations/test-variations.module';
 import { StaticModule } from '../static/static.module';
 
 @Module({
-  imports: [forwardRef(() => BuildsModule), forwardRef(() => TestVariationsModule), StaticModule],
+  imports: [StaticModule],
   providers: [ProjectsService],
   controllers: [ProjectsController],
   exports: [ProjectsService],

@@ -70,13 +70,7 @@ export class DbUsersService implements Users {
       (email === email.toLowerCase()
         ? null
         : await this.prismaService.user.findUnique({ where: { email: email.toLowerCase() } }));
-    if (!user) {
-      throw new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST);
-    }
-
-    const isMatch = await this.authService.compare(userLoginRequestDto.password, user.password);
-
-    if (!isMatch) {
+    if (!user || !(await this.authService.compare(userLoginRequestDto.password, user.password))) {
       throw new HttpException('Invalid email or password.', HttpStatus.BAD_REQUEST);
     }
 

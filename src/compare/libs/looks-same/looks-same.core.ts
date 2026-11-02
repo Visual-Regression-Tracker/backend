@@ -1,7 +1,7 @@
 import looksSame from 'looks-same';
 import { PNG } from 'pngjs';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { applyIgnoreAreas, readPng } from '../../utils';
+import { applyIgnoreAreas, tryReadPng } from '../../utils';
 import { LooksSameConfig } from './looks-same.types';
 
 export const LOOKS_SAME_DEFAULT_CONFIG: LooksSameConfig = {
@@ -36,16 +36,12 @@ export type LooksSameJobOutput =
 const FAST_PNG = { deflateLevel: 1, filterType: 0 } as const;
 
 export async function computeLooksSame(input: LooksSameJobInput): Promise<LooksSameJobOutput> {
-  let baseline: PNG;
-  try {
-    baseline = readPng(input.baseline);
-  } catch {
+  const baseline = tryReadPng(input.baseline);
+  if (!baseline) {
     return { outcome: 'baseline-unreadable' };
   }
-  let image: PNG;
-  try {
-    image = readPng(input.image);
-  } catch {
+  const image = tryReadPng(input.image);
+  if (!image) {
     return { outcome: 'image-unreadable' };
   }
 

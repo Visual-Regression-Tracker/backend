@@ -124,7 +124,7 @@ describe('TestRunsService', () => {
   const imageBuffer = Buffer.from('Image');
   const ignoreAreas = [{ x: 1, y: 2, width: 10, height: 20 }];
 
-  const saveDiff = async (diff: DiffResult | null, id = 'some id') => {
+  const saveDiff = async (diff: DiffResult, id = 'some id') => {
     const { service, m } = await build();
     m.testRun.update.mockResolvedValueOnce(generateTestRun());
     await service.saveDiffResult(id, diff);
@@ -313,7 +313,7 @@ describe('TestRunsService', () => {
 
     it('calculateDiff passes the bytes it is given', async () => {
       const { service, m } = await build();
-      m.compare.getDiff.mockResolvedValueOnce(null);
+      m.compare.getDiff.mockResolvedValueOnce(okDiff);
       m.testRun.update.mockResolvedValueOnce({});
 
       await service.calculateDiff('projectId', generateTestRun(), imageBuffer);
@@ -323,7 +323,7 @@ describe('TestRunsService', () => {
 
     it('calculateDiff hands the project it is given to the comparison', async () => {
       const { service, m } = await build();
-      m.compare.getDiff.mockResolvedValueOnce(null);
+      m.compare.getDiff.mockResolvedValueOnce(okDiff);
       m.testRun.update.mockResolvedValueOnce({});
 
       await service.calculateDiff('projectId', generateTestRun(), imageBuffer, TEST_PROJECT);
@@ -337,36 +337,16 @@ describe('TestRunsService', () => {
     ])('treats %s stored ignore areas as none', async (_case, stored, temporary) => {
       const testRun = generateTestRun({ ignoreAreas: stored, tempIgnoreAreas: temporary });
       const { service, m } = await build();
-      m.compare.getDiff.mockResolvedValueOnce(null);
+      m.compare.getDiff.mockResolvedValueOnce(okDiff);
       m.testRun.update.mockResolvedValueOnce(testRun);
 
       await service.calculateDiff('projectId', testRun);
 
       expect(diffInputs(m)[0].data.ignoreAreas).toEqual([]);
-      expect(updatedData(m).status).toBe(TestStatus.new);
     });
   });
 
   describe('saveDiffResult', () => {
-    it('no results', async () => {
-      const m = await saveDiff(null);
-
-      expect(m.testRun.update).toHaveBeenCalledWith({
-        where: { id: 'some id' },
-        data: {
-          status: TestStatus.new,
-          diffName: null,
-          pixelMisMatchCount: null,
-          diffPercent: null,
-          vlmDescription: null,
-          changeSignature: null,
-          imageThumbnailName: null,
-          diffThumbnailName: null,
-        },
-      });
-      expect(m.events.testRunUpdated).toHaveBeenCalled();
-    });
-
     it('stores the change signature the comparison produced', async () => {
       const changeSignature = { threshold: 0.1, includeAA: true, signature: [0.25, 0.75] };
 
@@ -1519,7 +1499,7 @@ describe('TestRunsService', () => {
       await service.approve(testRun.id, false, false, 'user id');
 
       expect(m.tv.findUnique).toHaveBeenCalledWith(key, expect.anything());
-      expect(m.tv.create).toHaveBeenCalledWith({ createTestRequestDto: key }, expect.anything());
+      expect(m.tv.create).toHaveBeenCalledWith(key, expect.anything());
       expect(m.tv.update).toHaveBeenCalledWith(
         created.id,
         { ignoreAreas: '[{"x":1}]', comment: 'run comment' },

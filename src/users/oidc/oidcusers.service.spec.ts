@@ -186,9 +186,7 @@ describe('OidcUsersService', () => {
     });
 
     it('adds an error fragment when no token is present', () => {
-      expect(service.buildFrontendRedirect(undefined, 'oidc_login_failed')).toBe(
-        'http://localhost:8080/login#error=oidc_login_failed'
-      );
+      expect(service.buildFrontendRedirect()).toBe('http://localhost:8080/login#error=oidc_login_failed');
     });
   });
 
