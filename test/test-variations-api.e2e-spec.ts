@@ -168,14 +168,11 @@ describe('TestVariations API (e2e)', () => {
     });
   });
 
-  describe('GET /test-variations/merge', () => {
+  describe('POST /test-variations/merge', () => {
+    const post = (body: object, token = user.token) =>
+      requestWithAuth(app, 'post', '/test-variations/merge', token).send(body);
     const merge = (fromBranch: string, toBranch: string, token = user.token) =>
-      requestWithAuth(
-        app,
-        'get',
-        `/test-variations/merge?projectId=${project.id}&fromBranch=${fromBranch}&toBranch=${toBranch}`,
-        token
-      );
+      post({ projectId: project.id, fromBranch, toBranch }, token);
 
     it('re-runs the source branch baselines against the target branch in a new, stopped build', async () => {
       await haveBaseline(project.mainBranchName, WHITE, 'Changed');
@@ -185,7 +182,7 @@ describe('TestVariations API (e2e)', () => {
       await haveBaseline('feature', CHANGED, 'Only on feature');
       await postRun('feature', WHITE, 'No baseline');
 
-      const res = await merge('feature', project.mainBranchName).expect(200);
+      const res = await merge('feature', project.mainBranchName).expect(201);
 
       expect(res.body).toMatchObject({
         projectId: project.id,
@@ -210,7 +207,7 @@ describe('TestVariations API (e2e)', () => {
     });
 
     it('nothing to merge: an empty stopped build', async () => {
-      const res = await merge('nothing-here', project.mainBranchName).expect(200);
+      const res = await merge('nothing-here', project.mainBranchName).expect(201);
 
       expect(res.body).toMatchObject({ branchName: project.mainBranchName, isRunning: false, merge: false });
       expect(await prisma.testRun.count({ where: { buildId: res.body.id } })).toBe(0);
@@ -221,7 +218,7 @@ describe('TestVariations API (e2e)', () => {
       await haveBaseline(project.mainBranchName, WHITE);
       await haveBaseline('feature', CHANGED);
 
-      const res = await merge('feature', 'release').expect(200);
+      const res = await merge('feature', 'release').expect(201);
 
       expect(res.body).toMatchObject({ branchName: 'release', isRunning: false, merge: true, unresolvedCount: 1 });
       const [release] = await prisma.testVariation.findMany({
@@ -233,16 +230,11 @@ describe('TestVariations API (e2e)', () => {
     });
 
     it('400 without the branches', async () => {
-      await requestWithAuth(app, 'get', `/test-variations/merge?projectId=${project.id}`, user.token).expect(400);
+      await post({ projectId: project.id }).expect(400);
     });
 
     it('400 for a projectId that is not a uuid', async () => {
-      await requestWithAuth(
-        app,
-        'get',
-        `/test-variations/merge?projectId=x&fromBranch=a&toBranch=b`,
-        user.token
-      ).expect(400);
+      await post({ projectId: 'x', fromBranch: 'a', toBranch: 'b' }).expect(400);
     });
 
     it('403 for a guest', async () => {
@@ -253,47 +245,14 @@ describe('TestVariations API (e2e)', () => {
         await usersService.delete(guest.id);
       }
     });
-  });
 
-  describe('POST /test-variations/merge', () => {
-    const merge = (body: object, token = user.token) =>
-      requestWithAuth(app, 'post', '/test-variations/merge', token).send(body);
-
-    it('merges the branches named in the body like GET does', async () => {
-      await haveBaseline(project.mainBranchName, WHITE);
-      await haveBaseline('feature', CHANGED);
-
-      const res = await merge({
-        projectId: project.id,
-        fromBranch: 'feature',
-        toBranch: project.mainBranchName,
-      }).expect(201);
-
-      expect(res.body).toMatchObject({
-        projectId: project.id,
-        branchName: project.mainBranchName,
-        isRunning: false,
-        merge: true,
-        unresolvedCount: 1,
-      });
-      expect(await prisma.testRun.count({ where: { buildId: res.body.id } })).toBe(1);
-    });
-
-    it('400 without the branches', async () => {
-      await merge({ projectId: project.id }).expect(400);
-    });
-
-    it('400 for a projectId that is not a uuid', async () => {
-      await merge({ projectId: 'x', fromBranch: 'a', toBranch: 'b' }).expect(400);
-    });
-
-    it('403 for a guest', async () => {
-      const guest = await haveUserLogged(usersService, 'guest');
-      try {
-        await merge({ projectId: project.id, fromBranch: 'feature', toBranch: 'master' }, guest.token).expect(403);
-      } finally {
-        await usersService.delete(guest.id);
-      }
+    it('404 for the GET removed in 6.0', async () => {
+      await requestWithAuth(
+        app,
+        'get',
+        `/test-variations/merge?projectId=${project.id}&fromBranch=feature&toBranch=master`,
+        user.token
+      ).expect(404);
     });
   });
 

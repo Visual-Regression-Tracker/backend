@@ -20,8 +20,8 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       DINOV2_URL: ${DINOV2_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      WS_AUTH_REQUIRED: ${WS_AUTH_REQUIRED:-false}
-      WS_BROADCAST: ${WS_BROADCAST:-true}
+      WS_AUTH_REQUIRED: ${WS_AUTH_REQUIRED:-true}
+      WS_BROADCAST: ${WS_BROADCAST:-false}
     ports:
       - "${APP_PORT}:3000"
     expose:

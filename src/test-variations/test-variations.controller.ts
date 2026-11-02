@@ -1,13 +1,5 @@
 import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query, Delete, Post, Body } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiParam,
-  ApiBearerAuth,
-  ApiQuery,
-  ApiOkResponse,
-  ApiOperation,
-  ApiCreatedResponse,
-} from '@nestjs/swagger';
+import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import { TestVariationsService } from './test-variations.service';
 import { Prisma, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
@@ -58,22 +50,12 @@ export class TestVariationsController {
     return this.testVariations.getDetails(id);
   }
 
-  @Get('merge/')
-  @ApiOperation({ deprecated: true, description: 'Use POST /test-variations/merge' })
-  @ApiOkResponse({ type: BuildDto })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.admin, Role.editor)
-  merge(@Query() params: MergeParams): Promise<BuildDto> {
-    return this.mergeFromBody(params);
-  }
-
   @Post('merge')
   @ApiCreatedResponse({ type: BuildDto })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  mergeFromBody(@Body() { projectId, fromBranch, toBranch }: MergeParams): Promise<BuildDto> {
+  merge(@Body() { projectId, fromBranch, toBranch }: MergeParams): Promise<BuildDto> {
     return this.testVariations.merge(projectId, fromBranch, toBranch);
   }
 

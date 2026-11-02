@@ -53,10 +53,10 @@ describe('Socket.io (e2e)', () => {
 
   const expiredToken = () => app.get(JwtService).sign({ sub: user.id, email: user.email }, { expiresIn: -10 });
 
-  describe('WS_AUTH_REQUIRED unset', () => {
-    beforeEach(() => start({}));
+  describe('WS_AUTH_REQUIRED=false', () => {
+    beforeEach(() => start({ WS_AUTH_REQUIRED: 'false' }));
 
-    it('lets in a socket without a token, as the deployed frontend connects', async () => {
+    it('lets in a socket without a token', async () => {
       await expect(refusalOf()).resolves.toBe('connected');
     });
 
@@ -70,8 +70,8 @@ describe('Socket.io (e2e)', () => {
     });
   });
 
-  describe('WS_AUTH_REQUIRED=true', () => {
-    beforeEach(() => start({ WS_AUTH_REQUIRED: 'true' }));
+  describe('WS_AUTH_REQUIRED unset', () => {
+    beforeEach(() => start({}));
 
     it('refuses a socket without a token as unauthorized', async () => {
       await expect(refusalOf()).resolves.toBe('unauthorized');
@@ -101,8 +101,8 @@ describe('Socket.io (e2e)', () => {
       await app.get(ProjectsService).remove(project.id);
     });
 
-    it('with WS_BROADCAST=false only a socket that joined the project room gets its builds', async () => {
-      await start({ WS_BROADCAST: 'false' });
+    it('by default only a socket that joined the project room gets its builds', async () => {
+      await start({});
       project = await haveProject(app.get(ProjectsService), 'Socket rooms');
       const member = await connect({ token: user.token });
       const outsider = await connect({ token: user.token });
@@ -122,8 +122,8 @@ describe('Socket.io (e2e)', () => {
       expect(toLeft).toEqual([]);
     });
 
-    it('by default every socket gets every build, joined or not', async () => {
-      await start({});
+    it('with WS_BROADCAST=true every socket gets every build, joined or not', async () => {
+      await start({ WS_BROADCAST: 'true', WS_AUTH_REQUIRED: 'false' });
       project = await haveProject(app.get(ProjectsService), 'Socket broadcast');
       const member = await connect();
       const outsider = await connect();

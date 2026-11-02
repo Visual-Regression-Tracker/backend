@@ -22,12 +22,12 @@ export class SocketAuthService {
   ) {}
 
   middleware(): SocketMiddleware {
-    const required = booleanFlag(this.configService.get('WS_AUTH_REQUIRED'), false);
+    const required = booleanFlag(this.configService.get('WS_AUTH_REQUIRED'), true);
     return (socket, next) => {
       const token: unknown = socket.handshake.auth?.token;
       if (token === undefined || token === null || token === '') {
         if (required) return next(new Error(SOCKET_UNAUTHORIZED));
-        this.logger.warn(`Socket ${socket.id} connected without a token; set WS_AUTH_REQUIRED=true to refuse it`);
+        this.logger.warn(`Socket ${socket.id} connected without a token, let in because WS_AUTH_REQUIRED=false`);
         return next();
       }
       this.findUser(token).then(
