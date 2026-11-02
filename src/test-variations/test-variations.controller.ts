@@ -1,7 +1,7 @@
 import { Controller, ParseUUIDPipe, Get, UseGuards, Param, Query, Delete, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiParam, ApiBearerAuth, ApiQuery, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import { TestVariationsService } from './test-variations.service';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { BuildDto } from '../builds/dto/build.dto';
@@ -10,6 +10,16 @@ import { Roles } from '../shared/roles.decorator';
 import { MergeParams } from './types';
 import { BaseTestVariationDto } from './dto/base-test-variation.dto';
 import { TestVariationDto } from './dto/test-variation.dto';
+
+const VARIATION_ORDER: Prisma.TestVariationOrderByWithRelationInput[] = [
+  { name: 'asc' },
+  { branchName: 'asc' },
+  { browser: 'asc' },
+  { device: 'asc' },
+  { os: 'asc' },
+  { viewport: 'asc' },
+  { customTags: 'asc' },
+];
 
 @ApiTags('test-variations')
 @Controller('test-variations')
@@ -27,6 +37,7 @@ export class TestVariationsController {
   getList(@Query('projectId', new ParseUUIDPipe()) projectId: string): Promise<BaseTestVariationDto[]> {
     return this.prismaService.testVariation.findMany({
       where: { projectId },
+      orderBy: VARIATION_ORDER,
     });
   }
 

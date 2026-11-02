@@ -103,6 +103,22 @@ describe('TestVariations API (e2e)', () => {
       }
     });
 
+    it('lists them by name, then branch, then browser, whatever order they were created in', async () => {
+      for (const variation of [
+        { name: 'B', branchName: 'master', browser: 'chrome' },
+        { name: 'A', branchName: 'master', browser: 'chrome' },
+        { name: 'A', branchName: 'feature', browser: 'firefox' },
+      ]) {
+        await prisma.testVariation.create({ data: { ...variation, projectId: project.id } });
+      }
+
+      const res = await requestWithAuth(app, 'get', `/test-variations?projectId=${project.id}`, user.token).expect(200);
+
+      expect(
+        res.body.map(({ name, branchName, browser }: TestVariationDto) => `${name} ${branchName} ${browser}`)
+      ).toEqual(['A feature firefox', 'A master chrome', 'B master chrome']);
+    });
+
     it('400 for a projectId that is not a uuid', async () => {
       await requestWithAuth(app, 'get', `/test-variations?projectId=abc`, user.token).expect(400);
     });

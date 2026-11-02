@@ -32,12 +32,23 @@ describe('TestVariations Controller', () => {
     expect(controller).toBeDefined();
   });
 
-  it('lists the variations of a project straight from the database', async () => {
+  it('lists the variations of a project ordered by name, then by the rest of their key', async () => {
     const variations = [generateTestVariation()];
     prismaService.testVariation.findMany.mockResolvedValue(variations);
 
     await expect(controller.getList('projectId')).resolves.toBe(variations);
-    expect(prismaService.testVariation.findMany).toHaveBeenCalledWith({ where: { projectId: 'projectId' } });
+    expect(prismaService.testVariation.findMany).toHaveBeenCalledWith({
+      where: { projectId: 'projectId' },
+      orderBy: [
+        { name: 'asc' },
+        { branchName: 'asc' },
+        { browser: 'asc' },
+        { device: 'asc' },
+        { os: 'asc' },
+        { viewport: 'asc' },
+        { customTags: 'asc' },
+      ],
+    });
   });
 
   it('returns the details of one variation', async () => {
