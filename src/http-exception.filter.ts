@@ -1,6 +1,6 @@
 import { ExceptionFilter, Catch, ArgumentsHost, ForbiddenException, HttpStatus, Logger } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { errorMessage } from './utils/errors';
+import { httpErrorMessage } from './utils/errors';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -16,7 +16,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const message =
       this.isUniqueConstraintException(error) || this.isForbiddenException(error)
         ? this.getCustomMessageForException(error)
-        : errorMessage(error);
+        : httpErrorMessage(error);
 
     if (status >= 500) {
       this.logger.error(`${request.method} ${request.url} ${status}: ${message}`, error.stack);

@@ -77,10 +77,11 @@ export class Dinov2Service {
       this.logger.warn('dinov2Check is on but DINOV2_URL is not set: the run goes to review');
       return { noise: false };
     }
-    if (gate.cells.length === 0) {
-      return { noise: true, score: 0 };
-    }
     try {
+      if (gate.cells.length === 0) {
+        return { noise: true, score: 0 };
+      }
+
       const response = await fetch(`${url}/v1/patch-distances`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

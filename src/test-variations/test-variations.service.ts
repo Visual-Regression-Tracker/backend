@@ -14,7 +14,7 @@ import type { WrapperType } from '../shared/wrapper-type';
 
 export type BaselineRef = Pick<Baseline, 'id' | 'baselineName'>;
 
-type NewVariation = BaselineDataDto & { projectId: string; branchName: string };
+type NewVariation = BaselineDataDto & { projectId: string };
 
 @Injectable()
 export class TestVariationsService {
@@ -154,14 +154,12 @@ export class TestVariationsService {
     });
   }
 
-  async createOrTakeWinner(createTestRequestDto: NewVariation): Promise<TestVariation> {
+  async createOrTakeWinner(data: NewVariation): Promise<TestVariation> {
     try {
-      return await this.create(createTestRequestDto);
+      return await this.create(data);
     } catch (e) {
       if (isPrismaError(e, 'P2002')) {
-        const winner = await this.findUnique(
-          variationKey(createTestRequestDto.projectId, createTestRequestDto.branchName, createTestRequestDto)
-        );
+        const winner = await this.findUnique(variationKey(data.projectId, data.branchName, data));
         if (winner) {
           return winner;
         }

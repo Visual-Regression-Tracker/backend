@@ -49,7 +49,7 @@ import { positiveNumber } from '../utils/env';
 import { isUUID } from 'class-validator';
 import { BulkResultDto } from './dto/bulk-result.dto';
 import { isPrismaError } from '../prisma/prisma-errors';
-import { errorMessage } from '../utils/errors';
+import { httpErrorMessage } from '../utils/errors';
 
 const DEFAULT_MULTIPART_FILE_SIZE_LIMIT = 100 * 1024 * 1024;
 
@@ -239,7 +239,7 @@ export class TestRunsController {
         result.succeeded.push(id);
       } catch (error) {
         if (!(error instanceof HttpException || isPrismaError(error, 'P2025'))) throw error;
-        const message = errorMessage(error);
+        const message = httpErrorMessage(error);
         this.logger.warn(`Cannot ${action} TestRun ${id}: ${message}`);
         result.failed.push({ id, message });
       }
