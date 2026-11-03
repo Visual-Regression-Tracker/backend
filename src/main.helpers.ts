@@ -1,10 +1,13 @@
 import { Logger, LogLevel } from '@nestjs/common';
 import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
-import { existsSync, readFileSync } from 'fs';
+import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'fs';
+import { resolve } from 'path';
 
 export const DEFAULT_HTTPS_KEY_PATH = './secrets/ssl.key';
 export const DEFAULT_HTTPS_CERT_PATH = './secrets/ssl.cert';
 const LOG_LEVELS: readonly LogLevel[] = ['log', 'error', 'warn', 'debug', 'verbose', 'fatal'];
+
+export class StartupCheckError extends Error {}
 
 export function getHttpsOptions(
   env: NodeJS.ProcessEnv = process.env,
@@ -12,7 +15,7 @@ export function getHttpsOptions(
 ): HttpsOptions | undefined {
   const keyPath = env.HTTPS_KEY_PATH?.trim() || DEFAULT_HTTPS_KEY_PATH;
   const certPath = env.HTTPS_CERT_PATH?.trim() || DEFAULT_HTTPS_CERT_PATH;
-  if (!existsSync(keyPath) || !existsSync(certPath)) {
+  if (!tlsFileExists(keyPath) || !tlsFileExists(certPath)) {
     if (env.HTTPS_KEY_PATH?.trim() || env.HTTPS_CERT_PATH?.trim()) {
       logger.warn(`HTTPS key or certificate not found (${keyPath}, ${certPath}). Fall back to HTTP`);
     } else {
@@ -20,7 +23,41 @@ export function getHttpsOptions(
     }
     return undefined;
   }
-  return { key: readFileSync(keyPath), cert: readFileSync(certPath) };
+  return { key: readTlsFile(keyPath), cert: readTlsFile(certPath) };
+}
+
+export function assertWritableDir(dir: string): void {
+  try {
+    mkdirSync(dir, { recursive: true });
+    accessSync(dir, constants.W_OK);
+  } catch (error) {
+    throw accessError(dir, 'writable', error);
+  }
+}
+
+function tlsFileExists(path: string): boolean {
+  try {
+    return statSync(path, { throwIfNoEntry: false }) !== undefined;
+  } catch (error) {
+    throw accessError(path, 'readable', error);
+  }
+}
+
+function readTlsFile(path: string): Buffer {
+  try {
+    return readFileSync(path);
+  } catch (error) {
+    throw accessError(path, 'readable', error);
+  }
+}
+
+function accessError(path: string, access: 'readable' | 'writable', error: unknown): Error {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code !== 'EACCES' && code !== 'EPERM') return error as Error;
+  const uid = process.getuid?.();
+  return new StartupCheckError(
+    `${resolve(path)} is not ${access} by uid ${uid} (${code}): chown -R ${uid}:${process.getgid?.()} the host directory, volume or file mounted there`
+  );
 }
 
 export function parseLogLevels(

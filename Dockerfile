@@ -22,9 +22,9 @@ RUN mkdir -p /imageUploads && chown node:node /imageUploads
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
-COPY docker-entrypoint.sh /usr/local/bin/vrt-entrypoint.sh
-RUN chmod 755 /usr/local/bin/vrt-entrypoint.sh
+# numeric, so Kubernetes runAsNonRoot can verify it
+USER 1000:1000
 EXPOSE 3000
 # node without npm in between, so SIGTERM reaches the app's shutdown hooks
-ENTRYPOINT [ "/usr/bin/tini", "--", "/usr/local/bin/vrt-entrypoint.sh" ]
+ENTRYPOINT [ "/usr/bin/tini", "--" ]
 CMD [ "node", "dist/main" ]
