@@ -56,7 +56,7 @@ services:
         condition: service_healthy
   postgres:
     container_name: postgres
-    image: postgres:15.3-alpine3.18
+    image: postgres:18
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -67,7 +67,7 @@ services:
     expose:
       - "${POSTGRES_PORT}"
     volumes:
-      - postgres:/var/lib/postgresql/data
+      - postgres:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -d $$POSTGRES_DB -U $$POSTGRES_USER"]
       interval: 10s
