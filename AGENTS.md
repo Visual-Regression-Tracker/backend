@@ -68,8 +68,8 @@ Run typecheck, lint, format check and the unit tests before calling work done.
 ## Services beside the API
 
 - ML runs in separate services the API reaches over HTTP, configured by env:
-  Ollama for VLM (`OLLAMA_BASE_URL`), DINOv2 for the rendering-noise filter's
-  `dinov2Check` (`DINOV2_URL`, `dinov2/` in this repo, compose profile
+  Ollama for VLM (`OLLAMA_BASE_URL`), DINOv2 for the rendering-noise filter
+  `ignoreRenderingNoise` (`DINOV2_URL`, `dinov2/` in this repo, compose profile
   `dinov2`). Do not load models into the API process or its workers.
 - `dinov2/` is Python: `python -m unittest test_patches` there; the image
   pins the model revision the backend's threshold was calibrated on.

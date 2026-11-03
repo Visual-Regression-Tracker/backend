@@ -1,6 +1,6 @@
-import { BlurAmplitudeConfig } from '../blur-amplitude.config';
+import { RenderingNoiseConfig } from '../rendering-noise.config';
 
-interface BaseVlmConfig extends BlurAmplitudeConfig {
+interface BaseVlmConfig extends RenderingNoiseConfig {
   model: string;
   prompt: string;
   temperature: number;

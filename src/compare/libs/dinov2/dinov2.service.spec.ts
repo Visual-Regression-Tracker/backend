@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { blobScore, Dinov2Service, tilesOf } from './dinov2.service';
+import { blobScore, Dinov2Service, DINOV2_THRESHOLD, tilesOf } from './dinov2.service';
 
 const WIDTH = 32;
 const HEIGHT = 20;
@@ -75,7 +75,7 @@ describe('Dinov2Service', () => {
   afterEach(() => fetchMock.mockReset());
 
   const confirm = (service: Dinov2Service, given = gate) =>
-    service.confirmsNoiseForGate(given, Buffer.from('baseline'), Buffer.from('image'), 0.15);
+    service.confirmsNoiseForGate(given, Buffer.from('baseline'), Buffer.from('image'));
 
   it('takes the service address with or without a trailing slash, and its own timeout', async () => {
     const { service } = await init({ DINOV2_URL: 'http://dinov2:8000/', DINOV2_TIMEOUT_MS: '5000' });
@@ -121,6 +121,16 @@ describe('Dinov2Service', () => {
     expect(await confirm(service)).toEqual({ noise: false, score: 0.5 });
   });
 
+  it.each([
+    [DINOV2_THRESHOLD, true],
+    [DINOV2_THRESHOLD + 0.001, false],
+  ])('takes a score of %p for noise: %p', async (score, noise) => {
+    const { service } = await init();
+    fetchMock.mockResolvedValue(answer({ [at(3, 3)]: score, [at(3, 4)]: score }) as Response);
+
+    expect((await confirm(service)).noise).toBe(noise);
+  });
+
   it('confirms noise without a call when no patch is marked', async () => {
     const { service } = await init();
 
@@ -140,6 +150,15 @@ describe('Dinov2Service', () => {
 
     expect((await confirm(service)).noise).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['http://dinov2:8000', true],
+    ['', false],
+  ])('with DINOV2_URL %p is configured: %p', async (url, configured) => {
+    const { service } = await init({ DINOV2_URL: url });
+
+    expect(service.isConfigured()).toBe(configured);
   });
 
   it('does not confirm noise when the answer does not fit the screenshots', async () => {
