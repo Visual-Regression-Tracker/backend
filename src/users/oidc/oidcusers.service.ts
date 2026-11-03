@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Logger } from '@nestjs/common';
-import { Client as OidcClient, Issuer, generators, custom, TokenSet } from 'openid-client';
+import * as oidc from 'openid-client';
+import { Agent } from 'undici';
 import { CreateUserDto } from '../dto/user-create.dto';
 import { UserLoginResponseDto } from '../dto/user-login-response.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -11,7 +12,6 @@ import { UserLoginRequestDto } from '../dto/user-login-request.dto';
 import { Users } from '../users.interface';
 import { ConfigService } from '@nestjs/config';
 import { genSaltSync } from 'bcryptjs';
-import { Agent as HttpsAgent } from 'node:https';
 
 type OIDCConfig = {
   issuerUrl: string;
@@ -34,7 +34,9 @@ export class OidcUsersService implements Users {
   private readonly logger: Logger = new Logger(OidcUsersService.name);
   private readonly oidcConfig: OIDCConfig;
   private readonly appFrontendUrl: string;
-  private clientPromise: Promise<OidcClient> | null = null;
+  private readonly httpIssuer: boolean;
+  private readonly insecureIssuerFetch: oidc.CustomFetch | undefined;
+  private configPromise: Promise<oidc.Configuration> | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -70,65 +72,59 @@ export class OidcUsersService implements Users {
     }
     this.appFrontendUrl = appFrontendUrl;
 
+    const issuer = URL.parse(this.oidcConfig.issuerUrl);
+    this.httpIssuer = issuer?.protocol === 'http:';
+    this.insecureIssuerFetch =
+      this.oidcConfig.tlsNoVerify && issuer ? skipTlsVerificationFor(issuer.origin) : undefined;
+
     if (this.oidcConfig.tlsNoVerify) {
       this.logger.warn('OIDC TLS certificate verification is disabled for the configured issuer only');
     }
+    if (this.httpIssuer) {
+      this.logger.warn(`OIDC issuer ${this.oidcConfig.issuerUrl} uses plain HTTP: use it for local setups only`);
+    }
+    if (URL.parse(this.oidcConfig.redirectUri)?.search) {
+      this.logger.warn(
+        'OIDC_REDIRECT_URI has a query string, which is not sent to the token endpoint: login will fail'
+      );
+    }
   }
 
-  private getHttpOptions(): ((url: URL, options: Record<string, unknown>) => Record<string, unknown>) | null {
-    if (!this.oidcConfig.tlsNoVerify) {
-      return null;
-    }
-    const insecureAgent = new HttpsAgent({ rejectUnauthorized: false });
-    const issuerOrigin = new URL(this.oidcConfig.issuerUrl).origin;
-    return (url, options) => (url.origin === issuerOrigin ? { ...options, agent: insecureAgent } : options);
+  private discoverConfig(): Promise<oidc.Configuration> {
+    return oidc.discovery(
+      new URL(this.oidcConfig.issuerUrl),
+      this.oidcConfig.clientId,
+      { redirect_uris: [this.oidcConfig.redirectUri], response_types: ['code'] },
+      clientSecretBasic(this.oidcConfig.clientId, this.oidcConfig.clientSecret),
+      {
+        execute: this.httpIssuer ? [oidc.allowInsecureRequests] : [],
+        ...(this.insecureIssuerFetch && { [oidc.customFetch]: this.insecureIssuerFetch }),
+      }
+    );
   }
 
-  private async discoverClient(): Promise<OidcClient> {
-    const httpOptions = this.getHttpOptions();
-    if (httpOptions) {
-      // Discovery only takes a static option; httpOptions still checks the origin
-      Issuer[custom.http_options] = httpOptions;
-    }
-
-    const issuer = await Issuer.discover(this.oidcConfig.issuerUrl);
-    if (httpOptions) {
-      issuer[custom.http_options] = httpOptions;
-    }
-    const client = new issuer.Client({
-      client_id: this.oidcConfig.clientId,
-      client_secret: this.oidcConfig.clientSecret,
-      redirect_uris: [this.oidcConfig.redirectUri],
-      response_types: ['code'],
-    });
-
-    if (httpOptions) {
-      client[custom.http_options] = httpOptions;
-    }
-    return client;
-  }
-
-  private getClient(): Promise<OidcClient> {
-    if (!this.clientPromise) {
-      this.clientPromise = this.discoverClient().catch((error) => {
-        this.clientPromise = null;
+  private getConfig(): Promise<oidc.Configuration> {
+    if (!this.configPromise) {
+      this.configPromise = this.discoverConfig().catch((error) => {
+        this.configPromise = null;
         throw error;
       });
     }
-    return this.clientPromise;
+    return this.configPromise;
   }
 
   async getAuthorizationUrl(): Promise<{ url: string; state: string; codeVerifier: string }> {
-    const client = await this.getClient();
-    const state = generators.state();
-    const codeVerifier = generators.codeVerifier();
-    const url = client.authorizationUrl({
+    const config = await this.getConfig();
+    const state = oidc.randomState();
+    const codeVerifier = oidc.randomPKCECodeVerifier();
+    const url = oidc.buildAuthorizationUrl(config, {
+      redirect_uri: this.oidcConfig.redirectUri,
       scope: this.oidcConfig.scopes,
       state,
-      code_challenge: generators.codeChallenge(codeVerifier),
+      code_challenge: await oidc.calculatePKCECodeChallenge(codeVerifier),
       code_challenge_method: 'S256',
     });
-    return { url, state, codeVerifier };
+    return { url: url.href, state, codeVerifier };
   }
 
   buildFrontendRedirect(token?: string | null): string {
@@ -140,23 +136,28 @@ export class OidcUsersService implements Users {
     params: Record<string, string>,
     checks: { state: string; codeVerifier: string }
   ): Promise<UserLoginResponseDto> {
-    const client = await this.getClient();
+    const config = await this.getConfig();
+    const currentUrl = new URL(this.oidcConfig.redirectUri);
+    for (const [name, value] of Object.entries(params)) {
+      currentUrl.searchParams.set(name, value);
+    }
 
-    let tokenSet: TokenSet;
+    let tokens: Awaited<ReturnType<typeof oidc.authorizationCodeGrant>>;
     try {
-      tokenSet = await client.callback(this.oidcConfig.redirectUri, params, {
-        state: checks.state,
-        code_verifier: checks.codeVerifier,
+      tokens = await oidc.authorizationCodeGrant(config, currentUrl, {
+        expectedState: checks.state,
+        pkceCodeVerifier: checks.codeVerifier,
+        idTokenExpected: true,
       });
     } catch (e) {
       this.logger.warn(`OIDC callback validation failed: ${e}`);
       throw new HttpException('OIDC login failed.', HttpStatus.BAD_REQUEST);
     }
 
-    const claims: Record<string, unknown> = { ...tokenSet.claims() };
-    if (tokenSet.access_token && !this.claimToString(claims, this.oidcConfig.attributeMail)) {
+    const claims: Record<string, unknown> = { ...tokens.claims() };
+    if (tokens.access_token && !this.claimToString(claims, this.oidcConfig.attributeMail)) {
       try {
-        Object.assign(claims, await client.userinfo(tokenSet));
+        Object.assign(claims, await oidc.fetchUserInfo(config, tokens.access_token, String(claims.sub)));
       } catch (e) {
         this.logger.warn(`OIDC userinfo request failed: ${e}`);
       }
@@ -298,4 +299,18 @@ export class OidcUsersService implements Users {
   login(_userLoginRequestDto: UserLoginRequestDto): Promise<UserLoginResponseDto> {
     return Promise.reject(new HttpException('Password login is disabled. Use SSO to login.', HttpStatus.BAD_REQUEST));
   }
+}
+
+function skipTlsVerificationFor(origin: string): oidc.CustomFetch {
+  const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+  // openid-client types its body as Uint8Array<ArrayBufferLike>, which RequestInit does not accept
+  return (url, options) =>
+    fetch(url, { ...(options as RequestInit), ...(new URL(url).origin === origin && { dispatcher }) });
+}
+
+// openid-client 5's encoding: 6's ClientSecretBasic also escapes -_.!~*'(), which IdPs that do not decode reject
+function clientSecretBasic(clientId: string, clientSecret: string): oidc.ClientAuth {
+  const encode = (value: string) => encodeURIComponent(value).replace(/%20/g, '+');
+  const credentials = Buffer.from(`${encode(clientId)}:${encode(clientSecret)}`).toString('base64');
+  return (_as, _client, _body, headers) => headers.set('authorization', `Basic ${credentials}`);
 }

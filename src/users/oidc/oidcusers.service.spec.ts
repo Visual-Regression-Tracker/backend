@@ -1,27 +1,32 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Role, User } from '@prisma/client';
-import { Issuer, custom } from 'openid-client';
-import { Agent as HttpsAgent } from 'node:https';
+import { allowInsecureRequests, customFetch } from 'openid-client';
+import { Agent } from 'undici';
 import { AuthService } from '../../auth/auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OidcUsersService } from './oidcusers.service';
 import { Prisma as PrismaRuntime } from '@prisma/client';
 const { PrismaClientKnownRequestError } = PrismaRuntime;
 
-const mockAuthorizationUrl = jest.fn();
-const mockCallback = jest.fn();
-const mockUserinfo = jest.fn();
-const mockDiscover = jest.fn();
+const mockDiscovery = jest.fn();
+const mockBuildAuthorizationUrl = jest.fn();
+const mockAuthorizationCodeGrant = jest.fn();
+const mockFetchUserInfo = jest.fn();
 
 jest.mock('openid-client', () => ({
-  Issuer: { discover: (...args: unknown[]) => mockDiscover(...args) },
-  generators: {
-    state: () => 'mock-state',
-    codeVerifier: () => 'mock-verifier',
-    codeChallenge: () => 'mock-challenge',
-  },
-  custom: { setHttpOptionsDefaults: jest.fn(), http_options: 'http_options' },
+  discovery: (...args: unknown[]) => mockDiscovery(...args),
+  buildAuthorizationUrl: (...args: unknown[]) => mockBuildAuthorizationUrl(...args),
+  authorizationCodeGrant: (...args: unknown[]) => mockAuthorizationCodeGrant(...args),
+  fetchUserInfo: (...args: unknown[]) => mockFetchUserInfo(...args),
+  randomState: () => 'mock-state',
+  randomPKCECodeVerifier: () => 'mock-verifier',
+  calculatePKCECodeChallenge: () => Promise.resolve('mock-challenge'),
+  allowInsecureRequests: jest.fn(),
+  customFetch: Symbol('customFetch'),
 }));
+
+const oidcConfig = { issuer: 'https://idp.example.com' };
 
 const user: User = {
   id: '1',
@@ -78,14 +83,14 @@ const configWith = (overrides: Record<string, string> = {}): ConfigService =>
     get: jest.fn((key: string, defaultValue?: string) =>
       key in overrides ? overrides[key] : configService.get(key, defaultValue)
     ),
-    getOrThrow: configService.getOrThrow,
+    getOrThrow: jest.fn((key: string) => (key in overrides ? overrides[key] : configService.getOrThrow(key))),
   }) as unknown as ConfigService;
 
 const serviceWith = (overrides: Record<string, string> = {}) =>
   new OidcUsersService(configWith(overrides), prismaService, authService);
 
 const idpReturns = (claims: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
-  mockCallback.mockResolvedValue({ claims: () => claims, ...extra });
+  mockAuthorizationCodeGrant.mockResolvedValue({ claims: () => claims, ...extra });
 
 const noUser = () => {
   findUnique.mockResolvedValue(null);
@@ -107,76 +112,122 @@ describe('OidcUsersService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockDiscover.mockResolvedValue({
-      Client: class {
-        authorizationUrl = mockAuthorizationUrl;
-        callback = mockCallback;
-        userinfo = mockUserinfo;
-      },
-    });
-    mockAuthorizationUrl.mockReturnValue('https://idp.example.com/authorize');
+    mockDiscovery.mockResolvedValue(oidcConfig);
+    mockBuildAuthorizationUrl.mockReturnValue(new URL('https://idp.example.com/authorize?client_id=vrt-client'));
     service = serviceWith();
   });
+
+  const discoveryOptions = () => mockDiscovery.mock.calls[0][4] as Record<string | symbol, unknown>;
+  const fetchStub = () => jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
 
   describe('getAuthorizationUrl', () => {
     it('returns the IdP url together with state and PKCE verifier', async () => {
       const result = await service.getAuthorizationUrl();
 
       expect(result).toEqual({
-        url: 'https://idp.example.com/authorize',
+        url: 'https://idp.example.com/authorize?client_id=vrt-client',
         state: 'mock-state',
         codeVerifier: 'mock-verifier',
       });
-      expect(mockAuthorizationUrl).toHaveBeenCalledWith(
-        expect.objectContaining({
-          state: 'mock-state',
-          code_challenge: 'mock-challenge',
-          code_challenge_method: 'S256',
-        })
+      expect(mockBuildAuthorizationUrl).toHaveBeenCalledWith(oidcConfig, {
+        redirect_uri: 'http://localhost:4200/users/oidc/callback',
+        scope: 'openid profile email',
+        state: 'mock-state',
+        code_challenge: 'mock-challenge',
+        code_challenge_method: 'S256',
+      });
+    });
+
+    it('discovers the issuer with the client id and redirect uri', async () => {
+      await service.getAuthorizationUrl();
+
+      expect(mockDiscovery).toHaveBeenCalledWith(
+        new URL('https://idp.example.com'),
+        'vrt-client',
+        { redirect_uris: ['http://localhost:4200/users/oidc/callback'], response_types: ['code'] },
+        expect.any(Function),
+        { execute: [] }
       );
+    });
+
+    it.each([
+      ['vrt-client', 'secret', 'vrt-client:secret'],
+      ['a.b_c-d~e', "s!*'()", "a.b_c-d~e:s!*'()"],
+      ['id with space', 'p:w/d', 'id+with+space:p%3Aw%2Fd'],
+    ])('authenticates %p with client_secret_basic encoded as openid-client 5 did', async (clientId, secret, pair) => {
+      await serviceWith({ OIDC_CLIENT_ID: clientId, OIDC_CLIENT_SECRET: secret }).getAuthorizationUrl();
+      const clientAuth = mockDiscovery.mock.calls[0][3] as (...args: unknown[]) => void;
+      const headers = new Headers();
+
+      clientAuth({}, {}, new URLSearchParams(), headers);
+
+      expect(headers.get('authorization')).toBe(`Basic ${Buffer.from(pair).toString('base64')}`);
     });
 
     it('discovers the issuer only once', async () => {
       await service.getAuthorizationUrl();
       await service.getAuthorizationUrl();
 
-      expect(mockDiscover).toHaveBeenCalledTimes(1);
+      expect(mockDiscovery).toHaveBeenCalledTimes(1);
     });
 
     it('retries discovery after a transient failure', async () => {
-      mockDiscover.mockRejectedValueOnce(new Error('discovery down'));
+      mockDiscovery.mockRejectedValueOnce(new Error('discovery down'));
 
       await expect(service.getAuthorizationUrl()).rejects.toThrow('discovery down');
       await expect(service.getAuthorizationUrl()).resolves.toBeDefined();
 
-      expect(mockDiscover).toHaveBeenCalledTimes(2);
+      expect(mockDiscovery).toHaveBeenCalledTimes(2);
     });
 
-    it('applies the insecure TLS agent only to the issuer origin', async () => {
-      await serviceWith({ OIDC_TLS_NO_VERIFY: 'true' }).getAuthorizationUrl();
+    it('allows a plain HTTP issuer and warns about it', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
-      const provider = (Issuer as unknown as Record<string, (url: URL, options: object) => Record<string, unknown>>)[
-        custom.http_options as unknown as string
-      ];
-      expect(provider(new URL('https://idp.example.com/token'), {}).agent).toBeInstanceOf(HttpsAgent);
-      expect(provider(new URL('https://other.example.com/token'), {})).toEqual({});
+      await serviceWith({ OIDC_ISSUER_URL: 'http://localhost:8090/default' }).getAuthorizationUrl();
+
+      expect(discoveryOptions().execute).toEqual([allowInsecureRequests]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('plain HTTP'));
+      warn.mockRestore();
     });
 
-    it('applies the insecure TLS agent to the discovered issuer for JWKS requests', async () => {
-      const issuer: Record<string, unknown> = {
-        Client: class {
-          authorizationUrl = mockAuthorizationUrl;
-        },
-      };
-      mockDiscover.mockResolvedValue(issuer);
+    it('warns that a redirect uri with a query string cannot match at the token endpoint', () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
+      serviceWith({ OIDC_REDIRECT_URI: 'https://vrt.example.com/users/oidc/callback?tenant=a' });
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('OIDC_REDIRECT_URI'));
+      warn.mockRestore();
+    });
+
+    it('sends requests to the issuer through a dispatcher that skips TLS verification', async () => {
+      const fetchSpy = fetchStub();
       await serviceWith({ OIDC_TLS_NO_VERIFY: 'true' }).getAuthorizationUrl();
+      const insecureFetch = discoveryOptions()[customFetch] as (url: string, options: object) => Promise<Response>;
 
-      const provider = issuer[custom.http_options as unknown as string] as (
-        url: URL,
-        options: object
-      ) => Record<string, unknown>;
-      expect(provider(new URL('https://idp.example.com/jwks'), {}).agent).toBeInstanceOf(HttpsAgent);
+      await insecureFetch('https://idp.example.com/token', { method: 'POST' });
+
+      expect(fetchSpy).toHaveBeenCalledWith('https://idp.example.com/token', {
+        method: 'POST',
+        dispatcher: expect.any(Agent),
+      });
+      fetchSpy.mockRestore();
+    });
+
+    it('verifies TLS for every other origin even when OIDC_TLS_NO_VERIFY is set', async () => {
+      const fetchSpy = fetchStub();
+      await serviceWith({ OIDC_TLS_NO_VERIFY: 'true' }).getAuthorizationUrl();
+      const insecureFetch = discoveryOptions()[customFetch] as (url: string, options: object) => Promise<Response>;
+
+      await insecureFetch('https://other.example.com/jwks', { method: 'GET' });
+
+      expect(fetchSpy).toHaveBeenCalledWith('https://other.example.com/jwks', { method: 'GET' });
+      fetchSpy.mockRestore();
+    });
+
+    it('uses the default fetch when TLS verification is on', async () => {
+      await service.getAuthorizationUrl();
+
+      expect(discoveryOptions()).not.toHaveProperty([customFetch]);
     });
   });
 
@@ -242,15 +293,33 @@ describe('OidcUsersService', () => {
       await expectLoginFailed(service);
     });
 
+    it('exchanges the code on the configured redirect uri with the state and PKCE checks', async () => {
+      idpReturns({ email: 'test@example.com', email_verified: true });
+      findUnique.mockResolvedValue(user);
+
+      await login(service, { code: 'the-code', state: 'mock-state', iss: 'https://idp.example.com' });
+
+      const [config, currentUrl, grantChecks] = mockAuthorizationCodeGrant.mock.calls[0];
+      expect(config).toBe(oidcConfig);
+      expect((currentUrl as URL).href).toBe(
+        'http://localhost:4200/users/oidc/callback?code=the-code&state=mock-state&iss=https%3A%2F%2Fidp.example.com'
+      );
+      expect(grantChecks).toEqual({
+        expectedState: 'mock-state',
+        pkceCodeVerifier: 'mock-verifier',
+        idTokenExpected: true,
+      });
+    });
+
     it('throws when the callback validation fails', async () => {
-      mockCallback.mockRejectedValue(new Error('state mismatch'));
+      mockAuthorizationCodeGrant.mockRejectedValue(new Error('state mismatch'));
 
       await expectLoginFailed(service, { code: 'code', state: 'wrong' });
     });
 
     it('falls back to the userinfo endpoint when the email claim is missing', async () => {
       idpReturns({ sub: 'user-1' }, { access_token: 'access-token' });
-      mockUserinfo.mockResolvedValue({
+      mockFetchUserInfo.mockResolvedValue({
         email: 'from.userinfo@example.com',
         email_verified: true,
         given_name: 'Info',
@@ -260,13 +329,13 @@ describe('OidcUsersService', () => {
 
       await login(service);
 
-      expect(mockUserinfo).toHaveBeenCalledWith(expect.objectContaining({ access_token: 'access-token' }));
+      expect(mockFetchUserInfo).toHaveBeenCalledWith(oidcConfig, 'access-token', 'user-1');
       expectCreatedWith({ email: 'from.userinfo@example.com' });
     });
 
     it('still fails when the userinfo request fails and no email is present', async () => {
       idpReturns({ sub: 'user-1' }, { access_token: 'access-token' });
-      mockUserinfo.mockRejectedValue(new Error('userinfo down'));
+      mockFetchUserInfo.mockRejectedValue(new Error('userinfo down'));
 
       await expectLoginFailed(service);
     });
