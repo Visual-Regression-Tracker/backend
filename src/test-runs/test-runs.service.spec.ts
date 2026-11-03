@@ -1185,6 +1185,24 @@ describe('TestRunsService', () => {
         }
       );
 
+      it('restores the ignore areas and comment the kept feature variation had before the approval', async () => {
+        const run = featureRun();
+        const ctx = await initRevertService([run]);
+        const { tx } = ctx;
+        givenFeatureApproval(ctx, 'old.png');
+        tx.baseline.findUnique.mockResolvedValue(
+          baselineOf({ ignoreAreasBeforeApproval: '[{"x":1}]', commentBeforeApproval: null })
+        );
+        tx.baseline.count.mockResolvedValue(1);
+
+        await ctx.service.revert([run.id]);
+
+        expect(tx.testVariation.update).toHaveBeenCalledWith({
+          where: { id: 'variation' },
+          data: { baselineName: 'old.png', ignoreAreas: '[{"x":1}]', comment: null },
+        });
+      });
+
       it('409 when the main variation was deleted', async () => {
         const run = featureRun();
         const ctx = await initRevertService([run]);
@@ -1507,7 +1525,7 @@ describe('TestRunsService', () => {
         expect.anything()
       );
       expect(m.tv.addBaseline).toHaveBeenCalledWith(
-        { id: updated.id, userId: 'user id', testRunId: testRun.id, baselineName: copiedBaselineName },
+        { id: updated.id, userId: 'user id', testRunId: testRun.id, baselineName: copiedBaselineName, before: created },
         expect.anything()
       );
       expectClaim(m, testRun, TestStatus.approved);
@@ -1525,7 +1543,7 @@ describe('TestRunsService', () => {
       expect(m.tv.create).not.toHaveBeenCalled();
       expect(m.tv.update).toHaveBeenCalledWith(existing.id, expect.any(Object), testRun.id, expect.anything());
       expect(m.tv.addBaseline).toHaveBeenCalledWith(
-        expect.objectContaining({ id: existing.id, userId: undefined }),
+        expect.objectContaining({ id: existing.id, userId: undefined, before: existing }),
         expect.anything()
       );
     });

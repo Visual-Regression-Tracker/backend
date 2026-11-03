@@ -366,6 +366,22 @@ describe('TestVariationsService', () => {
         },
       });
     });
+
+    it("records the variation's ignore areas and comment before the approval", async () => {
+      const { service, m } = await build();
+
+      await service.addBaseline({
+        id: 'variationId',
+        testRunId: 'testRunId',
+        baselineName: 'baseline.png',
+        before: { ignoreAreas: '[{"x":1}]', comment: null },
+      });
+
+      expect(m.prisma.testVariation.update.mock.calls[0][0].data.baselines.create).toMatchObject({
+        ignoreAreasBeforeApproval: '[{"x":1}]',
+        commentBeforeApproval: null,
+      });
+    });
   });
 
   describe('merge', () => {

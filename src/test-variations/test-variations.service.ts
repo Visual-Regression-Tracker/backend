@@ -174,11 +174,13 @@ export class TestVariationsService {
       userId,
       testRunId,
       baselineName,
+      before,
     }: {
       id: string;
       userId?: string;
       testRunId: string;
       baselineName: string;
+      before?: Pick<TestVariation, 'ignoreAreas' | 'comment'>;
     },
     tx: Prisma.TransactionClient = this.prismaService
   ): Promise<TestVariation> {
@@ -189,6 +191,7 @@ export class TestVariationsService {
         baselines: {
           create: {
             baselineName,
+            ...(before && { ignoreAreasBeforeApproval: before.ignoreAreas, commentBeforeApproval: before.comment }),
             testRun: {
               connect: {
                 id: testRunId,

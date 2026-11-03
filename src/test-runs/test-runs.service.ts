@@ -189,10 +189,12 @@ export class TestRunsService {
           return false;
         }
         let target: TestVariation = testVariation;
+        let before: TestVariation | undefined;
         if (toFeatureBranch) {
           const key = variationKey(testVariation.projectId, testRun.branchName, testRun);
           const featureBranchTestVariation =
             (await this.testVariationService.findUnique(key, tx)) ?? (await this.testVariationService.create(key, tx));
+          before = featureBranchTestVariation;
           target = await this.testVariationService.update(
             featureBranchTestVariation.id,
             { ignoreAreas: testRun.ignoreAreas, comment: testRun.comment },
@@ -201,7 +203,10 @@ export class TestRunsService {
           );
         }
         if (baselineName) {
-          await this.testVariationService.addBaseline({ id: target.id, userId, testRunId: id, baselineName }, tx);
+          await this.testVariationService.addBaseline(
+            { id: target.id, userId, testRunId: id, baselineName, before },
+            tx
+          );
         }
         return true;
       });
@@ -330,13 +335,22 @@ export class TestRunsService {
     }
     await tx.baseline.delete({ where: { id: baseline.id } });
     const previous = await latestBaseline(tx, variation.id);
-    const restoreBaselineName = () =>
-      tx.testVariation.update({ where: { id: variation.id }, data: { baselineName: previous?.baselineName ?? null } });
+    const restoreVariation = () =>
+      tx.testVariation.update({
+        where: { id: variation.id },
+        data: {
+          baselineName: previous?.baselineName ?? null,
+          ...(baseline.ignoreAreasBeforeApproval !== null && {
+            ignoreAreas: baseline.ignoreAreasBeforeApproval,
+            comment: baseline.commentBeforeApproval,
+          }),
+        },
+      });
 
     const wasFeatureBranchApproval =
       variation.branchName === run.branchName && run.baselineBranchName !== run.branchName;
     if (!wasFeatureBranchApproval) {
-      await restoreBaselineName();
+      await restoreVariation();
       await this.restoreStatus(run, {}, tx);
       return baseline.baselineName;
     }
@@ -356,7 +370,7 @@ export class TestRunsService {
     if (baselines === 0 && testRuns === 0) {
       await tx.testVariation.delete({ where: { id: variation.id } });
     } else {
-      await restoreBaselineName();
+      await restoreVariation();
     }
     return baseline.baselineName;
   }
