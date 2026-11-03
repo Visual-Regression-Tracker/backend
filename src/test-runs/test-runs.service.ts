@@ -168,7 +168,7 @@ export class TestRunsService {
       throw new ConflictException(NO_TEST_VARIATION);
     }
     if (await this.isAlreadyApproved(testRun, autoApprove)) {
-      return testRun;
+      throw new TestRunAlreadyDecidedException(`Test run ${id} is already approved`);
     }
 
     const toFeatureBranch = testRun.baselineBranchName !== testRun.branchName && !merge && !autoApprove;
@@ -215,7 +215,7 @@ export class TestRunsService {
     }
     if (!claimed) {
       await this.staticService.deleteImage(baselineName);
-      return (await this.findOne(id)) ?? testRun;
+      throw changedMeanwhile(id);
     }
 
     const approved = (await this.findOne(id))!;
@@ -239,20 +239,21 @@ export class TestRunsService {
       throw testRunNotFound(id);
     }
     if (testRun.status === TestStatus.failed) {
-      return testRun;
+      throw new TestRunAlreadyDecidedException(`Test run ${id} is already rejected`);
     }
     const { count } = await this.prismaService.testRun.updateMany({
       where: { id, status: testRun.status },
       data: { status: TestStatus.failed, statusBeforeDecision: testRun.status },
     });
-    const current = (await this.prismaService.testRun.findUnique({ where: { id } }))!;
-    if (count > 0) {
-      this.eventsGateway.testRunUpdated(current);
+    if (count === 0) {
+      throw changedMeanwhile(id);
     }
+    const current = (await this.prismaService.testRun.findUnique({ where: { id } }))!;
+    this.eventsGateway.testRunUpdated(current);
     return current;
   }
 
-  async revert(ids: string[]): Promise<void> {
+  async revert(ids: string[], decision?: RevertDecision): Promise<void> {
     const uniqueIds = [...new Set(ids)];
     if (uniqueIds.length === 0) {
       throw new ConflictException('Nothing to revert');
@@ -264,19 +265,16 @@ export class TestRunsService {
       throw testRunNotFound(missing.join(', '));
     }
     const runs = uniqueIds.map((id) => byId.get(id)!);
+    assertRevertable(runs, decision);
 
     const freedBaselines = await this.prismaService.$transaction(async (tx) => {
+      const approved = runs.filter((run) => run.status === TestStatus.approved);
+      for (const run of runs.filter((run) => run.status === TestStatus.failed)) {
+        await this.restoreStatus(run, {}, tx);
+      }
       const freed: { name: string; baselineName: string }[] = [];
-      for (const run of await this.orderForRevert(runs, tx)) {
-        if (run.status === TestStatus.failed) {
-          await this.restoreStatus(run, {}, tx);
-        } else if (run.status === TestStatus.approved) {
-          freed.push({ name: run.name, baselineName: await this.revertApproval(run, tx) });
-        } else {
-          throw new ConflictException(
-            `Test run ${run.id} is ${run.status}: only approved or rejected runs can be reverted`
-          );
-        }
+      for (const run of await this.latestApprovalFirst(approved, tx)) {
+        freed.push({ name: run.name, baselineName: await this.revertApproval(run, tx) });
       }
       return freed;
     });
@@ -293,15 +291,13 @@ export class TestRunsService {
     }
   }
 
-  private async orderForRevert(runs: TestRun[], tx: Prisma.TransactionClient): Promise<TestRun[]> {
-    const approved = runs.filter((run) => run.status === TestStatus.approved);
+  private async latestApprovalFirst(runs: TestRun[], tx: Prisma.TransactionClient): Promise<TestRun[]> {
     const baselines = await tx.baseline.findMany({
-      where: { testRunId: { in: approved.map((run) => run.id) } },
+      where: { testRunId: { in: runs.map((run) => run.id) } },
       select: { testRunId: true, createdAt: true },
     });
     const approvedAt = new Map(baselines.map((baseline) => [baseline.testRunId, baseline.createdAt.getTime()]));
-    approved.sort((a, b) => (approvedAt.get(b.id) ?? 0) - (approvedAt.get(a.id) ?? 0));
-    return [...approved, ...runs.filter((run) => run.status !== TestStatus.approved)];
+    return [...runs].sort((a, b) => (approvedAt.get(b.id) ?? 0) - (approvedAt.get(a.id) ?? 0));
   }
 
   private async restoreStatus(
@@ -741,7 +737,12 @@ export class TestRunsService {
     const ignoreAreas = this.getAllIgnoreAreas(testRun);
     for (const baseline of candidates) {
       if (await this.shouldAutoApprove({ project, baseline, testRun, imageBuffer, ignoreAreas })) {
-        return this.approve(testRun.id, false, true);
+        try {
+          return await this.approve(testRun.id, false, true);
+        } catch (e) {
+          if (!(e instanceof TestRunAlreadyDecidedException)) throw e;
+          return (await this.findOne(testRun.id)) ?? testRun;
+        }
       }
     }
 
@@ -801,7 +802,36 @@ interface SkippedSibling {
 
 type TestRunWithVariation = TestRun & { testVariation: TestVariation | null };
 
-const testRunNotFound = (id: string) => new NotFoundException(`Test run not found: ${id}`);
+export const testRunNotFound = (id: string) => new NotFoundException(`Test run not found: ${id}`);
+
+export class TestRunAlreadyDecidedException extends ConflictException {}
+
+export enum RevertDecision {
+  approve = 'approve',
+  reject = 'reject',
+}
+
+const DECIDED_STATUS = { approve: TestStatus.approved, reject: TestStatus.failed } as const;
+
+const assertRevertable = (runs: TestRun[], decision?: RevertDecision) => {
+  if (decision) {
+    const expected = DECIDED_STATUS[decision];
+    const changed = runs.find((run) => run.status !== expected);
+    if (changed) {
+      throw new ConflictException(`Test run ${changed.id} is ${changed.status}, not ${expected}`);
+    }
+    return;
+  }
+  const undecided = runs.find((run) => run.status !== TestStatus.approved && run.status !== TestStatus.failed);
+  if (undecided) {
+    throw new ConflictException(
+      `Test run ${undecided.id} is ${undecided.status}: only approved or rejected runs can be reverted`
+    );
+  }
+};
+
+const changedMeanwhile = (id: string) =>
+  new TestRunAlreadyDecidedException(`Test run ${id} was changed by someone else meanwhile`);
 
 const latestBaseline = (tx: Prisma.TransactionClient, testVariationId: string) =>
   tx.baseline.findFirst({ where: { testVariationId }, orderBy: { createdAt: 'desc' } });
