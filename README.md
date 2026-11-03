@@ -156,7 +156,9 @@ break:
    REDIS_URL=redis://<host>:6379
    ```
    When `REDIS_URL` is unset, the default in-memory adapter is used, so a single
-   instance and local development work with no extra setup.
+   instance and local development work with no extra setup. Any Redis server
+   from 5.0 on works (the API speaks RESP2). If Redis goes down, the API keeps
+   running and reconnects; events emitted meanwhile may miss other instances.
 
 2. **Reverse proxy with sticky sessions + WebSocket upgrade** for `/socket.io/`.
    Without sticky sessions the polling handshake fails with `400 "Session ID
