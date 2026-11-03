@@ -27,9 +27,23 @@ export class RedisIoAdapter extends IoAdapter {
         ? new Error(`Redis at ${describeUrl(url)} is not reachable after ${connectTimeoutMs} ms: ${cause.message}`)
         : Math.min(retries * 200, MAX_RECONNECT_DELAY_MS);
 
-    // no disableOfflineQueue: @socket.io/redis-adapter publishes without catch, an offline rejection would crash the process
-    const pubClient = createClient({ url, socket: { reconnectStrategy } });
+    const pubClient = createClient({
+      url,
+      // Redis servers before 6.0 do not speak RESP3
+      RESP: 2,
+      socket: { reconnectStrategy },
+    });
     const subClient = pubClient.duplicate();
+    // @socket.io/redis-adapter publishes without catch: a timed-out or failed publish would crash the process
+    const publish = pubClient.publish.bind(pubClient);
+    Object.assign(pubClient, {
+      publish: (...args: Parameters<typeof publish>) =>
+        publish(...args).catch((error: unknown) => {
+          const reason = error instanceof Error ? `${error.constructor.name} ${error.message}`.trim() : String(error);
+          RedisIoAdapter.logger.warn(`Redis publish failed, event not sent to other instances: ${reason}`);
+          return 0;
+        }),
+    });
 
     pubClient.on('error', (err) => RedisIoAdapter.logger.error(`Redis pub client error: ${err}`));
     subClient.on('error', (err) => RedisIoAdapter.logger.error(`Redis sub client error: ${err}`));
@@ -37,7 +51,8 @@ export class RedisIoAdapter extends IoAdapter {
     try {
       await Promise.all([pubClient.connect(), subClient.connect()]);
     } catch (error) {
-      await Promise.allSettled([pubClient.disconnect(), subClient.disconnect()]);
+      pubClient.destroy();
+      subClient.destroy();
       throw error;
     }
     connected = true;
