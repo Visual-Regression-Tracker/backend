@@ -86,6 +86,7 @@ describe('TestVariationsService', () => {
         where: { id: 'test id' },
         include: {
           baselines: {
+            omit: { ignoreAreasBeforeApproval: true, commentBeforeApproval: true },
             include: {
               testRun: true,
               user: { omit: { password: true, apiKey: true } },

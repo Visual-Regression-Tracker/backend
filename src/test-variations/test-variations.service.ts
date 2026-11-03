@@ -31,13 +31,17 @@ export class TestVariationsService {
 
   async getDetails(id: string): Promise<
     TestVariation & {
-      baselines: (Baseline & { testRun: TestRun | null; user: Omit<User, 'password' | 'apiKey'> | null })[];
+      baselines: (Omit<Baseline, 'ignoreAreasBeforeApproval' | 'commentBeforeApproval'> & {
+        testRun: TestRun | null;
+        user: Omit<User, 'password' | 'apiKey'> | null;
+      })[];
     }
   > {
     const testVariation = await this.prismaService.testVariation.findUnique({
       where: { id },
       include: {
         baselines: {
+          omit: { ignoreAreasBeforeApproval: true, commentBeforeApproval: true },
           include: {
             testRun: true,
             user: { omit: { password: true, apiKey: true } },
