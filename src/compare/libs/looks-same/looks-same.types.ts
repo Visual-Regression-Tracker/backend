@@ -1,6 +1,6 @@
-import { BlurAmplitudeConfig } from '../blur-amplitude.config';
+import { RenderingNoiseConfig } from '../rendering-noise.config';
 
-export interface LooksSameConfig extends BlurAmplitudeConfig {
+export interface LooksSameConfig extends RenderingNoiseConfig {
   strict?: boolean;
   tolerance?: number;
   antialiasingTolerance?: number;

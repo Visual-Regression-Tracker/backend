@@ -11,8 +11,7 @@ import { VlmService } from './libs/vlm/vlm.service';
 import { isHddStaticServiceConfigured } from '../static/utils';
 import { DiffWorkerPool } from './diff-worker-pool';
 import { SignatureJobInput, SignatureJobOutput } from './libs/pixelmatch/signature.core';
-import { BlurAmplitudeOptions, isRenderingNoise } from './libs/pixelmatch/blur-amplitude.core';
-import { splitBlurAmplitudeConfig } from './libs/blur-amplitude.config';
+import { splitRenderingNoiseConfig } from './libs/rendering-noise.config';
 import { StaticService } from '../static/static.service';
 import { Dinov2Service } from './libs/dinov2/dinov2.service';
 import { messageOf } from '../utils/errors';
@@ -20,6 +19,7 @@ import { messageOf } from '../utils/errors';
 @Injectable()
 export class CompareService {
   private readonly logger: Logger = new Logger(CompareService.name);
+  private warnedNoDinov2 = false;
 
   constructor(
     private readonly pixelmatchService: PixelmatchService,
@@ -44,26 +44,26 @@ export class CompareService {
     const project: Project =
       loadedProject ?? (await this.prismaService.project.findUnique({ where: { id: projectId } }))!;
     const comparator = this.getComparator(project.imageComparison);
-    const { blurAmplitude, comparatorConfig } = splitBlurAmplitudeConfig(
-      comparator.parseConfig(project.imageComparisonConfig),
-      this.logger
+    const { ignoreRenderingNoise, comparatorConfig } = splitRenderingNoiseConfig(
+      comparator.parseConfig(project.imageComparisonConfig)
     );
-    if (!blurAmplitude) {
+    const filtering = ignoreRenderingNoise && this.dinov2Service.isConfigured();
+    if (ignoreRenderingNoise && !filtering && !this.warnedNoDinov2) {
+      this.warnedNoDinov2 = true;
+      this.logger.warn('ignoreRenderingNoise is on but DINOV2_URL is not set: the filter is off');
+    }
+    if (!filtering) {
       return comparator.getDiff(data, comparatorConfig);
     }
-    if (comparator.appliesBlurAmplitudeFilter) {
-      return comparator.getDiff({ ...data, blurAmplitude }, comparatorConfig);
+    if (comparator.appliesRenderingNoiseFilter) {
+      return comparator.getDiff({ ...data, ignoreRenderingNoise: true }, comparatorConfig);
     }
 
     const result = await comparator.getDiff(data, comparatorConfig);
-    return this.filterRenderingNoise(data, result, blurAmplitude);
+    return this.filterRenderingNoise(data, result);
   }
 
-  private async filterRenderingNoise(
-    data: ImageCompareInput,
-    result: DiffResult,
-    { threshold, dinov2 }: BlurAmplitudeOptions
-  ): Promise<DiffResult> {
+  private async filterRenderingNoise(data: ImageCompareInput, result: DiffResult): Promise<DiffResult> {
     if (result.status !== TestStatus.unresolved || !result.isSameDimension) {
       return result;
     }
@@ -80,18 +80,12 @@ export class CompareService {
         baseline,
         image,
         ignoreAreas: data.ignoreAreas,
-        ...(dinov2 ? { gateIfNoise: { threshold } } : {}),
       });
-      if (!measure || !isRenderingNoise(measure, threshold)) {
+      if (!measure || !gate) {
         return result;
       }
-      if (dinov2) {
-        if (!gate) {
-          return result;
-        }
-        if (!(await this.dinov2Service.confirmsNoiseForGate(gate, baseline, image, dinov2.threshold)).noise) {
-          return result;
-        }
+      if (!(await this.dinov2Service.confirmsNoiseForGate(gate, baseline, image)).noise) {
+        return result;
       }
       this.logger.debug(
         `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${measure.amplitude.toFixed(1)}, ${measure.solidPixels} solid pixels)`

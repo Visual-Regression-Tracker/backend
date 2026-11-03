@@ -9,6 +9,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # the Node major moves by hand, with .nvmrc and the Dockerfiles
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       # one PR for all minor/patch bumps
       npm-minor-patch:
@@ -53,6 +57,9 @@ updates:
       - "/dinov2"
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
     groups:
       docker:
         patterns:

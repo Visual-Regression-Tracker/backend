@@ -90,15 +90,20 @@ describe('VlmService', () => {
   });
 
   it('applies the rendering-noise filter through pixelmatch, before the model', async () => {
-    const blurAmplitude = { threshold: 80 };
     const { service, pixelmatchGetDiff, ollama } = await setup({
       pixelmatch: createPixelmatchResult({ status: TestStatus.ok, diffName: null }),
     });
 
-    const result = await service.getDiff({ ...input, diffTollerancePercent: 0, blurAmplitude }, DEFAULT_CONFIG);
+    const result = await service.getDiff(
+      { ...input, diffTollerancePercent: 0, ignoreRenderingNoise: true },
+      DEFAULT_CONFIG
+    );
 
-    expect(service.appliesBlurAmplitudeFilter).toBe(true);
-    expect(pixelmatchGetDiff).toHaveBeenCalledWith(expect.objectContaining({ blurAmplitude }), expect.anything());
+    expect(service.appliesRenderingNoiseFilter).toBe(true);
+    expect(pixelmatchGetDiff).toHaveBeenCalledWith(
+      expect.objectContaining({ ignoreRenderingNoise: true }),
+      expect.anything()
+    );
     expect(result.status).toBe(TestStatus.ok);
     expect(ollama).not.toHaveBeenCalled();
   });

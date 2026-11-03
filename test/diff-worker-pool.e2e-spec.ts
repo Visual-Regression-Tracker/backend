@@ -49,7 +49,7 @@ describe('DiffWorkerPool on real worker threads (compiled build)', () => {
       },
     ],
     ['signature', { kind: 'signature', ignoreAreas: [], threshold: 0.1, includeAA: false }],
-    ['blur-amplitude', { kind: 'blur-amplitude', ignoreAreas: [], gateIfNoise: { threshold: 80 } }],
+    ['blur-amplitude', { kind: 'blur-amplitude', ignoreAreas: [] }],
     [
       'looks-same',
       {

@@ -369,7 +369,14 @@ describe('change signature', () => {
   });
 });
 
-describe('blur-amplitude filter', () => {
+describe('rendering-noise filter', () => {
+  const gate = { width: 5, height: 3, cells: [7] };
+  const noise = {
+    ...mismatch,
+    blurAmplitude: 40,
+    diffBuffer: Buffer.from('the diff'),
+    gate,
+  };
   const init = (output: Record<string, unknown>, confirmsNoiseForGate = jest.fn()) =>
     setup({
       pool: poolOf(output),
@@ -377,134 +384,58 @@ describe('blur-amplitude filter', () => {
       saveImage: jest.fn().mockResolvedValue('diff.png'),
       confirmsNoiseForGate,
     });
-
-  const filter: { threshold: number; dinov2?: { threshold: number } } = { threshold: 80 };
-  const compareWith = (service: PixelmatchService, blurAmplitude?: typeof filter) =>
-    compare(service, { saveDiffAsFile: true, ...(blurAmplitude ? { blurAmplitude } : {}) });
+  const compareWith = (service: PixelmatchService, ignoreRenderingNoise?: boolean) =>
+    compare(service, { saveDiffAsFile: true, ...(ignoreRenderingNoise ? { ignoreRenderingNoise } : {}) });
 
   it('applies the filter itself', async () => {
     const { service } = await init(mismatch);
 
-    expect(service.appliesBlurAmplitudeFilter).toBe(true);
+    expect(service.appliesRenderingNoiseFilter).toBe(true);
   });
 
-  it('asks for no measurement when the comparison does not carry the filter', async () => {
+  it.each([[undefined], [true]])('tells the worker ignoreRenderingNoise %p', async (ignoreRenderingNoise) => {
     const { service, run } = await init(mismatch);
 
-    await compareWith(service);
+    await compareWith(service, ignoreRenderingNoise);
 
-    expect(run.mock.calls[0][0].blurAmplitude).toBeUndefined();
+    expect(run.mock.calls[0][0].ignoreRenderingNoise).toBe(ignoreRenderingNoise);
   });
 
-  it('measures with the settings the comparison carries', async () => {
-    const { service, run } = await init(mismatch);
+  it('passes a run DINOv2 confirms is only noise, with the gate the diff job computed', async () => {
+    const confirmsNoiseForGate = jest.fn().mockResolvedValue({ noise: true, score: 0.05 });
+    const { service, saveImage } = await init(noise, confirmsNoiseForGate);
 
-    await compareWith(service, { threshold: 50 });
+    const result = await compareWith(service, true);
 
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ blurAmplitude: { threshold: 50 } }));
-  });
-
-  it('passes a run whose change is only rendering noise', async () => {
-    const { service, saveImage } = await init({ ...mismatch, blurAmplitude: 40, renderingNoiseOnly: true });
-
-    const result = await compareWith(service, filter);
-
+    expect(confirmsNoiseForGate).toHaveBeenCalledWith(gate, Buffer.from('png'), Buffer.from('png'));
     expect(result.status).toBe(TestStatus.ok);
     expect(result.diffPercent).toBe(5);
     expect(result.diffName).toBeNull();
     expect(saveImage).not.toHaveBeenCalled();
   });
 
-  it('fails a run whose change is stronger than rendering noise', async () => {
-    const { service } = await init({
-      ...mismatch,
-      blurAmplitude: 200,
-      renderingNoiseOnly: false,
-      diffBuffer: Buffer.from('the diff'),
-    });
+  it('fails a run in which DINOv2 sees a change of content, with its diff', async () => {
+    const confirmsNoiseForGate = jest.fn().mockResolvedValue({ noise: false, score: 0.56 });
+    const { service, saveImage } = await init(noise, confirmsNoiseForGate);
 
-    const result = await compareWith(service, filter);
+    const result = await compareWith(service, true);
 
     expect(result.status).toBe(TestStatus.unresolved);
     expect(result.diffName).toBe('diff.png');
+    expect(saveImage).toHaveBeenCalledWith('diff', Buffer.from('the diff'));
   });
 
-  describe('with the DINOv2 check', () => {
-    const checked = { ...filter, dinov2: { threshold: 0.15 } };
-    const gate = { width: 5, height: 3, cells: [7] };
-    const noise = {
-      ...mismatch,
-      blurAmplitude: 40,
-      renderingNoiseOnly: true,
-      diffBuffer: Buffer.from('the diff'),
-      gate,
-    };
+  it('fails a run whose change is stronger than rendering noise, without asking DINOv2', async () => {
+    const confirmsNoiseForGate = jest.fn();
+    const { service } = await init(
+      { ...mismatch, blurAmplitude: 200, diffBuffer: Buffer.from('the diff') },
+      confirmsNoiseForGate
+    );
 
-    it('passes a run DINOv2 confirms is only noise, with the gate the diff job computed', async () => {
-      const confirmsNoiseForGate = jest.fn().mockResolvedValue({ noise: true, score: 0.05 });
-      const { service, saveImage } = await init(noise, confirmsNoiseForGate);
+    const result = await compareWith(service, true);
 
-      const result = await compareWith(service, checked);
-
-      expect(confirmsNoiseForGate).toHaveBeenCalledWith(gate, Buffer.from('png'), Buffer.from('png'), 0.15);
-      expect(result.status).toBe(TestStatus.ok);
-      expect(saveImage).not.toHaveBeenCalled();
-    });
-
-    it('fails a run in which DINOv2 sees a change of content, with its diff', async () => {
-      const confirmsNoiseForGate = jest.fn().mockResolvedValue({ noise: false, score: 0.56 });
-      const { service, saveImage } = await init(noise, confirmsNoiseForGate);
-
-      const result = await compareWith(service, checked);
-
-      expect(result.status).toBe(TestStatus.unresolved);
-      expect(result.diffName).toBe('diff.png');
-      expect(saveImage).toHaveBeenCalledWith('diff', Buffer.from('the diff'));
-    });
-
-    it('fails a run whose diff job returned no gate, without asking DINOv2', async () => {
-      const confirmsNoiseForGate = jest.fn();
-      const { service, saveImage } = await init({ ...noise, gate: undefined }, confirmsNoiseForGate);
-
-      const result = await compareWith(service, checked);
-
-      expect(confirmsNoiseForGate).not.toHaveBeenCalled();
-      expect(result.status).toBe(TestStatus.unresolved);
-      expect(saveImage).toHaveBeenCalledWith('diff', Buffer.from('the diff'));
-    });
-
-    it('asks the worker to keep the diff when a check will follow', async () => {
-      const { service, run } = await init(noise, jest.fn().mockResolvedValue({ noise: true }));
-
-      await compareWith(service, checked);
-
-      expect(run).toHaveBeenCalledWith(expect.objectContaining({ blurAmplitude: checked }));
-    });
-
-    it('fails a run DINOv2 could not confirm', async () => {
-      const { service } = await init(noise, jest.fn().mockResolvedValue({ noise: false }));
-
-      expect((await compareWith(service, checked)).status).toBe(TestStatus.unresolved);
-    });
-
-    it('does not ask DINOv2 about a change the blur already fails', async () => {
-      const confirmsNoiseForGate = jest.fn();
-      const { service } = await init(
-        { ...mismatch, blurAmplitude: 200, renderingNoiseOnly: false },
-        confirmsNoiseForGate
-      );
-
-      await compareWith(service, checked);
-
-      expect(confirmsNoiseForGate).not.toHaveBeenCalled();
-    });
-
-    it('does not ask DINOv2 when the project did not turn the check on', async () => {
-      const confirmsNoiseForGate = jest.fn();
-      const { service } = await init(noise, confirmsNoiseForGate);
-
-      expect((await compareWith(service, filter)).status).toBe(TestStatus.ok);
-      expect(confirmsNoiseForGate).not.toHaveBeenCalled();
-    });
+    expect(result.status).toBe(TestStatus.unresolved);
+    expect(result.diffName).toBe('diff.png');
+    expect(confirmsNoiseForGate).not.toHaveBeenCalled();
   });
 });
