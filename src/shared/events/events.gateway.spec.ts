@@ -383,6 +383,20 @@ describe('EventsGateway', () => {
     });
   });
 
+  describe('disconnectUsers', () => {
+    it('closes every socket of the given users from the server side', async () => {
+      const { gateway } = await initGateway();
+      const disconnectSockets = jest.fn();
+      const inMock = jest.fn(() => ({ disconnectSockets }));
+      gateway.server = { in: inMock } as unknown as Server;
+
+      gateway.disconnectUsers(['u1', 'u2']);
+
+      expect(inMock).toHaveBeenCalledWith(['user:u1', 'user:u2']);
+      expect(disconnectSockets).toHaveBeenCalledWith(true);
+    });
+  });
+
   describe('rooms', () => {
     const projectId = '2f3c5c8e-3b5e-4b1a-9c3e-1f2a3b4c5d6e';
     const buildId = '7a8b9c0d-1e2f-4a3b-8c5d-6e7f8a9b0c1d';
