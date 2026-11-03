@@ -24,7 +24,7 @@ const build = async () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
-      baseline: { findMany: jest.fn().mockResolvedValue([]), deleteMany: jest.fn() },
+      baseline: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), deleteMany: jest.fn() },
       project: { findUnique: jest.fn() },
     },
   };
@@ -173,8 +173,15 @@ describe('TestVariationsService', () => {
       found.forEach((variation) => jest.mocked(ctx.service.findUnique).mockResolvedValueOnce(variation as never));
       return ctx;
     };
-    const main = generateTestVariation({ branchName: 'master', updatedAt: new Date(2000) });
-    const current = generateTestVariation({ branchName: 'develop', updatedAt: new Date(1000) });
+    const main = generateTestVariation({ id: 'main', branchName: 'master' });
+    const current = generateTestVariation({ id: 'current', branchName: 'develop' });
+    const latestBaselines = (m: Awaited<ReturnType<typeof build>>['m'], mainAt?: number, currentAt?: number) => {
+      const at: Record<string, number | undefined> = { main: mainAt, current: currentAt };
+      m.prisma.baseline.findFirst.mockImplementation(({ where }: { where: { testVariationId: string } }) => {
+        const createdAt = at[where.testVariationId];
+        return Promise.resolve(createdAt === undefined ? null : { createdAt: new Date(createdAt) });
+      });
+    };
 
     it.each([
       ['the main branch', [main, undefined], main],
@@ -184,6 +191,7 @@ describe('TestVariationsService', () => {
       const request = findRequest({ projectId: TEST_PROJECT.id });
       const { service, m } = await initFind(mainResult, currentResult);
       m.prisma.project.findUnique.mockReturnValueOnce(TEST_PROJECT);
+      latestBaselines(m, 2000, 1000);
 
       const result = await service.find(request);
 
@@ -243,14 +251,25 @@ describe('TestVariationsService', () => {
       expect(service.findUnique).toHaveBeenNthCalledWith(1, expect.objectContaining({ branchName: 'trunk' }));
     });
 
-    it('keeps the current branch variation when it is as new as the main branch one', async () => {
-      const updatedAt = new Date('2024-01-01');
-      const sameAgeMain = generateTestVariation({ id: 'main', updatedAt });
-      const sameAgeCurrent = generateTestVariation({ id: 'current', updatedAt });
-      const { service, m } = await initFind(sameAgeMain, sameAgeCurrent);
+    it.each([
+      ['its baseline is as new as the main branch one', 1000, 1000],
+      ['its baseline is newer, even when main was edited later', 1000, 2000],
+      ['neither has a baseline', undefined, undefined],
+    ])('keeps the current branch variation when %s', async (_case, mainAt, currentAt) => {
+      const editedMain = { ...main, updatedAt: new Date(3000) };
+      const { service, m } = await initFind(editedMain, { ...current, updatedAt: new Date(0) });
       m.prisma.project.findUnique.mockResolvedValueOnce(TEST_PROJECT);
+      latestBaselines(m, mainAt, currentAt);
 
-      await expect(service.find(findRequest())).resolves.toBe(sameAgeCurrent);
+      await expect(service.find(findRequest())).resolves.toMatchObject({ id: 'current' });
+    });
+
+    it('takes the main branch variation when the current one has no baseline left', async () => {
+      const { service, m } = await initFind(main, current);
+      m.prisma.project.findUnique.mockResolvedValueOnce(TEST_PROJECT);
+      latestBaselines(m, 1000, undefined);
+
+      await expect(service.find(findRequest())).resolves.toBe(main);
     });
   });
 

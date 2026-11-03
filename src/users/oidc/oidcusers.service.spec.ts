@@ -142,7 +142,7 @@ describe('OidcUsersService', () => {
       await service.getAuthorizationUrl();
 
       expect(mockDiscovery).toHaveBeenCalledWith(
-        new URL('https://idp.example.com'),
+        new URL('https://idp.example.com/.well-known/openid-configuration'),
         'vrt-client',
         { redirect_uris: ['http://localhost:4200/users/oidc/callback'], response_types: ['code'] },
         expect.any(Function),
@@ -163,6 +163,23 @@ describe('OidcUsersService', () => {
 
       expect(headers.get('authorization')).toBe(`Basic ${Buffer.from(pair).toString('base64')}`);
     });
+
+    it.each([
+      ['https://idp.example.com/', 'https://idp.example.com/.well-known/openid-configuration'],
+      ['https://idp.example.com/realms/vrt/', 'https://idp.example.com/realms/vrt/.well-known/openid-configuration'],
+      ['http://keycloak:8080/realms/vrt', 'http://keycloak:8080/realms/vrt/.well-known/openid-configuration'],
+      [
+        'https://idp.example.com/tenant/.well-known/openid-configuration',
+        'https://idp.example.com/tenant/.well-known/openid-configuration',
+      ],
+    ])(
+      'fetches the discovery document of %p from %p, so the advertised issuer need not match it',
+      async (issuer, url) => {
+        await serviceWith({ OIDC_ISSUER_URL: issuer }).getAuthorizationUrl();
+
+        expect(mockDiscovery.mock.calls[0][0]).toEqual(new URL(url));
+      }
+    );
 
     it('discovers the issuer only once', async () => {
       await service.getAuthorizationUrl();
