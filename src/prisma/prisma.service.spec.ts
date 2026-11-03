@@ -3,8 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { mkdtempSync, writeFileSync } from 'fs';
 import { availableParallelism, tmpdir } from 'os';
 import { join, relative, resolve } from 'path';
-import { Client, ClientConfig } from 'pg';
-import { getPgOptions, negotiatePreferredSsl, physicalCpuCount, PrismaService } from './prisma.service';
+import { Client } from 'pg';
+import { getPgOptions, physicalCpuCount, PrismaService } from './prisma.service';
 
 describe('PrismaService', () => {
   let service: PrismaService;
@@ -102,11 +102,9 @@ describe('getPgOptions', () => {
         max: defaultMax,
         connectionTimeoutMillis: 10000,
         idleTimeoutMillis: 300000,
-        ssl: noVerify,
       },
       schema: undefined,
       unsupportedParams: [],
-      preferSsl: true,
     });
   });
 
@@ -134,18 +132,16 @@ describe('getPgOptions', () => {
 
   describe('TLS, as Prisma 6 read the URL', () => {
     it.each([
-      ['takes sslmode=prefer out of the URL for pg', '?sslmode=prefer&schema=vrt', true, '?schema=vrt'],
-      ['insists on TLS under sslmode=require, unchecked', '?sslmode=require', false, ''],
+      ['takes sslmode=prefer out of the URL for pg', '?sslmode=prefer&schema=vrt', '?schema=vrt'],
+      ['insists on TLS under sslmode=require, unchecked', '?sslmode=require', ''],
       [
         'drops sslcert without sslaccept=strict (Prisma 6 accepted any certificate)',
         '?sslmode=require&sslcert=a.pem',
-        false,
         '',
       ],
-    ])('%s', (_, query, preferSsl, remainingQuery) => {
-      const { pool, preferSsl: prefer } = getPgOptions(`${url}${query}`);
+    ])('%s', (_, query, remainingQuery) => {
+      const { pool } = getPgOptions(`${url}${query}`);
 
-      expect(prefer).toBe(preferSsl);
       expect(pool.ssl).toEqual(noVerify);
       expect(pool.connectionString).toBe(`${url}${remainingQuery}`);
     });
@@ -167,13 +163,22 @@ describe('getPgOptions', () => {
       const ca = writeCa('relative-ca');
       const fromPrismaFolder = relative(resolve('prisma'), ca);
 
-      const { pool } = getPgOptions(`${url}?sslaccept=strict&sslcert=${encodeURIComponent(fromPrismaFolder)}`);
+      const { pool } = getPgOptions(
+        `${url}?sslmode=require&sslaccept=strict&sslcert=${encodeURIComponent(fromPrismaFolder)}`
+      );
 
       expect(pool.ssl).toEqual({ ca: Buffer.from('relative-ca') });
     });
 
+    it('leaves a URL without sslmode to pg, which connects without TLS', () => {
+      const { pool } = getPgOptions(url);
+
+      expect(pool.connectionString).toBe(url);
+      expect(pool).not.toHaveProperty('ssl');
+    });
+
     it('connects without TLS under sslmode=disable', () => {
-      expect(getPgOptions(`${url}?sslmode=disable`)).toMatchObject({ pool: { ssl: false }, preferSsl: false });
+      expect(getPgOptions(`${url}?sslmode=disable`)).toMatchObject({ pool: { ssl: false } });
     });
 
     it.each([
@@ -182,11 +187,10 @@ describe('getPgOptions', () => {
       ['sslmode=verify-full', `${url}?sslmode=verify-full`],
       ['sslmode=verify-ca', `${url}?sslmode=verify-ca`],
     ])('leaves a URL written for pg (%s) to pg as it is', (_, pgUrl) => {
-      const { pool, preferSsl } = getPgOptions(pgUrl);
+      const { pool } = getPgOptions(pgUrl);
 
       expect(pool.connectionString).toBe(pgUrl);
       expect(pool).not.toHaveProperty('ssl');
-      expect(preferSsl).toBe(false);
     });
   });
 
@@ -198,51 +202,8 @@ describe('getPgOptions', () => {
 
   it('falls back to the defaults for an unparsable or missing URL', () => {
     expect(getPgOptions(undefined).pool.max).toBe(defaultMax);
-    expect(getPgOptions('not a url')).toMatchObject({ schema: undefined, unsupportedParams: [], preferSsl: false });
+    expect(getPgOptions('not a url')).toMatchObject({ schema: undefined, unsupportedParams: [] });
     expect(getPgOptions('not a url').pool).not.toHaveProperty('ssl');
-  });
-});
-
-describe('negotiatePreferredSsl', () => {
-  afterEach(() => jest.restoreAllMocks());
-
-  const stubClient = (connect: () => Promise<void>) => {
-    jest.spyOn(Client.prototype, 'connect').mockImplementation(connect);
-    return jest.spyOn(Client.prototype, 'end').mockResolvedValue(undefined as never);
-  };
-
-  const preferringConfig = () => ({ connectionString: 'postgresql://db/vrt', ssl: { rejectUnauthorized: false } });
-
-  it('falls back to plaintext when the server has no TLS', async () => {
-    const end = stubClient(() => Promise.reject(new Error('The server does not support SSL connections')));
-    const log = jest.fn();
-    const config: ClientConfig = preferringConfig();
-
-    await negotiatePreferredSsl(config, { log } as unknown as Logger);
-
-    expect(config.ssl).toBe(false);
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('without it'));
-    expect(end).toHaveBeenCalled();
-  });
-
-  it('keeps TLS when the trial connection succeeds', async () => {
-    const end = stubClient(() => Promise.resolve());
-    const config = preferringConfig();
-
-    await negotiatePreferredSsl(config);
-
-    expect(config.ssl).toEqual({ rejectUnauthorized: false });
-    expect(end).toHaveBeenCalled();
-  });
-
-  it('fails when the server cannot be reached, so TLS is not settled on a guess', async () => {
-    const end = stubClient(() => Promise.reject(new Error('connect ECONNREFUSED 172.18.0.2:5432')));
-    const config = preferringConfig();
-
-    await expect(negotiatePreferredSsl(config)).rejects.toThrow('ECONNREFUSED');
-
-    expect(config.ssl).toEqual({ rejectUnauthorized: false });
-    expect(end).toHaveBeenCalled();
   });
 });
 
@@ -260,44 +221,6 @@ describe('PrismaService construction', () => {
     new PrismaService();
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('ignored since Prisma 7: pgbouncer'));
-  });
-
-  it('settles TLS before it first connects when the URL prefers it', async () => {
-    const end = jest.spyOn(Client.prototype, 'end').mockResolvedValue(undefined as never);
-    jest
-      .spyOn(Client.prototype, 'connect')
-      .mockRejectedValue(new Error('The server does not support SSL connections') as never);
-    process.env.DATABASE_URL = 'postgresql://user:secret@db:5432/vrt';
-    const service = new PrismaService();
-    const connect = jest.spyOn(service, '$connect').mockResolvedValue(undefined);
-
-    await service.onModuleInit();
-
-    expect(end).toHaveBeenCalled();
-    expect(connect).toHaveBeenCalledTimes(1);
-    expect((service as unknown as { pgConfig: { ssl: unknown } }).pgConfig.ssl).toBe(false);
-  });
-
-  it('does not connect when the TLS probe cannot reach the database', async () => {
-    jest.spyOn(Client.prototype, 'end').mockResolvedValue(undefined as never);
-    jest.spyOn(Client.prototype, 'connect').mockRejectedValue(new Error('getaddrinfo ENOTFOUND db') as never);
-    process.env.DATABASE_URL = 'postgresql://user:secret@db:5432/vrt';
-    const service = new PrismaService();
-    const connect = jest.spyOn(service, '$connect').mockResolvedValue(undefined);
-
-    await expect(service.onModuleInit()).rejects.toThrow('ENOTFOUND');
-    expect(connect).not.toHaveBeenCalled();
-  });
-
-  it('does not try TLS first when the URL settles it', async () => {
-    const trial = jest.spyOn(Client.prototype, 'connect');
-    process.env.DATABASE_URL = 'postgresql://user:secret@db:5432/vrt?sslmode=disable';
-    const service = new PrismaService();
-    jest.spyOn(service, '$connect').mockResolvedValue(undefined);
-
-    await service.onModuleInit();
-
-    expect(trial).not.toHaveBeenCalled();
   });
 
   it('stays quiet for a URL it fully understands', () => {
