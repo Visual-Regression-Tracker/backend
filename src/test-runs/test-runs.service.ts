@@ -192,11 +192,10 @@ export class TestRunsService {
         let before: TestVariation | undefined;
         if (toFeatureBranch) {
           const key = variationKey(testVariation.projectId, testRun.branchName, testRun);
-          const featureBranchTestVariation =
+          before =
             (await this.testVariationService.findUnique(key, tx)) ?? (await this.testVariationService.create(key, tx));
-          before = featureBranchTestVariation;
           target = await this.testVariationService.update(
-            featureBranchTestVariation.id,
+            before.id,
             { ignoreAreas: testRun.ignoreAreas, comment: testRun.comment },
             id,
             tx
@@ -340,6 +339,7 @@ export class TestRunsService {
         where: { id: variation.id },
         data: {
           baselineName: previous?.baselineName ?? null,
+          // null: the approval did not overwrite this variation's ignore areas and comment
           ...(baseline.ignoreAreasBeforeApproval !== null && {
             ignoreAreas: baseline.ignoreAreasBeforeApproval,
             comment: baseline.commentBeforeApproval,
