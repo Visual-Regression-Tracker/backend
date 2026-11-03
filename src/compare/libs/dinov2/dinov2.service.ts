@@ -7,7 +7,7 @@ import { messageOf } from '../../../utils/errors';
 const TILE_PATCHES = 16;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const STATUS_TIMEOUT_MS = 3_000;
-// strongest of 57 anti-aliasing-only real pairs: 0.133
+// above the strongest anti-aliasing-only pair measured (0.133)
 export const DINOV2_THRESHOLD = 0.15;
 
 export interface Dinov2Status {
