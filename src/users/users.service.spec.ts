@@ -13,6 +13,7 @@ import { toUserSummary } from './dto/user.dto';
 import { UpdateUserDto } from './dto/user-update.dto';
 import { OidcUsersService } from './oidc/oidcusers.service';
 import { LdapUsersService } from './ldap/ldapusers.service';
+import { EventsGateway } from '../shared/events/events.gateway';
 
 const user: User = {
   id: '1',
@@ -31,9 +32,11 @@ describe('UsersService with DbUserService implementation', () => {
   let service: UsersService;
   let prismaService: PrismaService;
   let configService: { get: jest.Mock };
+  let eventsGateway: { disconnectUsers: jest.Mock };
 
   beforeEach(async () => {
     configService = { get: jest.fn() };
+    eventsGateway = { disconnectUsers: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
@@ -42,6 +45,7 @@ describe('UsersService with DbUserService implementation', () => {
           provide: ConfigService,
           useValue: configService,
         },
+        { provide: EventsGateway, useValue: eventsGateway },
         {
           provide: PrismaService,
           useValue: {
@@ -143,6 +147,7 @@ describe('UsersService with DbUserService implementation', () => {
     await service.delete(user.id);
 
     expect(prismaUserDeleteMock).toHaveBeenCalledWith({ where: { id: user.id } });
+    expect(eventsGateway.disconnectUsers).toHaveBeenCalledWith([user.id]);
   });
 
   describe('deleteMany', () => {
@@ -159,6 +164,7 @@ describe('UsersService with DbUserService implementation', () => {
 
       expect(tx.user.findMany).toHaveBeenCalledWith({ where: { id: { in: ['1', '2'] } }, select: { id: true } });
       expect(tx.user.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['1', '2'] } } });
+      expect(eventsGateway.disconnectUsers).toHaveBeenCalledWith(['1', '2']);
     });
 
     it('deletes nobody and names the unknown ids when one is missing', async () => {
@@ -167,6 +173,7 @@ describe('UsersService with DbUserService implementation', () => {
       await expect(service.deleteMany(['1', 'x', 'y'])).rejects.toThrow(new NotFoundException('User not found: x, y'));
 
       expect(tx.user.deleteMany).not.toHaveBeenCalled();
+      expect(eventsGateway.disconnectUsers).not.toHaveBeenCalled();
     });
   });
 
@@ -227,6 +234,7 @@ const serviceWith = async (implementation: object, get = jest.fn()) => {
       { provide: PrismaService, useValue: {} },
       { provide: AuthService, useValue: {} },
       { provide: ConfigService, useValue: { get } },
+      { provide: EventsGateway, useValue: {} },
     ],
   }).compile();
   return module.get<UsersService>(UsersService);
