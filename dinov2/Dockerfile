@@ -24,7 +24,7 @@ ENV DINOV2_MODEL_PATH=/model/dinov2-base.onnx \
     PORT=8000 \
     PYTHONUNBUFFERED=1
 EXPOSE 8000
-USER nobody
+USER 65534:65534
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 CMD ["python", "server.py"]

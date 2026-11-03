@@ -1,7 +1,17 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { DEFAULT_HTTPS_CERT_PATH, DEFAULT_HTTPS_KEY_PATH, getHttpsOptions, parseLogLevels } from './main.helpers';
+import {
+  assertWritableDir,
+  DEFAULT_HTTPS_CERT_PATH,
+  DEFAULT_HTTPS_KEY_PATH,
+  getHttpsOptions,
+  parseLogLevels,
+  StartupCheckError,
+} from './main.helpers';
+
+const owner = `${process.getuid?.()}:${process.getgid?.()}`;
+const itAsNonRoot = process.getuid?.() === 0 ? it.skip : it;
 
 describe('getHttpsOptions', () => {
   let dir: string;
@@ -66,10 +76,87 @@ describe('getHttpsOptions', () => {
     expect(logger.warn).toHaveBeenCalled();
   });
 
+  itAsNonRoot('stops startup with the chown fix when the key exists but is not readable', () => {
+    writeFileSync(join(dir, 'a.key'), 'KEY');
+    writeFileSync(join(dir, 'a.cert'), 'CERT');
+    chmodSync(join(dir, 'a.key'), 0o000);
+    const read = () =>
+      getHttpsOptions({ HTTPS_KEY_PATH: join(dir, 'a.key'), HTTPS_CERT_PATH: join(dir, 'a.cert') }, logger);
+
+    expect(read).toThrow(StartupCheckError);
+    expect(read).toThrow(
+      `${join(dir, 'a.key')} is not readable by uid ${process.getuid?.()} (EACCES): chown -R ${owner}`
+    );
+  });
+
+  itAsNonRoot('stops startup instead of serving HTTP when the TLS directory cannot be searched', () => {
+    mkdirSync(join(dir, 'secrets'));
+    writeFileSync(join(dir, 'secrets', 'a.key'), 'KEY');
+    writeFileSync(join(dir, 'secrets', 'a.cert'), 'CERT');
+    chmodSync(join(dir, 'secrets'), 0o000);
+    const env = { HTTPS_KEY_PATH: join(dir, 'secrets', 'a.key'), HTTPS_CERT_PATH: join(dir, 'secrets', 'a.cert') };
+
+    try {
+      expect(() => getHttpsOptions(env, logger)).toThrow(`${env.HTTPS_KEY_PATH} is not readable`);
+    } finally {
+      chmodSync(join(dir, 'secrets'), 0o700);
+    }
+  });
+
+  it('stops startup without a chown hint when a configured path is a directory', () => {
+    mkdirSync(join(dir, 'a.key'));
+    writeFileSync(join(dir, 'a.cert'), 'CERT');
+    const read = () =>
+      getHttpsOptions({ HTTPS_KEY_PATH: join(dir, 'a.key'), HTTPS_CERT_PATH: join(dir, 'a.cert') }, logger);
+
+    expect(read).toThrow(/EISDIR/);
+    expect(read).not.toThrow(StartupCheckError);
+  });
+
   it('treats blank paths as not configured', () => {
     expect(inEmptyDir(() => getHttpsOptions({ HTTPS_KEY_PATH: '  ', HTTPS_CERT_PATH: '' }, logger))).toBeUndefined();
     expect(logger.warn).not.toHaveBeenCalled();
     expect(logger.log).toHaveBeenCalled();
+  });
+});
+
+describe('assertWritableDir', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'vrt-images-'));
+  });
+
+  afterEach(() => {
+    chmodSync(dir, 0o700);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('accepts a writable directory', () => {
+    expect(() => assertWritableDir(dir)).not.toThrow();
+  });
+
+  it('creates a missing directory', () => {
+    assertWritableDir(join(dir, 'imageUploads'));
+
+    expect(existsSync(join(dir, 'imageUploads'))).toBe(true);
+  });
+
+  itAsNonRoot('stops startup with the chown fix when the directory is not writable', () => {
+    chmodSync(dir, 0o500);
+
+    expect(() => assertWritableDir(dir)).toThrow(StartupCheckError);
+    expect(() => assertWritableDir(dir)).toThrow(
+      new StartupCheckError(
+        `${dir} is not writable by uid ${process.getuid?.()} (EACCES): chown -R ${owner} the host directory, volume or file mounted there`
+      )
+    );
+  });
+
+  itAsNonRoot('names the directory that cannot be created', () => {
+    chmodSync(dir, 0o500);
+
+    expect(() => assertWritableDir(join(dir, 'imageUploads'))).toThrow(join(dir, 'imageUploads'));
   });
 });
 
