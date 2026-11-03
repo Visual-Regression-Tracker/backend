@@ -18,8 +18,6 @@ export const KNOWN_FALSE_PASSES: Record<string, string> = {
     'one digit: DINOv2 scores it below anti-aliasing',
   'change-chromium-143-swiftshader-set4 · details-unresolved [light] · details-diff-percent':
     'one digit: DINOv2 scores it below anti-aliasing',
-  'change-chromium-143-swiftshader-set4 · login [dark] · login-link-colour':
-    'text colour change under the blur threshold',
   'change-chromium-143-swiftshader-set4 · login [light] · login-link-colour':
     'text colour change under the blur threshold',
   'change-chromium-143-swiftshader-set4 · register [dark] · register-submit-typo':
@@ -32,10 +30,6 @@ export const KNOWN_FALSE_PASSES: Record<string, string> = {
     'faint border, as weak as the noise around it',
   'change-chromium-143-swiftshader-set4 · variations [light] · variations-card-outline':
     'faint border, as weak as the noise around it',
-  'change-swiftshader-set3 · build-filtered [dark] · filtered-chip-no-delete-icon':
-    'small light icon under the blur threshold',
-  'change-swiftshader-set3 · build-filtered [light] · filtered-chip-no-delete-icon':
-    'small light icon under the blur threshold',
   'change-swiftshader-set3 · build-mixed-grid [dark] · grid-card-borders':
     'faint border, as weak as the noise around it',
   'change-swiftshader-set3 · build-mixed-grid [light] · grid-card-borders':

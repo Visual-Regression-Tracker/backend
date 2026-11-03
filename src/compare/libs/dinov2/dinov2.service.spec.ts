@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { blobScore, Dinov2Service, DINOV2_THRESHOLD, tilesOf } from './dinov2.service';
+import { strongestPatchDistance, Dinov2Service, DINOV2_THRESHOLD, tilesOf } from './dinov2.service';
 
 const WIDTH = 32;
 const HEIGHT = 20;
@@ -8,35 +8,19 @@ const at = (row: number, col: number) => row * WIDTH + col;
 
 const grid = (values: Record<number, number>) => Array.from({ length: WIDTH * HEIGHT }, (_, i) => values[i] ?? 0);
 
-describe('blobScore', () => {
-  it('ignores a single changed patch', () => {
-    const cells = [at(3, 3)];
-
-    expect(blobScore(grid({ [at(3, 3)]: 0.9 }), WIDTH, HEIGHT, cells)).toBe(0);
+describe('strongestPatchDistance', () => {
+  it('scores a single changed patch by its distance', () => {
+    expect(strongestPatchDistance(grid({ [at(3, 3)]: 0.9 }), [at(3, 3)])).toBeCloseTo(0.9);
   });
 
-  it('scores two neighbouring changed patches by the weaker of them', () => {
-    const cells = [at(3, 3), at(3, 4)];
-
-    expect(blobScore(grid({ [at(3, 3)]: 0.9, [at(3, 4)]: 0.4 }), WIDTH, HEIGHT, cells)).toBeCloseTo(0.4);
+  it('scores several changed patches by the strongest of them', () => {
+    expect(strongestPatchDistance(grid({ [at(3, 3)]: 0.4, [at(8, 20)]: 0.7 }), [at(3, 3), at(8, 20)])).toBeCloseTo(0.7);
   });
 
   it('counts only the patches pixelmatch marked', () => {
-    const distances = grid({ [at(3, 3)]: 0.9, [at(3, 4)]: 0.9 });
+    const distances = grid({ [at(3, 3)]: 0.2, [at(3, 4)]: 0.9 });
 
-    expect(blobScore(distances, WIDTH, HEIGHT, [at(3, 3)])).toBe(0);
-  });
-
-  it('counts a pair on the edge of the grid', () => {
-    const cells = [at(HEIGHT - 1, 0), at(HEIGHT - 1, 1)];
-
-    expect(blobScore(grid({ [cells[0]]: 0.3, [cells[1]]: 0.7 }), WIDTH, HEIGHT, cells)).toBeCloseTo(0.3);
-  });
-
-  it('does not join patches across a row end', () => {
-    const cells = [at(3, WIDTH - 1), at(4, 0)];
-
-    expect(blobScore(grid({ [cells[0]]: 0.9, [cells[1]]: 0.9 }), WIDTH, HEIGHT, cells)).toBe(0);
+    expect(strongestPatchDistance(distances, [at(3, 3)])).toBeCloseTo(0.2);
   });
 });
 
@@ -104,7 +88,7 @@ describe('Dinov2Service', () => {
     const { service } = await init();
     fetchMock.mockResolvedValue(answer({ [at(3, 3)]: 0.05, [at(3, 4)]: 0.04 }) as Response);
 
-    expect(await confirm(service)).toEqual({ noise: true, score: 0.04 });
+    expect(await confirm(service)).toEqual({ noise: true, score: 0.05 });
     const [url, request] = fetchMock.mock.calls[0];
     expect(url).toBe('http://dinov2:8000/v1/patch-distances');
     expect(JSON.parse(request?.body as string)).toEqual({
@@ -118,7 +102,7 @@ describe('Dinov2Service', () => {
     const { service } = await init();
     fetchMock.mockResolvedValue(answer({ [at(3, 3)]: 0.6, [at(3, 4)]: 0.5 }) as Response);
 
-    expect(await confirm(service)).toEqual({ noise: false, score: 0.5 });
+    expect(await confirm(service)).toEqual({ noise: false, score: 0.6 });
   });
 
   it.each([
