@@ -2,13 +2,8 @@ import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { applyIgnoreAreas, readPng, scaleImageToSize } from '../../utils';
-import {
-  BlurAmplitudeOptions,
-  BlurredDifference,
-  isRenderingNoise,
-  measureBlurredDifference,
-} from './blur-amplitude.core';
-import { DINOV2_PATCH, gateOfDecoded, PatchGate } from './patch-gate.core';
+import { BlurAmplitudeJobOutput, measureRenderingNoise } from './blur-amplitude.core';
+import { PatchGate } from './patch-gate.core';
 import { signatureOfDecoded } from './signature.core';
 import { encodeThumbnail } from './thumbnail.core';
 
@@ -22,7 +17,7 @@ export interface PixelmatchJobInput {
   allowDiffDimensions?: boolean;
   diffTolerancePercent: number;
   saveDiff: boolean;
-  blurAmplitude?: BlurAmplitudeOptions;
+  ignoreRenderingNoise?: boolean;
 }
 
 export interface PixelmatchJobOutput {
@@ -36,7 +31,6 @@ export interface PixelmatchJobOutput {
   diffThumbnail?: Buffer | Uint8Array;
   blurAmplitude?: number;
   solidPixels?: number;
-  renderingNoiseOnly?: boolean;
   gate?: PatchGate;
 }
 
@@ -66,20 +60,12 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
   const diffPercent = (pixelMisMatchCount * 100) / (maxWidth * maxHeight);
 
   const overTolerance = diffPercent > input.diffTolerancePercent;
-  const blurAmplitude = overTolerance && isSameDimension ? input.blurAmplitude : undefined;
-  let measure: BlurredDifference | null = null;
-  let renderingNoiseOnly = false;
-  if (blurAmplitude) {
-    measure = measureBlurredDifference(baselineIgnored, imageIgnored);
-    renderingNoiseOnly = isRenderingNoise(measure, blurAmplitude.threshold);
-  }
-
-  const gate =
-    renderingNoiseOnly && blurAmplitude?.dinov2
-      ? gateOfDecoded(baselineIgnored, imageIgnored, DINOV2_PATCH)
+  const noise: BlurAmplitudeJobOutput | undefined =
+    overTolerance && isSameDimension && input.ignoreRenderingNoise
+      ? measureRenderingNoise(baselineIgnored, imageIgnored)
       : undefined;
 
-  const keepingTheDiff = overTolerance && input.saveDiff && (!renderingNoiseOnly || !!blurAmplitude?.dinov2);
+  const keepingTheDiff = overTolerance && input.saveDiff;
   const diffBuffer = keepingTheDiff ? PNG.sync.write(diff, { filterType: 1 }) : undefined;
 
   const signature =
@@ -102,12 +88,7 @@ export function computePixelmatchDiff(input: PixelmatchJobInput): PixelmatchJobO
     diffBuffer,
     ...(signature ? { signature } : {}),
     ...thumbnails,
-    ...(gate ? { gate } : {}),
-    ...(blurAmplitude
-      ? {
-          renderingNoiseOnly,
-          ...(measure ? { blurAmplitude: measure.amplitude, solidPixels: measure.solidPixels } : {}),
-        }
-      : {}),
+    ...(noise?.gate ? { gate: noise.gate } : {}),
+    ...(noise?.measure ? { blurAmplitude: noise.measure.amplitude, solidPixels: noise.measure.solidPixels } : {}),
   };
 }
