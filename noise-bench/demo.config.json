@@ -1,0 +1,69 @@
+{
+  "uiUrl": "http://localhost:8080",
+  "apiUrl": "http://localhost:4200",
+  "showcaseProject": "Showcase",
+  "projects": {
+    "nofilter": "Noise demo · no filter",
+    "tolerance": "Noise demo · tolerance",
+    "dinov2": "Noise demo · filter + DINOv2",
+    "ownenv": "Noise demo · own baseline",
+    "ownenvia": "Noise demo · own baseline + ignore areas"
+  },
+  "noiseEnvironments": [
+    "chrome",
+    "swiftshader",
+    "chromium-143-swiftshader",
+    "chromium-133"
+  ],
+  "bugSetCount": 5,
+  "toleranceStep": 0.01,
+  "frozenTime": "2026-11-01T12:00:00Z",
+  "calibrationEnvironments": [
+    "chrome",
+    "swiftshader",
+    "chromium-143-swiftshader"
+  ],
+  "changeEnvironments": [
+    "reference",
+    "chrome",
+    "swiftshader",
+    "chromium-143-swiftshader",
+    "chrome"
+  ],
+  "ownBaselineEnvironments": [
+    "reference",
+    "chrome",
+    "swiftshader",
+    "chromium-143-swiftshader"
+  ],
+  "ownIgnoreAreas": {
+    "swiftshader": {
+      "login": [
+        {
+          "x": 24,
+          "y": 16,
+          "width": 45,
+          "height": 33
+        }
+      ],
+      "login-filled": [
+        {
+          "x": 24,
+          "y": 16,
+          "width": 45,
+          "height": 33
+        }
+      ]
+    },
+    "chromium-143-swiftshader": {
+      "build-mixed-grid": [
+        {
+          "x": 795,
+          "y": 375,
+          "width": 393,
+          "height": 161
+        }
+      ]
+    }
+  }
+}

@@ -17,6 +17,7 @@ export default [
       'coverage/**',
       'node_modules/**',
       'dinov2/**',
+      'noise-bench/**',
       'prisma/node_modules/**',
       'prisma/.generate/**',
     ],
