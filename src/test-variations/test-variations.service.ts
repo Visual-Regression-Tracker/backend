@@ -139,13 +139,28 @@ export class TestVariationsService {
     ]);
 
     if (currentBranchTestVariation) {
-      if (mainBranchTestVariation && mainBranchTestVariation.updatedAt > currentBranchTestVariation.updatedAt) {
-        return mainBranchTestVariation;
+      if (mainBranchTestVariation) {
+        const [mainAt, currentAt] = await Promise.all([
+          this.latestApprovalAt(mainBranchTestVariation.id),
+          this.latestApprovalAt(currentBranchTestVariation.id),
+        ]);
+        if (mainAt > currentAt) {
+          return mainBranchTestVariation;
+        }
       }
       return currentBranchTestVariation;
     }
 
     return mainBranchTestVariation ?? undefined;
+  }
+
+  private async latestApprovalAt(testVariationId: string): Promise<number> {
+    const baseline = await this.prismaService.baseline.findFirst({
+      where: { testVariationId },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    return baseline?.createdAt.getTime() ?? -Infinity;
   }
 
   create(data: NewVariation, tx: Prisma.TransactionClient = this.prismaService): Promise<TestVariation> {

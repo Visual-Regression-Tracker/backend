@@ -241,4 +241,38 @@ describe('TestRuns (e2e)', () => {
       expect(mainBranchResult.testVariationId).toBe(featureBranchResult.testVariationId);
     });
   });
+
+  describe('editing a feature-branch run compared against the main branch', () => {
+    const area = { x: 1, y: 2, width: 3, height: 4 };
+
+    it('leaves the main branch variation alone and carries the edits into the feature variation on approve', async () => {
+      const mainRun = await haveApprovedRun(project.mainBranchName, image_v1);
+      const featureRun = await haveRun('develop', image_v2);
+
+      await testRunsService.updateIgnoreAreas(featureRun.id, [area]);
+      await testRunsService.update(featureRun.id, { comment: 'feature comment' });
+
+      const main = await detailsOf(mainRun.testVariationId);
+      expect(main.ignoreAreas).toBe('[]');
+      expect(main.comment).toBeNull();
+      const approved = await testRunsService.approve(featureRun.id);
+      const feature = await detailsOf(approved.testVariationId);
+      expect(feature.branchName).toBe('develop');
+      expect(JSON.parse(feature.ignoreAreas)).toEqual([area]);
+      expect(feature.comment).toBe('feature comment');
+    });
+
+    it('keeps comparing a feature branch against its own baseline after edits on other branches', async () => {
+      const mainRun = await haveApprovedRun(project.mainBranchName, image_v1);
+      await haveApprovedRun('develop', image_v2);
+      const otherRun = await haveRun('other', image_v3);
+
+      await testRunsService.updateIgnoreAreas(otherRun.id, [area]);
+      await testRunsService.update(mainRun.id, { comment: 'main comment' });
+
+      const next = await haveRun('develop', image_v2);
+      expect(next.status).toBe(TestStatus.ok);
+      expect(next.baselineBranchName).toBe('develop');
+    });
+  });
 });

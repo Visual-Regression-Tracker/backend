@@ -622,17 +622,17 @@ export class TestRunsService {
   }
 
   async updateIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
-    const testVariationId = await this.getTestVariationId(id);
+    const { projectId, ownVariationId } = await this.findEditedVariation(id);
     const testRun = await this.prismaService.testRun.update({
       where: { id },
       data: {
         ignoreAreas: JSON.stringify(ignoreAreas),
       },
     });
-    const testVariation = await this.testVariationService.update(testVariationId, {
-      ignoreAreas: testRun.ignoreAreas,
-    });
-    return this.calculateDiff(testVariation.projectId, testRun);
+    if (ownVariationId) {
+      await this.testVariationService.update(ownVariationId, { ignoreAreas: testRun.ignoreAreas });
+    }
+    return this.calculateDiff(projectId, testRun);
   }
 
   async addIgnoreAreas(id: string, ignoreAreas: IgnoreAreaDto[]): Promise<TestRun> {
@@ -641,30 +641,35 @@ export class TestRunsService {
   }
 
   async update(id: string, data: UpdateTestRunDto): Promise<TestRun> {
-    const testVariationId = await this.getTestVariationId(id);
+    const { ownVariationId } = await this.findEditedVariation(id);
     const testRun = await this.prismaService.testRun.update({
       where: { id },
       data: {
         comment: data.comment,
       },
     });
-    await this.testVariationService.update(testVariationId, { comment: data.comment });
+    if (ownVariationId) {
+      await this.testVariationService.update(ownVariationId, { comment: data.comment });
+    }
     this.eventsGateway.testRunUpdated(testRun);
     return testRun;
   }
 
-  private async getTestVariationId(id: string): Promise<string> {
+  private async findEditedVariation(id: string): Promise<{ projectId: string; ownVariationId?: string }> {
     const testRun = await this.prismaService.testRun.findUnique({
       where: { id },
-      select: { testVariationId: true },
+      select: { branchName: true, testVariation: { select: { id: true, branchName: true, projectId: true } } },
     });
     if (!testRun) {
       throw testRunNotFound(id);
     }
-    if (!testRun.testVariationId) {
+    const { testVariation } = testRun;
+    if (!testVariation) {
       throw new ConflictException(NO_TEST_VARIATION);
     }
-    return testRun.testVariationId;
+    // a run compared against another branch keeps its edits until approve copies them to its own branch
+    const ownVariationId = testVariation.branchName === testRun.branchName ? testVariation.id : undefined;
+    return { projectId: testVariation.projectId, ownVariationId };
   }
 
   private getAllIgnoreAreas(testRun: TestRun): IgnoreAreaDto[] {

@@ -1,8 +1,6 @@
-import { ApiProperty, OmitType } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { TestRunDto } from '../../test-runs/dto/testRun.dto';
-import { UserDto } from '../../users/dto/user.dto';
-
-export class BaselineUserDto extends OmitType(UserDto, ['apiKey'] as const) {}
+import { UserSummaryDto } from '../../users/dto/user.dto';
 
 export class BaselineDto {
   @ApiProperty()
@@ -23,6 +21,6 @@ export class BaselineDto {
   @ApiProperty()
   testRun!: TestRunDto | null;
 
-  @ApiProperty({ type: BaselineUserDto })
-  user!: BaselineUserDto | null;
+  @ApiProperty({ type: UserSummaryDto })
+  user!: UserSummaryDto | null;
 }

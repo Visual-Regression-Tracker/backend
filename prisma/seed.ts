@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 import { Role } from '@prisma/client';
 import { genSalt, hash } from 'bcryptjs';
 
-import prisma, { prepareConnection } from './client';
+import prisma from './client';
 
 const DEFAULT_EMAIL = 'visual-regression-tracker@example.com';
 const PUBLIC_DEFAULT_PASSWORD = '123456';
@@ -10,7 +10,6 @@ const PUBLIC_DEFAULT_API_KEY = 'DEFAULTUSERAPIKEYTOBECHANGED';
 const CROCKFORD_DIGITS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 export async function seed() {
-  await prepareConnection();
   await prisma.$connect();
   console.log('Seeding default data...');
   await Promise.all([createDefaultUser(), createDefaultProject()]);

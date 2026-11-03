@@ -36,5 +36,5 @@ distances per 14 px patch; `tiles` optional, default all). `GET /health`.
 ## Test
 
 ```bash
-python -m unittest test_patches   # numpy only, no model
+python -m unittest test_patches test_guard   # no model
 ```
