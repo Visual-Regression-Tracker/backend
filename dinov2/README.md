@@ -8,9 +8,9 @@ but clear in meaning — a missing light icon, a removed input border.
 
 The service only measures. The backend (`src/compare/libs/dinov2`) decides:
 it marks the patches where pixelmatch sees a non-anti-aliasing change, asks
-for the distances of the tiles holding them, and fails the run when two
-neighbouring marked patches changed by more than `DINOV2_THRESHOLD`
-(0.15, calibrated in `research/jepa-screenshot-diff`). If the service
+for the distances of the tiles holding them, and fails the run when any
+marked patch changed by more than `DINOV2_THRESHOLD` (0.15, checked
+against the noise pairs of `test_noise`). If the service
 cannot be reached, the run goes to review: the check never lets a change
 through it could not look at.
 
