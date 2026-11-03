@@ -7,6 +7,8 @@ import { messageOf } from '../../../utils/errors';
 const TILE_PATCHES = 16;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const STATUS_TIMEOUT_MS = 3_000;
+// strongest of 57 anti-aliasing-only real pairs: 0.133
+export const DINOV2_THRESHOLD = 0.15;
 
 export interface Dinov2Status {
   configured: boolean;
@@ -66,15 +68,13 @@ export class Dinov2Service {
     }
   }
 
-  async confirmsNoiseForGate(
-    gate: PatchGate,
-    baseline: Buffer,
-    image: Buffer,
-    threshold: number
-  ): Promise<Dinov2Verdict> {
+  isConfigured(): boolean {
+    return this.serviceUrl() !== undefined;
+  }
+
+  async confirmsNoiseForGate(gate: PatchGate, baseline: Buffer, image: Buffer): Promise<Dinov2Verdict> {
     const url = this.serviceUrl();
     if (!url) {
-      this.logger.warn('dinov2Check is on but DINOV2_URL is not set: the run goes to review');
       return { noise: false };
     }
     try {
@@ -103,7 +103,10 @@ export class Dinov2Service {
       }
 
       const score = blobScore(answer.distances, gate.width, gate.height, gate.cells);
-      return { noise: score <= threshold, score };
+      if (score > DINOV2_THRESHOLD) {
+        this.logger.debug(`DINOv2 sees a change of content (score ${score.toFixed(3)}): to review`);
+      }
+      return { noise: score <= DINOV2_THRESHOLD, score };
     } catch (error) {
       this.logger.warn(`DINOv2 check failed, the run goes to review: ${messageOf(error)}`);
       return { noise: false };

@@ -2,7 +2,7 @@
 
 ## Local setup
 
-- Install Node `24` (LTS), 24.15 or newer
+- Install Node `26` (LTS); `nvm use` picks it up from `.nvmrc`
 - clone repo
 - Update `.env` and `prisma/.env` (`DATABASE_URL` in `prisma/.env` must match the `POSTGRES_*` values in `.env`)
 - Start Postgres `docker compose up -d postgres`
@@ -76,7 +76,7 @@ lines in `.env` (section `# optional`) show the same variables.
 | `DIFF_QUEUE_LIMIT` | `256` | Diff jobs allowed to wait for a worker. When the queue is full the API answers `503` with `Retry-After: 5`. |
 | `DIFF_WORKER_MAX_HEAP_MB` | `512` | Heap limit of each diff worker, in MB. |
 | `OLLAMA_BASE_URL` | none | Ollama server for VLM comparisons; required when the Ollama provider is used. |
-| `DINOV2_URL` | none | DINOv2 service for the `dinov2Check` noise filter. With the filter on and this unset, runs go to review. |
+| `DINOV2_URL` | none | DINOv2 service for the `ignoreRenderingNoise` filter. Unset, the filter is off. |
 | `DINOV2_TIMEOUT_MS` | `60000` | Timeout for one DINOv2 request, in milliseconds. |
 
 ### Auth
@@ -128,7 +128,7 @@ Read by `prisma db seed`.
 ## Optional services
 
 - **Redis** runs several API instances behind one socket.io fan-out. Set `REDIS_URL`; see [Scaling to multiple instances](#scaling-to-multiple-instances-real-time-updates).
-- **DINOv2** serves the `dinov2Check` rendering-noise filter (see `dinov2/README.md`). Start it with `docker compose --profile dinov2 up -d`. The service listens on port 8000 inside the compose network only, so the API container uses `DINOV2_URL=http://dinov2:8000`.
+- **DINOv2** serves the `ignoreRenderingNoise` rendering-noise filter (see `dinov2/README.md`). Start it with `docker compose --profile dinov2 up -d`. The service listens on port 8000 inside the compose network only, so the API container uses `DINOV2_URL=http://dinov2:8000`.
 - **Ollama** runs the VLM comparison locally. Set `OLLAMA_BASE_URL`; from the API container, which is started by compose, the host is `http://host.docker.internal:11434`.
 - **Gemini** runs the VLM comparison in the cloud. Its API key is set in the project's VLM settings, not in the environment.
 
