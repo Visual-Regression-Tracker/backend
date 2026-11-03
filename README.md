@@ -94,10 +94,10 @@ lines in `.env` (section `# optional`) show the same variables.
 | `LDAP_ATTRIBUTE_MAIL`, `LDAP_ATTRIBUTE_FIRST_NAME`, `LDAP_ATTRIBUTE_LAST_NAME` | none | Attributes that hold the email, first name and last name. Required when LDAP is enabled. |
 | `LDAP_TLS_NO_VERIFY` | `false` | Skip TLS certificate verification for LDAP. Test servers only. |
 | `OIDC_ENABLED` | `false` | Enables OIDC (SSO) login; see the OIDC section. |
-| `OIDC_ISSUER_URL` | none | Issuer URL of the identity provider. Required when OIDC is enabled. |
+| `OIDC_ISSUER_URL` | none | Issuer URL of the identity provider. Required when OIDC is enabled. An `http://` issuer works (with a warning) for local setups. |
 | `OIDC_CLIENT_ID` | none | OIDC client ID. Required when OIDC is enabled. |
 | `OIDC_CLIENT_SECRET` | none | OIDC client secret. Required when OIDC is enabled. |
-| `OIDC_REDIRECT_URI` | `http://localhost:4200/users/oidc/callback` | Callback URL registered at the identity provider. |
+| `OIDC_REDIRECT_URI` | `http://localhost:4200/users/oidc/callback` | Callback URL registered at the identity provider, without a query string. |
 | `OIDC_SCOPES` | `openid profile email` | Requested scopes. |
 | `OIDC_ATTRIBUTE_MAIL` | `email` | Claim that holds the email. |
 | `OIDC_ATTRIBUTE_FIRST_NAME` | `given_name` | Claim that holds the first name. |
@@ -106,7 +106,7 @@ lines in `.env` (section `# optional`) show the same variables.
 | `OIDC_ADMIN_VALUES` | `vrt-admin,admin` | Comma-separated claim values that give the admin role. |
 | `OIDC_DEFAULT_ROLE` | `editor` | Role for every other user: `admin` or `editor`. |
 | `OIDC_REQUIRE_VERIFIED_EMAIL` | `true` | Reject logins whose email is not verified. |
-| `OIDC_TLS_NO_VERIFY` | `false` | Skip TLS verification for the identity provider. Test servers only. |
+| `OIDC_TLS_NO_VERIFY` | `false` | Skip TLS verification for requests to the issuer's origin; other hosts are still verified. Test servers only. |
 
 ### Service variables
 
