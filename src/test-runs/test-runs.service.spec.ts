@@ -1,7 +1,12 @@
 import { ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import { mocked } from 'jest-mock';
 import { Test } from '@nestjs/testing';
-import { SIGNATURE_CONCURRENCY, TestRunsService } from './test-runs.service';
+import {
+  RevertDecision,
+  SIGNATURE_CONCURRENCY,
+  TestRunAlreadyDecidedException,
+  TestRunsService,
+} from './test-runs.service';
 import { SIGNATURE_LENGTH } from '../compare/libs/pixelmatch/signature.core';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../static/static.service';
@@ -1010,15 +1015,16 @@ describe('TestRunsService', () => {
       expect(result).toBe(rejected);
     });
 
-    it('rejecting a failed run changes nothing', async () => {
+    it('rejecting a failed run is a 409 and changes nothing', async () => {
       const run = generateTestRun({ status: TestStatus.failed });
       const { service, m } = await initRejectService(run);
 
-      const result = await service.reject(run.id);
+      await expect(service.reject(run.id)).rejects.toThrow(
+        new TestRunAlreadyDecidedException(`Test run ${run.id} is already rejected`)
+      );
 
       expect(m.testRun.updateMany).not.toHaveBeenCalled();
       expect(m.events.testRunUpdated).not.toHaveBeenCalled();
-      expect(result).toBe(run);
     });
 
     it('reject of an unknown run is a 404', async () => {
@@ -1029,15 +1035,15 @@ describe('TestRunsService', () => {
       expect(m.testRun.updateMany).not.toHaveBeenCalled();
     });
 
-    it('a lost race emits nothing', async () => {
+    it('a lost race is a 409 and emits nothing', async () => {
       const run = generateTestRun({ status: TestStatus.unresolved });
-      const current = { ...run, status: TestStatus.approved };
-      const { service, m } = await initRejectService(run, current, 0);
+      const { service, m } = await initRejectService(run, undefined, 0);
 
-      const result = await service.reject(run.id);
+      await expect(service.reject(run.id)).rejects.toThrow(
+        new TestRunAlreadyDecidedException(`Test run ${run.id} was changed by someone else meanwhile`)
+      );
 
       expect(m.events.testRunUpdated).not.toHaveBeenCalled();
-      expect(result).toBe(current);
     });
   });
 
@@ -1104,7 +1110,7 @@ describe('TestRunsService', () => {
       const run = generateTestRun({ status: TestStatus.failed, statusBeforeDecision: TestStatus.ok });
       const { service, tx } = await initRevertService([run]);
 
-      await service.revert([run.id]);
+      await service.revert([run.id], RevertDecision.reject);
 
       expect(tx.testRun.updateMany).toHaveBeenCalledWith(claim(run, restored(TestStatus.ok)));
       expect(tx.baseline.findUnique).not.toHaveBeenCalled();
@@ -1119,7 +1125,7 @@ describe('TestRunsService', () => {
         const run = generateTestRun({ status: TestStatus.failed, statusBeforeDecision: null, baselineName });
         const { service, tx } = await initRevertService([run]);
 
-        await service.revert([run.id]);
+        await service.revert([run.id], RevertDecision.reject);
 
         expect(tx.testRun.updateMany).toHaveBeenCalledWith(claim(run, restored(expected)));
       }
@@ -1131,7 +1137,7 @@ describe('TestRunsService', () => {
       const { service, m, tx } = ctx;
       givenApproval(ctx);
 
-      await service.revert([run.id]);
+      await service.revert([run.id], RevertDecision.approve);
 
       expect(tx.baseline.findUnique).toHaveBeenCalledWith({ where: { testRunId: run.id } });
       expect(tx.baseline.findFirst).toHaveBeenNthCalledWith(1, {
@@ -1152,7 +1158,7 @@ describe('TestRunsService', () => {
       const ctx = await initRevertService([run]);
       givenApproval(ctx, null);
 
-      await ctx.service.revert([run.id]);
+      await ctx.service.revert([run.id], RevertDecision.approve);
 
       expect(ctx.tx.testVariation.update).toHaveBeenCalledWith({
         where: { id: 'variation' },
@@ -1166,7 +1172,7 @@ describe('TestRunsService', () => {
       const { tx } = ctx;
       givenApproval(ctx, null);
 
-      await ctx.service.revert([run.id]);
+      await ctx.service.revert([run.id], RevertDecision.approve);
 
       expect(tx.testVariation.update).toHaveBeenCalledWith({
         where: { id: 'variation' },
@@ -1191,7 +1197,7 @@ describe('TestRunsService', () => {
         const { service, m, tx } = ctx;
         givenFeatureApproval(ctx);
 
-        await service.revert([run.id]);
+        await service.revert([run.id], RevertDecision.approve);
 
         expect(m.tv.findUnique).toHaveBeenCalledWith(
           { projectId: 'project', branchName: 'master', ...getTestVariationUniqueData(run) },
@@ -1219,7 +1225,7 @@ describe('TestRunsService', () => {
           tx.testRun.count.mockResolvedValue(runCount);
           tx.baseline.count.mockResolvedValue(baselineCount);
 
-          await ctx.service.revert([run.id]);
+          await ctx.service.revert([run.id], RevertDecision.approve);
 
           expect(tx.testVariation.delete).not.toHaveBeenCalled();
           expect(tx.testVariation.update).toHaveBeenCalledWith({
@@ -1239,7 +1245,7 @@ describe('TestRunsService', () => {
         );
         tx.baseline.count.mockResolvedValue(1);
 
-        await ctx.service.revert([run.id]);
+        await ctx.service.revert([run.id], RevertDecision.approve);
 
         expect(tx.testVariation.update).toHaveBeenCalledWith({
           where: { id: 'variation' },
@@ -1254,7 +1260,9 @@ describe('TestRunsService', () => {
         givenFeatureApproval(ctx);
         m.tv.findUnique.mockResolvedValue(null);
 
-        await expect(service.revert([run.id])).rejects.toThrow(new ConflictException(NO_VARIATION));
+        await expect(service.revert([run.id], RevertDecision.approve)).rejects.toThrow(
+          new ConflictException(NO_VARIATION)
+        );
 
         expect(tx.testRun.updateMany).not.toHaveBeenCalled();
         expect(m.static.deleteImage).not.toHaveBeenCalled();
@@ -1272,7 +1280,7 @@ describe('TestRunsService', () => {
       tx.baseline.findFirst.mockResolvedValue(latest());
       tx.testVariation.findUnique.mockResolvedValue(variationOf({ baselineName: variationBaselineName }));
 
-      await expect(service.revert([run.id])).rejects.toThrow(
+      await expect(service.revert([run.id], RevertDecision.approve)).rejects.toThrow(
         new ConflictException(`Test run ${run.id}: a later approval changed this baseline`)
       );
 
@@ -1283,26 +1291,63 @@ describe('TestRunsService', () => {
       expect(m.events.testRunUpdated).not.toHaveBeenCalled();
     });
 
-    it.each([TestStatus.autoApproved, TestStatus.new, TestStatus.unresolved, TestStatus.ok])(
-      '409 for a %s run',
-      async (status) => {
-        const run = generateTestRun({ status });
-        const { service, m, tx } = await initRevertService([run]);
+    it.each([
+      [RevertDecision.approve, TestStatus.failed, TestStatus.approved],
+      [RevertDecision.reject, TestStatus.approved, TestStatus.failed],
+      [RevertDecision.approve, TestStatus.autoApproved, TestStatus.approved],
+      [RevertDecision.reject, TestStatus.unresolved, TestStatus.failed],
+      [RevertDecision.approve, TestStatus.new, TestStatus.approved],
+      [RevertDecision.reject, TestStatus.ok, TestStatus.failed],
+    ])('409 when undoing %s of a %s run, before any write', async (decision, status, expected) => {
+      const run = generateTestRun({ status });
+      const { service, m, tx } = await initRevertService([run]);
 
-        await expect(service.revert([run.id])).rejects.toThrow(
-          new ConflictException(`Test run ${run.id} is ${status}: only approved or rejected runs can be reverted`)
-        );
+      await expect(service.revert([run.id], decision)).rejects.toThrow(
+        new ConflictException(`Test run ${run.id} is ${status}, not ${expected}`)
+      );
 
-        expect(tx.testRun.updateMany).not.toHaveBeenCalled();
-        expect(m.events.testRunUpdated).not.toHaveBeenCalled();
-      }
-    );
+      expect(m.transaction).not.toHaveBeenCalled();
+      expect(tx.testRun.updateMany).not.toHaveBeenCalled();
+      expect(m.events.testRunUpdated).not.toHaveBeenCalled();
+    });
+
+    describe('without a decision, as older clients send it', () => {
+      it('reverts approved and rejected runs together, approvals latest first', async () => {
+        const rejected = generateTestRun({ id: 'run-2', status: TestStatus.failed });
+        const approved = approvedRun();
+        const ctx = await initRevertService([rejected, approved]);
+        givenApproval(ctx);
+
+        await ctx.service.revert([rejected.id, approved.id]);
+
+        expect(ctx.tx.baseline.findMany).toHaveBeenCalledWith({
+          where: { testRunId: { in: [approved.id] } },
+          select: { testRunId: true, createdAt: true },
+        });
+        expect(ctx.tx.baseline.delete).toHaveBeenCalledWith({ where: { id: 'baseline-1' } });
+        expect(ctx.tx.testRun.updateMany).toHaveBeenCalledWith(claim(rejected, restored(TestStatus.new)));
+      });
+
+      it.each([TestStatus.autoApproved, TestStatus.new, TestStatus.unresolved, TestStatus.ok])(
+        '409 for a %s run',
+        async (status) => {
+          const run = generateTestRun({ status });
+          const { service, m } = await initRevertService([run]);
+
+          await expect(service.revert([run.id])).rejects.toThrow(
+            new ConflictException(`Test run ${run.id} is ${status}: only approved or rejected runs can be reverted`)
+          );
+
+          expect(m.transaction).not.toHaveBeenCalled();
+        }
+      );
+    });
 
     it('409 when the approval has no baseline row', async () => {
       const run = approvedRun();
       const { service, tx } = await initRevertService([run]);
 
-      await expect(service.revert([run.id])).rejects.toThrow(
+      await expect(service.revert([run.id], RevertDecision.approve)).rejects.toThrow(
         new ConflictException(`Test run ${run.id} has no baseline to revert`)
       );
 
@@ -1312,7 +1357,9 @@ describe('TestRunsService', () => {
     it('409 for an empty list', async () => {
       const { service, m } = await initRevertService([]);
 
-      await expect(service.revert([])).rejects.toThrow(new ConflictException('Nothing to revert'));
+      await expect(service.revert([], RevertDecision.approve)).rejects.toThrow(
+        new ConflictException('Nothing to revert')
+      );
 
       expect(m.testRun.findMany).not.toHaveBeenCalled();
       expect(m.transaction).not.toHaveBeenCalled();
@@ -1322,7 +1369,7 @@ describe('TestRunsService', () => {
       const run = generateTestRun({ status: TestStatus.failed });
       const { service, m } = await initRevertService([run]);
 
-      await expect(service.revert([run.id, 'missing 1', 'missing 2'])).rejects.toThrow(
+      await expect(service.revert([run.id, 'missing 1', 'missing 2'], RevertDecision.reject)).rejects.toThrow(
         new NotFoundException('Test run not found: missing 1, missing 2')
       );
 
@@ -1334,7 +1381,7 @@ describe('TestRunsService', () => {
       const { service, m, tx } = await initRevertService([run]);
       tx.testRun.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.revert([run.id])).rejects.toThrow(
+      await expect(service.revert([run.id], RevertDecision.reject)).rejects.toThrow(
         new ConflictException(`Test run ${run.id} changed while reverting, try again`)
       );
 
@@ -1351,7 +1398,7 @@ describe('TestRunsService', () => {
         const ctx = await initRevertService([run], counts);
         givenApproval(ctx);
 
-        await ctx.service.revert([run.id]);
+        await ctx.service.revert([run.id], RevertDecision.approve);
 
         expect(ctx.m.static.deleteImage).not.toHaveBeenCalled();
       });
@@ -1362,7 +1409,7 @@ describe('TestRunsService', () => {
         const { service, m } = ctx;
         givenApproval(ctx);
 
-        await service.revert([run.id]);
+        await service.revert([run.id], RevertDecision.approve);
 
         expect(m.testRun.count).toHaveBeenCalledWith({ where: { name: 'screen', baselineName: 'new.png' } });
         expect(m.testVariation.count).toHaveBeenCalledWith({ where: { baselineName: 'new.png' } });
@@ -1378,38 +1425,38 @@ describe('TestRunsService', () => {
         const run = generateTestRun({ status: TestStatus.failed });
         const { service, m } = await initRevertService([run]);
 
-        await service.revert([run.id]);
+        await service.revert([run.id], RevertDecision.reject);
 
         expect(m.static.deleteImage).not.toHaveBeenCalled();
       });
     });
 
     it('emits testRun_updated for every run after the commit, nothing on a 409', async () => {
-      const rejected = generateTestRun({ id: 'run-2', status: TestStatus.failed });
-      const approved = approvedRun();
-      const ctx = await initRevertService([rejected, approved]);
-      const { service, m } = ctx;
-      givenApproval(ctx);
+      const second = generateTestRun({ id: 'run-2', status: TestStatus.failed });
+      const first = generateTestRun({ id: 'run-1', status: TestStatus.failed });
+      const { service, m } = await initRevertService([second, first]);
       m.testRun.findMany
-        .mockResolvedValueOnce([rejected, approved])
-        .mockResolvedValueOnce([{ ...approved, status: TestStatus.unresolved }, rejected]);
+        .mockResolvedValueOnce([second, first])
+        .mockResolvedValueOnce([{ ...first, status: TestStatus.unresolved }, second]);
 
-      await service.revert(['run-2', approved.id, 'run-2']);
+      await service.revert(['run-2', 'run-1', 'run-2'], RevertDecision.reject);
 
-      expect(m.testRun.findMany).toHaveBeenLastCalledWith({ where: { id: { in: ['run-2', approved.id] } } });
+      expect(m.testRun.findMany).toHaveBeenLastCalledWith({ where: { id: { in: ['run-2', 'run-1'] } } });
       expect(m.testRun.findUnique).not.toHaveBeenCalled();
       expect(m.events.testRunUpdated).toHaveBeenCalledWith(
-        expect.objectContaining({ id: approved.id, status: TestStatus.unresolved })
+        expect.objectContaining({ id: 'run-1', status: TestStatus.unresolved })
       );
       expect(m.events.testRunUpdated).toHaveBeenCalledTimes(2);
       expect(m.events.testRunUpdated).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 'run-2' }));
-      expect(m.events.testRunUpdated).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: approved.id }));
+      expect(m.events.testRunUpdated).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 'run-1' }));
       expect(m.events.testRunUpdated.mock.invocationCallOrder[0]).toBeGreaterThan(
         m.transaction.mock.invocationCallOrder[0]
       );
 
       const failing = await initRevertService([generateTestRun({ status: TestStatus.new })]);
-      await expect(failing.service.revert(['10fb5e02-64e0-4cf5-9f17-c00ab3c96658'])).rejects.toThrow(ConflictException);
+      await expect(
+        failing.service.revert(['10fb5e02-64e0-4cf5-9f17-c00ab3c96658'], RevertDecision.approve)
+      ).rejects.toThrow(ConflictException);
       expect(failing.m.events.testRunUpdated).not.toHaveBeenCalled();
     });
 
@@ -1437,7 +1484,7 @@ describe('TestRunsService', () => {
         .mockResolvedValueOnce(variationOf({ baselineName: 'second.png' }))
         .mockResolvedValueOnce(variationOf({ baselineName: 'first.png' }));
 
-      await service.revert(['run-1', 'run-2']);
+      await service.revert(['run-1', 'run-2'], RevertDecision.approve);
 
       expect(tx.baseline.findMany).toHaveBeenCalledWith({
         where: { testRunId: { in: ['run-1', 'run-2'] } },
@@ -1632,38 +1679,39 @@ describe('TestRunsService', () => {
       expectClaim(m, testRun, TestStatus.autoApproved);
     });
 
-    it('re-approving an already approved feature-branch run changes nothing', async () => {
+    it('re-approving an already approved feature-branch run is a 409 and changes nothing', async () => {
       const testRun = featureRun({ status: TestStatus.approved });
       const { service, m } = await initApproveService(testRun);
 
-      const result = await service.approve(testRun.id);
+      await expect(service.approve(testRun.id)).rejects.toThrow(
+        new TestRunAlreadyDecidedException(`Test run ${testRun.id} is already approved`)
+      );
 
-      expect(result).toBe(testRun);
       expectNoWrites(m);
       expect(m.tv.update).not.toHaveBeenCalled();
       expect(m.events.testRunUpdated).not.toHaveBeenCalled();
     });
 
-    it('auto approving an already auto approved run changes nothing', async () => {
+    it('auto approving an already auto approved run is a 409 and changes nothing', async () => {
       const testRun = featureRun({ status: TestStatus.autoApproved });
       const { service, m } = await initApproveService(testRun);
 
-      const result = await service.approve(testRun.id, false, true);
+      await expect(service.approve(testRun.id, false, true)).rejects.toThrow(TestRunAlreadyDecidedException);
 
-      expect(result).toBe(testRun);
       expect(m.baseline.count).not.toHaveBeenCalled();
       expect(m.static.copyImage).not.toHaveBeenCalled();
       expect(m.testRun.updateMany).not.toHaveBeenCalled();
     });
 
-    it('manually approving an autoApproved run that already has a baseline is a no-op', async () => {
+    it('manually approving an autoApproved run that already has a baseline is a 409 and changes nothing', async () => {
       const testRun = sameBranchRun({ status: TestStatus.autoApproved });
       const { service, m } = await initApproveService(testRun, { baselineCount: 1 });
 
-      const result = await service.approve(testRun.id);
+      await expect(service.approve(testRun.id)).rejects.toThrow(
+        new TestRunAlreadyDecidedException(`Test run ${testRun.id} is already approved`)
+      );
 
       expect(m.baseline.count).toHaveBeenCalledWith({ where: { testRunId: testRun.id } });
-      expect(result).toBe(testRun);
       expectNoWrites(m);
     });
 
@@ -1683,24 +1731,17 @@ describe('TestRunsService', () => {
       );
     });
 
-    it('a lost claim deletes the copy and changes nothing', async () => {
+    it('a lost claim is a 409, deletes the copy and changes nothing', async () => {
       const testRun = sameBranchRun();
       const { service, m } = await initApproveService(testRun, { updateManyCount: 0 });
 
-      const result = await service.approve(testRun.id);
+      await expect(service.approve(testRun.id)).rejects.toThrow(
+        new TestRunAlreadyDecidedException(`Test run ${testRun.id} was changed by someone else meanwhile`)
+      );
 
       expect(m.tv.addBaseline).not.toHaveBeenCalled();
       expect(m.static.deleteImage).toHaveBeenCalledWith(copiedBaselineName);
       expect(m.events.testRunUpdated).not.toHaveBeenCalled();
-      expect(result).toBe(testRun);
-    });
-
-    it('a lost claim returns the run it read when the run is gone meanwhile', async () => {
-      const testRun = sameBranchRun();
-      const { service, m } = await initApproveService(testRun, { updateManyCount: 0 });
-      m.testRun.findUnique.mockResolvedValueOnce(testRun).mockResolvedValueOnce(null);
-
-      expect(await service.approve(testRun.id)).toBe(testRun);
     });
 
     it('deletes the copy when the transaction fails', async () => {
@@ -2114,6 +2155,16 @@ describe('TestRunsService', () => {
       expect(m.compare.getDiff).toHaveBeenCalledTimes(2);
       expect(service.approve).toHaveBeenCalledWith(testRun.id, false, true);
       expect(result).toBe(approved);
+    });
+
+    it('returns the run as it is now when someone decided it meanwhile', async () => {
+      const { service, m } = await build();
+      m.compare.getDiff.mockResolvedValue({ status: TestStatus.ok });
+      service.approve = jest.fn().mockRejectedValueOnce(new TestRunAlreadyDecidedException('decided'));
+      const current = generateTestRun({ status: TestStatus.approved });
+      m.testRun.findUnique.mockResolvedValueOnce(current);
+
+      expect(await firstMatch(service, refs('a'))).toBe(current);
     });
   });
 

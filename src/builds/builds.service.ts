@@ -10,7 +10,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { isPrismaError } from '../prisma/prisma-errors';
 import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
-import { TestRunsService } from '../test-runs/test-runs.service';
+import { TestRunAlreadyDecidedException, TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { getBuildsStats } from './build-stats';
@@ -281,7 +281,11 @@ export class BuildsService implements BeforeApplicationShutdown {
     }
 
     for (const testRun of build.testRuns) {
-      await this.testRunsService.approve(testRun.id, merge, false, userId);
+      try {
+        await this.testRunsService.approve(testRun.id, merge, false, userId);
+      } catch (e) {
+        if (!(e instanceof TestRunAlreadyDecidedException)) throw e;
+      }
     }
   }
 

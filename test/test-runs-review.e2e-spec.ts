@@ -82,7 +82,7 @@ describe('TestRuns review API (e2e)', () => {
   it.each([
     ['approve', 'post', '/test-runs/approve?merge=false', (id: string) => [id]],
     ['reject', 'post', '/test-runs/reject', (id: string) => [id]],
-    ['revert', 'post', '/test-runs/revert', (id: string) => [id]],
+    ['revert', 'post', '/test-runs/revert?decision=approve', (id: string) => [id]],
     ['delete', 'post', '/test-runs/delete', (id: string) => [id]],
     ['update', 'patch', '/test-runs/update/:id', () => ({ comment: 'x' })],
   ] as const)('403 for a guest on %s', async (_name, method, url, body) => {
@@ -281,8 +281,12 @@ describe('TestRuns review API (e2e)', () => {
       const { testVariationId } = await runOf(featureRun.id);
       const { baselineName } = await variationOf(testVariationId!);
 
-      await approve([featureRun.id]);
+      const res = await approve([featureRun.id]);
 
+      expect(res.body).toEqual({
+        succeeded: [],
+        failed: [{ id: featureRun.id, message: `Test run ${featureRun.id} is already approved` }],
+      });
       const baselines = await prisma.baseline.findMany({ where: { testVariationId: testVariationId! } });
       expect(baselines).toHaveLength(1);
       expect(baselines[0].testRunId).toBe(featureRun.id);
@@ -301,6 +305,33 @@ describe('TestRuns review API (e2e)', () => {
         succeeded: [],
         failed: [{ id: run.id, message: 'No test variation found. Re-create test run' }],
       });
+      expect((await runOf(run.id)).status).toBe(TestStatus.new);
+    });
+
+    it('two editors approving one run at once: one gets it, the other is told it lost', async () => {
+      const run = await runAgainstBaseline(await newBuild(), WHITE, pngBuffer([redAt(0, 0)]));
+
+      await withUser(usersService, 'editor', async (other) => {
+        const [mine, theirs] = await Promise.all([approve([run.id]), approveRuns(app, other, [run.id])]);
+
+        const results = [mine.body, theirs.body];
+        expect(results.flatMap((body) => body.succeeded)).toEqual([run.id]);
+        expect(results.flatMap((body) => body.failed)).toEqual([
+          { id: run.id, message: expect.stringMatching(/already approved|changed by someone else/) },
+        ]);
+        const baselines = await prisma.baseline.findMany({ where: { testRunId: run.id } });
+        expect(baselines).toHaveLength(1);
+        expect(baselines[0].userId).toBe(mine.body.succeeded.length ? user.id : other.id);
+      });
+    });
+
+    it('400 for an id that is not a uuid', async () => {
+      const run = await postRun(await newBuild(), WHITE);
+
+      await requestWithAuth(app, 'post', `/test-runs/approve?merge=false`, user.token)
+        .send([run.id, 'not-a-uuid'])
+        .expect(400);
+
       expect((await runOf(run.id)).status).toBe(TestStatus.new);
     });
 
@@ -346,8 +377,8 @@ describe('TestRuns review API (e2e)', () => {
   });
 
   describe('POST /test-runs/revert', () => {
-    const revert = (ids: string[], token = user.token) =>
-      requestWithAuth(app, 'post', '/test-runs/revert', token).send(ids);
+    const revert = (ids: string[], decision?: string) =>
+      requestWithAuth(app, 'post', `/test-runs/revert${decision ? `?decision=${decision}` : ''}`, user.token).send(ids);
 
     it('approve, then revert: the variation gets its previous baseline back and the run its status', async () => {
       const run = await runAgainstBaseline(await newBuild(), WHITE, pngBuffer([redAt(0, 0)]));
@@ -375,7 +406,7 @@ describe('TestRuns review API (e2e)', () => {
       await requestWithAuth(app, 'post', '/test-runs/reject', user.token).send([run.id]).expect(200);
       expect((await runOf(run.id)).status).toBe(TestStatus.failed);
 
-      await revert([run.id]).expect(204);
+      await revert([run.id], 'reject').expect(204);
 
       expect((await runOf(run.id)).status).toBe(TestStatus.unresolved);
     });
@@ -456,6 +487,36 @@ describe('TestRuns review API (e2e)', () => {
       expect(after.comment).toBe('kept');
     });
 
+    it('undoing an approval that someone rejected since is a 409 and keeps the rejection', async () => {
+      const run = await runAgainstBaseline(await newBuild(), WHITE, pngBuffer([redAt(0, 0)]));
+      await approve([run.id]);
+      await requestWithAuth(app, 'post', '/test-runs/reject', user.token).send([run.id]).expect(200);
+
+      const res = await revert([run.id], 'approve').expect(409);
+
+      expect(res.body.message).toBe(`Test run ${run.id} is failed, not approved`);
+      expect((await runOf(run.id)).status).toBe(TestStatus.failed);
+      expect(await prisma.baseline.count({ where: { testRunId: run.id } })).toBe(1);
+    });
+
+    it('400 for an unknown decision', async () => {
+      const run = await postRun(await newBuild(), WHITE);
+      await approve([run.id]);
+
+      await revert([run.id], 'merge').expect(400);
+
+      expect((await runOf(run.id)).status).toBe(TestStatus.approved);
+    });
+
+    it('without a decision, as older clients send it, reverts by the status the run has', async () => {
+      const run = await runAgainstBaseline(await newBuild(), WHITE, pngBuffer([redAt(0, 0)]));
+      await approve([run.id]);
+
+      await revert([run.id]).expect(204);
+
+      expect((await runOf(run.id)).status).toBe(TestStatus.unresolved);
+    });
+
     it('409 for a run that was not decided', async () => {
       const run = await postRun(await newBuild(), WHITE);
 
@@ -496,12 +557,12 @@ describe('TestRuns review API (e2e)', () => {
       expect(imageExists(baselineName)).toBe(true);
     });
 
-    it('counts an id that does not exist as deleted', async () => {
+    it('reports an id that does not exist as not found', async () => {
       const id = randomUUID();
 
       const res = await requestWithAuth(app, 'post', `/test-runs/delete`, user.token).send([id]).expect(200);
 
-      expect(res.body).toEqual({ succeeded: [id], failed: [] });
+      expect(res.body).toEqual({ succeeded: [], failed: [{ id, message: `Test run not found: ${id}` }] });
     });
   });
 

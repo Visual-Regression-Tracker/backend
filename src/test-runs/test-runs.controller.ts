@@ -16,6 +16,7 @@ import {
   HttpCode,
   HttpException,
   PipeTransform,
+  ParseEnumPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -31,7 +32,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { Role, TestRun, User } from '@prisma/client';
-import { MatchingVariations, TestRunsService } from './test-runs.service';
+import { MatchingVariations, RevertDecision, TestRunsService, testRunNotFound } from './test-runs.service';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { TestRunDto } from './dto/testRun.dto';
@@ -109,7 +110,7 @@ export class TestRunsController {
   @Roles(Role.admin, Role.editor)
   approveTestRun(
     @CurrentUser() user: User,
-    @Body(parseIds()) ids: string[],
+    @Body(parseIds(), parseUuidIds()) ids: string[],
     @Query('merge', new ParseBoolPipe()) merge: boolean
   ): Promise<BulkResultDto> {
     this.logger.debug(`Going to approve TestRuns: ${ids}`);
@@ -139,20 +140,24 @@ export class TestRunsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  reject(@Body(parseIds()) ids: string[]): Promise<BulkResultDto> {
+  reject(@Body(parseIds(), parseUuidIds()) ids: string[]): Promise<BulkResultDto> {
     this.logger.debug(`Going to reject TestRuns: ${ids}`);
     return this.forEachId('reject', ids, (id) => this.testRunsService.reject(id));
   }
 
   @Post('revert')
   @HttpCode(204)
+  @ApiQuery({ name: 'decision', enum: RevertDecision, required: false, description: 'The decision being undone' })
   @ApiNoContentResponse()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  revert(@Body(parseIds(), parseUuidIds()) ids: string[]): Promise<void> {
-    this.logger.debug(`Going to revert TestRuns: ${ids}`);
-    return this.testRunsService.revert(ids);
+  revert(
+    @Body(parseIds(), parseUuidIds()) ids: string[],
+    @Query('decision', new ParseEnumPipe(RevertDecision, { optional: true })) decision?: RevertDecision
+  ): Promise<void> {
+    this.logger.debug(`Going to revert ${decision} of TestRuns: ${ids}`);
+    return this.testRunsService.revert(ids, decision);
   }
 
   @Post('delete')
@@ -161,9 +166,13 @@ export class TestRunsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles(Role.admin, Role.editor)
-  delete(@Body(parseIds()) ids: string[]): Promise<BulkResultDto> {
+  delete(@Body(parseIds(), parseUuidIds()) ids: string[]): Promise<BulkResultDto> {
     this.logger.debug(`Going to delete TestRuns: ${ids}`);
-    return this.forEachId('delete', ids, (id) => this.testRunsService.delete(id));
+    return this.forEachId('delete', ids, async (id) => {
+      if (!(await this.testRunsService.delete(id))) {
+        throw testRunNotFound(id);
+      }
+    });
   }
 
   @Post('ignoreAreas/update')
@@ -233,12 +242,16 @@ export class TestRunsController {
     run: (id: string) => Promise<unknown>
   ): Promise<BulkResultDto> {
     const result: BulkResultDto = { succeeded: [], failed: [] };
-    for (const id of ids) {
+    for (const [index, id] of ids.entries()) {
       try {
         await run(id);
         result.succeeded.push(id);
       } catch (error) {
-        if (!(error instanceof HttpException || isPrismaError(error, 'P2025'))) throw error;
+        if (!(error instanceof HttpException || isPrismaError(error, 'P2025'))) {
+          this.logger.error(`Cannot ${action} TestRun ${id}, skipping the rest`, error);
+          result.failed.push(...ids.slice(index).map((rest) => ({ id: rest, message: 'Internal error' })));
+          return result;
+        }
         const message = httpErrorMessage(error);
         this.logger.warn(`Cannot ${action} TestRun ${id}: ${message}`);
         result.failed.push({ id, message });

@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { BuildsService } from './builds.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestRunsService } from '../test-runs/test-runs.service';
+import { TestRunAlreadyDecidedException, TestRunsService } from '../test-runs/test-runs.service';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { mocked, MockedObject } from 'jest-mock';
@@ -792,6 +792,16 @@ describe('BuildsService', () => {
         },
       });
       expect(testRuns.approve).toHaveBeenCalledWith(run.id, true, false, 'user id');
+    });
+
+    it('goes on past a run someone else decided meanwhile', async () => {
+      const { service, prisma, testRuns } = await setup();
+      prisma.build.findUnique.mockResolvedValueOnce({ ...build, testRuns: [{ id: 'decided' }, { id: 'next' }] });
+      testRuns.approve.mockRejectedValueOnce(new TestRunAlreadyDecidedException('decided')).mockResolvedValueOnce(run);
+
+      await service.approve('someId', false, 'user id');
+
+      expect(testRuns.approve).toHaveBeenLastCalledWith('next', false, false, 'user id');
     });
 
     it('throws NotFoundException for an unknown build', async () => {
