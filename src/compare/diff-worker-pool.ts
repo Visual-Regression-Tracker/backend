@@ -137,7 +137,7 @@ export class DiffWorkerPool implements OnApplicationShutdown {
     });
     worker.on('error', (error) => {
       this.logger.error(`Image diff worker crashed: ${error}`);
-      this.replace(worker, error);
+      this.replace(worker, error as Error);
     });
     worker.on('exit', (code) => this.replace(worker, new Error(`Image diff worker exited with code ${code}`)));
     this.workers.push(worker);
