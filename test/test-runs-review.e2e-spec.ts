@@ -430,6 +430,32 @@ describe('TestRuns review API (e2e)', () => {
       expect(await prisma.baseline.count({ where: { testVariationId: masterRun.testVariationId } })).toBe(1);
     });
 
+    it('a second feature-branch approval: the feature variation gets its ignore areas and comment back', async () => {
+      const masterRun = await postRun(await newBuild(), WHITE);
+      await approve([masterRun.id]);
+      const firstFeatureRun = await postRun(await newBuild('feature'), pngBuffer([redAt(0, 0)]));
+      const secondFeatureRun = await postRun(await newBuild('feature'), pngBuffer([redAt(1, 1)]));
+      await approve([firstFeatureRun.id]);
+      const featureVariationId = (await runOf(firstFeatureRun.id)).testVariationId!;
+      const before = await prisma.testVariation.update({
+        where: { id: featureVariationId },
+        data: { comment: 'kept', ignoreAreas: JSON.stringify([{ x: 1, y: 2, width: 3, height: 4 }]) },
+      });
+      await prisma.testRun.update({
+        where: { id: secondFeatureRun.id },
+        data: { comment: 'second', ignoreAreas: JSON.stringify([{ x: 5, y: 6, width: 7, height: 8 }]) },
+      });
+      await approve([secondFeatureRun.id]);
+      expect((await variationOf(featureVariationId)).comment).toBe('second');
+
+      await revert([secondFeatureRun.id]).expect(204);
+
+      const after = await variationOf(featureVariationId);
+      expect(after.baselineName).toBe(before.baselineName);
+      expect(after.ignoreAreas).toBe(before.ignoreAreas);
+      expect(after.comment).toBe('kept');
+    });
+
     it('409 for a run that was not decided', async () => {
       const run = await postRun(await newBuild(), WHITE);
 

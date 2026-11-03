@@ -27,7 +27,7 @@
     "typescript": "~6.0.3"
   },
   "engines": {
-    "node": ">=24.15"
+    "node": ">=26"
   },
   "allowScripts": {
     "prisma": true,

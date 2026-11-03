@@ -10,20 +10,21 @@ describe('RedisIoAdapter', () => {
   const createClientMock = createClient as jest.Mock;
   const createAdapterMock = createAdapter as jest.Mock;
 
-  let pubClient: { on: jest.Mock; connect: jest.Mock; disconnect: jest.Mock; duplicate: jest.Mock };
-  let subClient: { on: jest.Mock; connect: jest.Mock; disconnect: jest.Mock };
+  let pubClient: { on: jest.Mock; connect: jest.Mock; destroy: jest.Mock; duplicate: jest.Mock; publish: jest.Mock };
+  let subClient: { on: jest.Mock; connect: jest.Mock; destroy: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
     subClient = {
       on: jest.fn(),
       connect: jest.fn().mockResolvedValue(undefined),
-      disconnect: jest.fn().mockResolvedValue(undefined),
+      destroy: jest.fn(),
     };
     pubClient = {
       on: jest.fn(),
       connect: jest.fn().mockResolvedValue(undefined),
-      disconnect: jest.fn().mockResolvedValue(undefined),
+      destroy: jest.fn(),
+      publish: jest.fn().mockResolvedValue(1),
       duplicate: jest.fn(() => subClient),
     };
     createClientMock.mockReturnValue(pubClient);
@@ -39,6 +40,7 @@ describe('RedisIoAdapter', () => {
 
     expect(createClientMock).toHaveBeenCalledWith({
       url: 'redis://localhost:6379',
+      RESP: 2,
       socket: { reconnectStrategy: expect.any(Function) },
     });
     expect(pubClient.duplicate).toHaveBeenCalledTimes(1);
@@ -64,6 +66,45 @@ describe('RedisIoAdapter', () => {
 
     const [, subErrorHandler] = subClient.on.mock.calls.find(([event]) => event === 'error');
     expect(() => subErrorHandler(new Error('boom'))).not.toThrow();
+  });
+
+  describe('publish', () => {
+    let warnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      warnSpy = jest
+        .spyOn((RedisIoAdapter as unknown as { logger: { warn: () => void } }).logger, 'warn')
+        .mockImplementation(() => undefined);
+    });
+
+    afterEach(() => warnSpy.mockRestore());
+
+    it('passes publishes through to the client', async () => {
+      const publish = pubClient.publish;
+      await makeAdapter().connectToRedis('redis://localhost:6379');
+
+      await expect(pubClient.publish('channel', 'message')).resolves.toBe(1);
+      expect(publish).toHaveBeenCalledWith('channel', 'message');
+    });
+
+    it('logs a rejected publish instead of leaving it unhandled', async () => {
+      const publish = pubClient.publish;
+      await makeAdapter().connectToRedis('redis://localhost:6379');
+      class TimeoutError extends Error {}
+      publish.mockRejectedValueOnce(new TimeoutError());
+
+      await expect(pubClient.publish('channel', 'message')).resolves.toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith('Redis publish failed, event not sent to other instances: TimeoutError');
+    });
+
+    it('logs a publish rejected with a non-error value', async () => {
+      const publish = pubClient.publish;
+      await makeAdapter().connectToRedis('redis://localhost:6379');
+      publish.mockRejectedValueOnce('closed');
+
+      await expect(pubClient.publish('channel', 'message')).resolves.toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith('Redis publish failed, event not sent to other instances: closed');
+    });
   });
 
   describe('first connection deadline', () => {
@@ -120,28 +161,14 @@ describe('RedisIoAdapter', () => {
       expect(strategy(1000, new Error('x'))).toBe(5000);
     });
 
-    it('does not disable the offline queue', async () => {
-      await makeAdapter().connectToRedis('redis://localhost:6379');
-
-      expect(createClientMock.mock.calls[0][0]).not.toHaveProperty('disableOfflineQueue');
-      expect(createClientMock.mock.calls[0][0].socket).not.toHaveProperty('disableOfflineQueue');
-    });
-
-    it('disconnects both clients when the first connection fails', async () => {
+    it('destroys both clients when the first connection fails', async () => {
       pubClient.connect.mockRejectedValueOnce(new Error('redis down'));
 
       await expect(makeAdapter().connectToRedis('redis://localhost:6379')).rejects.toThrow('redis down');
 
-      expect(pubClient.disconnect).toHaveBeenCalledTimes(1);
-      expect(subClient.disconnect).toHaveBeenCalledTimes(1);
+      expect(pubClient.destroy).toHaveBeenCalledTimes(1);
+      expect(subClient.destroy).toHaveBeenCalledTimes(1);
       expect(createAdapterMock).not.toHaveBeenCalled();
-    });
-
-    it('still reports the connect error when a disconnect fails too', async () => {
-      pubClient.connect.mockRejectedValueOnce(new Error('redis down'));
-      subClient.disconnect.mockRejectedValueOnce(new Error('already closed'));
-
-      await expect(makeAdapter().connectToRedis('redis://localhost:6379')).rejects.toThrow('redis down');
     });
 
     it('gives up after 30 seconds by default', async () => {

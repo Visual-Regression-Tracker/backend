@@ -23,7 +23,7 @@ services:
         condition: service_started
   oidcmock:
     container_name: oidcmock
-    image: ghcr.io/navikt/mock-oauth2-server:6.1.0
+    image: ghcr.io/navikt/mock-oauth2-server:6.1.4
     hostname: host.docker.internal
     restart: always
     environment:

@@ -23,7 +23,7 @@ function sameDimensions(a: Buffer, b: Buffer): boolean {
 @Injectable()
 export class PixelmatchService implements ImageComparator {
   private readonly logger: Logger = new Logger(PixelmatchService.name);
-  readonly appliesBlurAmplitudeFilter = true;
+  readonly appliesRenderingNoiseFilter = true;
 
   constructor(
     private readonly staticService: StaticService,
@@ -63,7 +63,7 @@ export class PixelmatchService implements ImageComparator {
       allowDiffDimensions: config.allowDiffDimensions,
       diffTolerancePercent: data.diffTollerancePercent,
       saveDiff: data.saveDiffAsFile,
-      ...(data.blurAmplitude ? { blurAmplitude: data.blurAmplitude } : {}),
+      ignoreRenderingNoise: data.ignoreRenderingNoise,
     });
 
     if (output.equal) {
@@ -89,7 +89,10 @@ export class PixelmatchService implements ImageComparator {
         : {}),
     };
 
-    if (output.renderingNoiseOnly && (await this.confirmedByDinov2(data, baselineBuffer, imageBuffer, output))) {
+    if (
+      output.gate &&
+      (await this.dinov2Service.confirmsNoiseForGate(output.gate, baselineBuffer, imageBuffer)).noise
+    ) {
       this.logger.debug(
         `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${output.blurAmplitude?.toFixed(1)}, ${output.solidPixels} solid pixels)`
       );
@@ -109,26 +112,6 @@ export class PixelmatchService implements ImageComparator {
       result.status = TestStatus.ok;
     }
     return result;
-  }
-
-  private async confirmedByDinov2(
-    data: ImageCompareInput,
-    baseline: Buffer,
-    image: Buffer,
-    output: PixelmatchJobOutput
-  ): Promise<boolean> {
-    const dinov2 = data.blurAmplitude?.dinov2;
-    if (!dinov2) {
-      return true;
-    }
-    if (!output.gate) {
-      return false;
-    }
-    const verdict = await this.dinov2Service.confirmsNoiseForGate(output.gate, baseline, image, dinov2.threshold);
-    if (!verdict.noise) {
-      this.logger.debug(`DINOv2 sees a change of content (score ${verdict.score?.toFixed(3) ?? 'n/a'}): to review`);
-    }
-    return verdict.noise;
   }
 
   private async saveThumbnails(

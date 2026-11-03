@@ -11,7 +11,7 @@ pass. A step that fails is fixed on the branch, not noted for later.
 1. **Checks.** `npm run typecheck`, `npm run lint`, `npm run format:check`,
    `npm run test:cov`, `npm run build`, and `npm run test:e2e` against a
    database of its own (`docker run -d --name vrt-e2e-pr -e POSTGRES_PASSWORD=pg
-   -p 55499:5432 postgres:15.3-alpine3.18`, then with
+   -p 55499:5432 postgres:18`, then with
    `DATABASE_URL=postgresql://postgres:pg@localhost:55499/postgres`:
    `npx prisma migrate deploy`, `npx prisma migrate diff --from-config-datasource
    --to-schema prisma/schema.prisma --exit-code`, `npm run test:e2e`; remove it

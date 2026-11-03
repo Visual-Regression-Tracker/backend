@@ -7,10 +7,14 @@ import compression from 'compression';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { HDD_IMAGE_PATH } from './static/hdd/constants';
 import { RedisIoAdapter } from './redis-io.adapter';
-import { getHttpsOptions, parseLogLevels } from './main.helpers';
+import { assertWritableDir, getHttpsOptions, parseLogLevels, StartupCheckError } from './main.helpers';
 import { GlobalValidationPipe } from './shared/validation';
 
 async function bootstrap() {
+  // same rule as StaticFactoryService: anything but s3 stores on HDD
+  if (process.env.STATIC_SERVICE !== 's3') {
+    assertWritableDir(HDD_IMAGE_PATH);
+  }
   const logger = parseLogLevels(process.env.LOG_LEVEL);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     cors: true,
@@ -45,7 +49,7 @@ async function bootstrap() {
 bootstrap().catch((error: unknown) => {
   Logger.error(
     `Failed to start: ${error instanceof Error ? error.message : String(error)}`,
-    error instanceof Error ? error.stack : undefined
+    error instanceof Error && !(error instanceof StartupCheckError) ? error.stack : undefined
   );
   process.exit(1);
 });

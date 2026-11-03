@@ -31,13 +31,17 @@ export class TestVariationsService {
 
   async getDetails(id: string): Promise<
     TestVariation & {
-      baselines: (Baseline & { testRun: TestRun | null; user: Omit<User, 'password' | 'apiKey'> | null })[];
+      baselines: (Omit<Baseline, 'ignoreAreasBeforeApproval' | 'commentBeforeApproval'> & {
+        testRun: TestRun | null;
+        user: Omit<User, 'password' | 'apiKey'> | null;
+      })[];
     }
   > {
     const testVariation = await this.prismaService.testVariation.findUnique({
       where: { id },
       include: {
         baselines: {
+          omit: { ignoreAreasBeforeApproval: true, commentBeforeApproval: true },
           include: {
             testRun: true,
             user: { omit: { password: true, apiKey: true } },
@@ -174,11 +178,13 @@ export class TestVariationsService {
       userId,
       testRunId,
       baselineName,
+      before,
     }: {
       id: string;
       userId?: string;
       testRunId: string;
       baselineName: string;
+      before?: Pick<TestVariation, 'ignoreAreas' | 'comment'>;
     },
     tx: Prisma.TransactionClient = this.prismaService
   ): Promise<TestVariation> {
@@ -189,6 +195,7 @@ export class TestVariationsService {
         baselines: {
           create: {
             baselineName,
+            ...(before && { ignoreAreasBeforeApproval: before.ignoreAreas, commentBeforeApproval: before.comment }),
             testRun: {
               connect: {
                 id: testRunId,

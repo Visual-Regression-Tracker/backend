@@ -1,6 +1,6 @@
-import { BlurAmplitudeConfig } from '../blur-amplitude.config';
+import { RenderingNoiseConfig } from '../rendering-noise.config';
 
-export type OdiffConfig = BlurAmplitudeConfig & {
+export type OdiffConfig = RenderingNoiseConfig & {
   outputDiffMask: boolean;
   failOnLayoutDiff: boolean;
   threshold: number;
