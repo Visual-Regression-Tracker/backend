@@ -20,20 +20,8 @@ interface Dinov2Verdict {
   score?: number;
 }
 
-export function blobScore(distances: number[], width: number, height: number, cells: number[]): number {
-  const marked = new Set(cells);
-  const at = (row: number, col: number) =>
-    row >= 0 && row < height && col >= 0 && col < width && marked.has(row * width + col)
-      ? distances[row * width + col]
-      : 0;
-  let score = 0;
-  for (const cell of cells) {
-    const row = Math.floor(cell / width);
-    const col = cell % width;
-    const neighbour = Math.max(at(row - 1, col), at(row + 1, col), at(row, col - 1), at(row, col + 1));
-    score = Math.max(score, Math.min(distances[cell], neighbour));
-  }
-  return score;
+export function strongestPatchDistance(distances: number[], cells: number[]): number {
+  return cells.reduce((strongest, cell) => Math.max(strongest, distances[cell]), 0);
 }
 
 export function tilesOf(cells: number[], width: number): [number, number][] {
@@ -103,7 +91,7 @@ export class Dinov2Service {
         );
       }
 
-      const score = blobScore(answer.distances, gate.width, gate.height, gate.cells);
+      const score = strongestPatchDistance(answer.distances, gate.cells);
       if (score > DINOV2_THRESHOLD) {
         this.logger.debug(`DINOv2 sees a change of content (score ${score.toFixed(3)}): to review`);
       }
