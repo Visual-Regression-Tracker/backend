@@ -395,6 +395,16 @@ describe('EventsGateway', () => {
       expect(inMock).toHaveBeenCalledWith(['user:u1', 'user:u2']);
       expect(disconnectSockets).toHaveBeenCalledWith(true);
     });
+
+    it('closes no socket for an empty list, which socket.io would read as every room', async () => {
+      const { gateway } = await initGateway();
+      const inMock = jest.fn(() => ({ disconnectSockets: jest.fn() }));
+      gateway.server = { in: inMock } as unknown as Server;
+
+      gateway.disconnectUsers([]);
+
+      expect(inMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('rooms', () => {

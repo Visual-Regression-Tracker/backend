@@ -97,6 +97,8 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
   private readonly buildsUpdatedQueued = new Set<string>();
 
   disconnectUsers(userIds: string[]): void {
+    // socket.io reads no rooms as every socket
+    if (userIds.length === 0) return;
     this.server.in(userIds.map(userRoom)).disconnectSockets(true);
   }
 
