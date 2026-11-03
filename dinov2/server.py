@@ -1,27 +1,26 @@
 """HTTP service the VRT backend asks whether two screenshots differ in content.
 
-POST /v1/patch-distances
+POST /v1/patch-distances   (X-Timeout-Ms: how long the caller will wait; 503 once it is over)
   {"baseline": "<base64 PNG>", "image": "<base64 PNG>",
    "tiles": [[row, col], ...]}   (optional: 224 px tiles to encode, default all)
   -> {"patch": 14, "width": <patches across>, "height": <patches down>,
       "distances": [<row-major cosine distances>]}
+  -> 413 over DINOV2_MAX_PIXELS per image, 503 when the queue (DINOV2_MAX_QUEUE) is full
 GET /health -> {"status": "ok", "model": "<model id>"}
 
 It only measures; deciding what the distances mean (where to look, what
 threshold) is the backend's job, so that logic is tested and versioned there.
 """
-import base64
 import binascii
-import io
 import json
 import os
-import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 import onnxruntime as ort
-from PIL import Image
 
+from guard import Busy, Gate, TooLarge, open_image
 from patches import PATCH, patch_distances
 
 MODEL_PATH = os.environ.get("DINOV2_MODEL_PATH", "/model/dinov2-base.onnx")
@@ -30,6 +29,10 @@ PORT = int(os.environ.get("PORT", "8000"))
 # two decoded 1280x10000 screenshots are ~75 MB of base64; anything far beyond
 # that is not a screenshot pair
 MAX_BODY = int(os.environ.get("DINOV2_MAX_BODY_BYTES", str(200 * 1024 * 1024)))
+# per image, sized for 2 GB of RAM
+MAX_PIXELS = int(os.environ.get("DINOV2_MAX_PIXELS", "20000000"))
+# requests allowed to wait for the one compute slot; the rest are refused at once
+MAX_QUEUE = int(os.environ.get("DINOV2_MAX_QUEUE", "2"))
 
 # onnxruntime's default — one thread per visible core — oversubscribes a
 # container's CPU share and ran up to 7x slower than 4 threads when measured
@@ -39,12 +42,15 @@ options.intra_op_num_threads = THREADS
 session = ort.InferenceSession(MODEL_PATH, options, providers=["CPUExecutionProvider"])
 # the CLS token comes first; the patches follow, row by row
 encode = lambda x: session.run(None, {"pixel_values": x})[0][:, 1:]  # noqa: E731
-# one pair at a time: onnxruntime already spreads a run over every core
-lock = threading.Lock()
+# one pair at a time (onnxruntime already spreads a run over every core), reading and decoding included
+gate = Gate(MAX_QUEUE)
 
 
-def decode(field: str) -> np.ndarray:
-    return np.asarray(Image.open(io.BytesIO(base64.b64decode(field, validate=True))).convert("RGB"))
+def deadline_of(header: str | None, started: float) -> float | None:
+    try:
+        return started + int(header) / 1000 if header else None
+    except ValueError:
+        return None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -62,28 +68,41 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, {"error": "not found"})
 
+    def _measure(self, length: int, check):
+        body = json.loads(self.rfile.read(length))
+        opened = [open_image(body[key], MAX_PIXELS) for key in ("baseline", "image")]
+        baseline, image = (np.asarray(each.convert("RGB")) for each in opened)
+
+        def checked(x):
+            check()
+            return encode(x)
+
+        only = body.get("tiles")
+        if only is not None:
+            only = [(int(r), int(c)) for r, c in only]
+        return patch_distances(baseline, image, checked, only)
+
     def do_POST(self) -> None:
         if self.path != "/v1/patch-distances":
             self._send(404, {"error": "not found"})
             return
+        started = time.monotonic()
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0 or length > MAX_BODY:
             self._send(413 if length > MAX_BODY else 400, {"error": "body missing or too large"})
             return
         try:
-            body = json.loads(self.rfile.read(length))
-            baseline, image = decode(body["baseline"]), decode(body["image"])
-            only = body.get("tiles")
-            if only is not None:
-                only = [(int(r), int(c)) for r, c in only]
+            with gate.slot(deadline_of(self.headers.get("X-Timeout-Ms"), started)) as check:
+                distances = self._measure(length, check)
+        except Busy as error:
+            self.close_connection = True
+            self._send(503, {"error": str(error)})
+            return
+        except TooLarge as error:
+            self._send(413, {"error": str(error)})
+            return
         except (KeyError, TypeError, ValueError, binascii.Error, OSError) as error:
             self._send(400, {"error": f"expected two base64 PNGs: {error}"})
-            return
-        try:
-            with lock:
-                distances = patch_distances(baseline, image, encode, only)
-        except ValueError as error:
-            self._send(400, {"error": str(error)})
             return
         height, width = distances.shape
         self._send(200, {"patch": PATCH, "width": width, "height": height,

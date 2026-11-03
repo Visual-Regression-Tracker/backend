@@ -86,6 +86,7 @@ describe('Dinov2Service', () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe('http://dinov2:8000/v1/patch-distances');
     expect(timeout).toHaveBeenCalledWith(5000);
+    expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ 'X-Timeout-Ms': '5000' });
     timeout.mockRestore();
   });
 

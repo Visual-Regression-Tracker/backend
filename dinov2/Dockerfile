@@ -18,7 +18,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY --from=export /export/model.onnx /model/dinov2-base.onnx
-COPY patches.py server.py ./
+COPY patches.py guard.py server.py ./
 ENV DINOV2_MODEL_PATH=/model/dinov2-base.onnx \
     DINOV2_MODEL_ID=facebook/dinov2-base \
     PORT=8000 \

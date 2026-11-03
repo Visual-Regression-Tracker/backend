@@ -82,15 +82,16 @@ export class Dinov2Service {
         return { noise: true, score: 0 };
       }
 
+      const timeoutMs = positiveNumber(this.configService.get('DINOV2_TIMEOUT_MS'), DEFAULT_TIMEOUT_MS);
       const response = await fetch(`${url}/v1/patch-distances`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Timeout-Ms': String(timeoutMs) },
         body: JSON.stringify({
           baseline: baseline.toString('base64'),
           image: image.toString('base64'),
           tiles: tilesOf(gate.cells, gate.width),
         }),
-        signal: AbortSignal.timeout(positiveNumber(this.configService.get('DINOV2_TIMEOUT_MS'), DEFAULT_TIMEOUT_MS)),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) {
         throw new Error(`service answered ${response.status}`);
