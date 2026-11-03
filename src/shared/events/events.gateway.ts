@@ -38,20 +38,6 @@ const roomsOf = (body: RoomsBody | null | undefined): string[] => [
   ...(isUuidString(body?.buildId) ? [buildRoom(body.buildId)] : []),
 ];
 
-const groupBy = <T>(items: T[], keyOf: (item: T) => string): Map<string, T[]> => {
-  const groups = new Map<string, T[]>();
-  for (const item of items) {
-    const key = keyOf(item);
-    const group = groups.get(key);
-    if (group) {
-      group.push(item);
-    } else {
-      groups.set(key, [item]);
-    }
-  }
-  return groups;
-};
-
 @WebSocketGateway({ cors: true })
 export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
   @WebSocketServer()
@@ -164,7 +150,7 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
       this.server.emit(event, items);
       return;
     }
-    groupBy(items, roomOf).forEach((group, room) => this.emitToRoom(room, event, group));
+    Map.groupBy(items, roomOf).forEach((group, room) => this.emitToRoom(room, event, group));
   }
 
   private buildUpdatedDebounced = debounce(

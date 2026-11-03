@@ -21,7 +21,7 @@ export interface BlurAmplitudeJobOutput {
 }
 
 const DEFAULT_BLUR_SIGMA = 1;
-// strongest of 57 anti-aliasing-only real pairs: 75.1; 72% of injected bugs still fail
+// above the strongest anti-aliasing-only pair measured (75.1)
 export const BLUR_AMPLITUDE_THRESHOLD = 80;
 
 const SOLID_MIN_CHANGE = 6;

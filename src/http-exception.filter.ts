@@ -57,12 +57,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
   }
 
   isUniqueConstraintException(exception: Error): boolean {
-    // P2002 message says "on the fields" before Prisma 7, "on the constraint" since
-    return (
-      (exception as { code?: unknown }).code === 'P2002' ||
-      exception.message.includes('Unique constraint failed on the fields') ||
-      exception.message.includes('Unique constraint failed on the constraint')
-    );
+    return (exception as { code?: unknown }).code === 'P2002';
   }
 
   getCustomMessageForException(exception: Error): string {

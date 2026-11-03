@@ -22,7 +22,7 @@ const readCpuinfo = (): string => {
   }
 };
 
-// Prisma 6 sized its pool from physical cores; hyper-threads would double connections
+// physical cores, not hyper-threads, which would double the connections
 export function physicalCpuCount(cpuinfo: string = readCpuinfo()): number {
   const cores = new Set<string>();
   for (const block of cpuinfo.split(/\n\s*\n/)) {
@@ -59,7 +59,7 @@ export function getPgOptions(databaseUrl: string | undefined): {
     connectionString: databaseUrl,
     max: connectionLimit > 0 ? connectionLimit : physicalCpuCount() * 2 + 1,
     connectionTimeoutMillis: connectTimeout && poolTimeout ? Math.max(connectTimeout, poolTimeout) : undefined,
-    // Prisma 6's value; pg's 10s default reconnects over and over between ingestion bursts
+    // pg's 10s default reconnects over and over between ingestion bursts
     idleTimeoutMillis: 300_000,
   };
 
@@ -69,7 +69,7 @@ export function getPgOptions(databaseUrl: string | undefined): {
     ['prefer', 'require', 'disable'].includes(sslmode) &&
     !PG_ONLY_SSL_PARAMS.some((name) => params.has(name));
   if (url && prismaTls) {
-    // Prisma 6: no certificate check unless sslaccept=strict
+    // no certificate check unless sslaccept=strict
     const sslcert = params.get('sslcert');
     const ssl =
       params.get('sslaccept') === 'strict'

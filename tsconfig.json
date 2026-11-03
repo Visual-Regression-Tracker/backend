@@ -8,6 +8,7 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "target": "ES2023",
+    "lib": ["ES2024", "DOM"],
     "sourceMap": true,
     "incremental": true,
     "skipLibCheck": true,

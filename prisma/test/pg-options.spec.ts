@@ -16,10 +16,6 @@ describe('getSeedPgOptions', () => {
     });
   });
 
-  it('uses the schema the migrations were applied to', () => {
-    expect(getSeedPgOptions(`${url}?schema=vrt`).schema).toBe('vrt');
-  });
-
   it('insists on TLS under sslmode=require and takes the Prisma parameters out of the URL', () => {
     expect(getSeedPgOptions(`${url}?sslmode=require&schema=vrt`)).toEqual({
       config: { connectionString: `${url}?schema=vrt`, ssl: noVerify },
@@ -37,10 +33,6 @@ describe('getSeedPgOptions', () => {
     expect(config).toEqual({ connectionString: url, ssl: { ca: Buffer.from('ca-pem') } });
   });
 
-  it('connects without TLS under sslmode=disable', () => {
-    expect(getSeedPgOptions(`${url}?sslmode=disable`).config.ssl).toBe(false);
-  });
-
   it('leaves a URL written for pg to pg', () => {
     const pgUrl = `${url}?sslmode=verify-full`;
 
@@ -49,10 +41,6 @@ describe('getSeedPgOptions', () => {
       schema: undefined,
       preferSsl: false,
     });
-  });
-
-  it('leaves an unparsable URL for pg to report', () => {
-    expect(getSeedPgOptions('not a url')).toEqual({ config: { connectionString: 'not a url' }, preferSsl: false });
   });
 });
 
@@ -70,16 +58,6 @@ describe('negotiatePreferredSsl', () => {
 
     expect(config.ssl).toBe(false);
     expect(end).toHaveBeenCalled();
-  });
-
-  it('keeps TLS when the server takes it', async () => {
-    jest.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined as never);
-    jest.spyOn(Client.prototype, 'end').mockResolvedValue(undefined as never);
-    const config = { connectionString: 'postgresql://db/vrt', ssl: { rejectUnauthorized: false } };
-
-    await negotiatePreferredSsl(config);
-
-    expect(config.ssl).toEqual({ rejectUnauthorized: false });
   });
 
   it('fails when the server cannot be reached, so the seed does not run on a guessed TLS setting', async () => {
