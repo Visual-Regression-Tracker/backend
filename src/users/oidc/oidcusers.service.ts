@@ -92,7 +92,7 @@ export class OidcUsersService implements Users {
 
   private discoverConfig(): Promise<oidc.Configuration> {
     return oidc.discovery(
-      new URL(this.oidcConfig.issuerUrl),
+      discoveryUrl(this.oidcConfig.issuerUrl),
       this.oidcConfig.clientId,
       { redirect_uris: [this.oidcConfig.redirectUri], response_types: ['code'] },
       clientSecretBasic(this.oidcConfig.clientId, this.oidcConfig.clientSecret),
@@ -299,6 +299,16 @@ export class OidcUsersService implements Users {
   login(_userLoginRequestDto: UserLoginRequestDto): Promise<UserLoginResponseDto> {
     return Promise.reject(new HttpException('Password login is disabled. Use SSO to login.', HttpStatus.BAD_REQUEST));
   }
+}
+
+// openid-client 6 rejects an advertised issuer that differs from the configured one, except when given the
+// discovery url; 5 trusted the advertised one, as split-horizon setups (API reaches the IdP by another host) need
+function discoveryUrl(issuerUrl: string): URL {
+  const url = new URL(issuerUrl);
+  if (!url.pathname.includes('/.well-known/')) {
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/.well-known/openid-configuration`;
+  }
+  return url;
 }
 
 function skipTlsVerificationFor(origin: string): oidc.CustomFetch {
