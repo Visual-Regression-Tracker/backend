@@ -2,11 +2,6 @@ import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { RawImage, readSameSizePair } from '../../utils';
 import { DINOV2_PATCH, gateOfDecoded, PatchGate } from './patch-gate.core';
 
-export interface BlurAmplitudeOptions {
-  threshold: number;
-  dinov2?: { threshold: number };
-}
-
 export interface BlurredDifference {
   amplitude: number;
   solidPixels: number;
@@ -18,7 +13,6 @@ export interface BlurAmplitudeJobInput {
   baseline: Buffer | Uint8Array;
   image: Buffer | Uint8Array;
   ignoreAreas: IgnoreAreaDto[];
-  gateIfNoise?: { threshold: number };
 }
 
 export interface BlurAmplitudeJobOutput {
@@ -28,7 +22,7 @@ export interface BlurAmplitudeJobOutput {
 
 const DEFAULT_BLUR_SIGMA = 1;
 // strongest of 57 anti-aliasing-only real pairs: 75.1; 72% of injected bugs still fail
-export const DEFAULT_BLUR_AMPLITUDE_THRESHOLD = 80;
+export const BLUR_AMPLITUDE_THRESHOLD = 80;
 
 const SOLID_MIN_CHANGE = 6;
 const SOLID_KEEP = 0.9;
@@ -37,18 +31,18 @@ export const MAX_SOLID_SHARE = 0.01;
 
 export const MAX_MEASURED_PIXELS = 16_000_000;
 
-export function isRenderingNoise(measure: BlurredDifference | null, threshold: number): boolean {
-  return measure !== null && measure.amplitude <= threshold && measure.solidShare <= MAX_SOLID_SHARE;
+export function isRenderingNoise(measure: BlurredDifference | null): boolean {
+  return measure !== null && measure.amplitude <= BLUR_AMPLITUDE_THRESHOLD && measure.solidShare <= MAX_SOLID_SHARE;
+}
+
+export function measureRenderingNoise(baseline: RawImage, image: RawImage): BlurAmplitudeJobOutput {
+  const measure = measureBlurredDifference(baseline, image);
+  return isRenderingNoise(measure) ? { measure, gate: gateOfDecoded(baseline, image, DINOV2_PATCH) } : { measure };
 }
 
 export function computeBlurAmplitude(input: BlurAmplitudeJobInput): BlurAmplitudeJobOutput {
   const pair = readSameSizePair(input.baseline, input.image, input.ignoreAreas);
-  const measure = pair && measureBlurredDifference(pair.baseline, pair.image);
-  const gate =
-    pair && input.gateIfNoise && isRenderingNoise(measure, input.gateIfNoise.threshold)
-      ? gateOfDecoded(pair.baseline, pair.image, DINOV2_PATCH)
-      : undefined;
-  return { measure, ...(gate ? { gate } : {}) };
+  return pair ? measureRenderingNoise(pair.baseline, pair.image) : { measure: null };
 }
 
 function gaussianKernel(sigma: number): Float32Array {

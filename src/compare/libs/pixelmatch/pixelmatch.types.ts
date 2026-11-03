@@ -1,6 +1,6 @@
-import { BlurAmplitudeConfig } from '../blur-amplitude.config';
+import { RenderingNoiseConfig } from '../rendering-noise.config';
 
-export interface PixelmatchConfig extends BlurAmplitudeConfig {
+export interface PixelmatchConfig extends RenderingNoiseConfig {
   allowDiffDimensions?: boolean;
   ignoreAntialiasing: boolean;
   threshold: number;
