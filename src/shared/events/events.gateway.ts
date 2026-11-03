@@ -17,6 +17,7 @@ import { TestRunDto } from '../../test-runs/dto/testRun.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Debounced, debounce } from './debounce';
 import { SocketAuthService } from '../../auth/socket-auth.service';
+import { buildRoom, projectRoom, userRoom } from './rooms';
 import { booleanFlag } from '../../utils/env';
 
 const DEBOUNCE_WAIT = 1500;
@@ -24,9 +25,6 @@ const MAX_WAIT = 3000;
 
 const TEST_RUN_EVENTS = ['testRun_created', 'testRun_updated', 'testRun_deleted'] as const;
 type TestRunEvent = (typeof TEST_RUN_EVENTS)[number];
-
-const projectRoom = (projectId: string) => `project:${projectId}`;
-const buildRoom = (buildId: string) => `build:${buildId}`;
 
 interface RoomsBody {
   projectId?: unknown;
@@ -97,6 +95,12 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
     TEST_RUN_EVENTS.map((event) => [event, debounce(() => this.emitQueued(event), DEBOUNCE_WAIT, MAX_WAIT)])
   ) as Record<TestRunEvent, Debounced>;
   private readonly buildsUpdatedQueued = new Set<string>();
+
+  disconnectUsers(userIds: string[]): void {
+    // socket.io reads no rooms as every socket
+    if (userIds.length === 0) return;
+    this.server.in(userIds.map(userRoom)).disconnectSockets(true);
+  }
 
   buildCreated(build: BuildDto): void {
     this.emitToRoom(projectRoom(build.projectId), 'build_created', build);

@@ -13,6 +13,7 @@ import { Users } from './users.interface';
 import { OidcUsersService } from './oidc/oidcusers.service';
 import { ConfigService } from '@nestjs/config';
 import { booleanFlag } from '../utils/env';
+import { EventsGateway } from '../shared/events/events.gateway';
 
 @Injectable()
 export class UsersService {
@@ -23,7 +24,8 @@ export class UsersService {
     private readonly usersFactoryService: UsersFactoryService,
     private prismaService: PrismaService,
     private authService: AuthService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly eventsGateway: EventsGateway
   ) {
     this.usersService = this.usersFactoryService.getUsersService();
   }
@@ -85,7 +87,9 @@ export class UsersService {
 
   async delete(id: string): Promise<User> {
     this.logger.debug(`Removing User: ${id}`);
-    return this.prismaService.user.delete({ where: { id } });
+    const deleted = await this.prismaService.user.delete({ where: { id } });
+    this.eventsGateway.disconnectUsers([id]);
+    return deleted;
   }
 
   async deleteMany(ids: string[]): Promise<void> {
@@ -98,6 +102,7 @@ export class UsersService {
       }
       await tx.user.deleteMany({ where: { id: { in: ids } } });
     });
+    this.eventsGateway.disconnectUsers(ids);
   }
 
   async assignRole(data: AssignRoleDto): Promise<UserSummaryDto> {
