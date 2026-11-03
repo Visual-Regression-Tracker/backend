@@ -525,8 +525,20 @@ describe('TestRunsService', () => {
   });
 
   describe('ignore areas and comments', () => {
-    const findsVariation = (m: Mocks, testVariationId: string | null = 'testVariationId') =>
-      m.testRun.findUnique.mockResolvedValue({ testVariationId });
+    const findsVariation = (
+      m: Mocks,
+      testVariationId: string | null = 'testVariationId',
+      variationBranch = 'develop'
+    ) =>
+      m.testRun.findUnique.mockResolvedValue({
+        branchName: 'develop',
+        testVariationId,
+        testVariation: testVariationId && {
+          id: testVariationId,
+          branchName: variationBranch,
+          projectId: 'someProjectId',
+        },
+      });
 
     it('updateIgnoreAreas', async () => {
       const testRun = { id: 'testRunId', testVariationId: 'testVariationId', ignoreAreas: JSON.stringify(ignoreAreas) };
@@ -610,6 +622,38 @@ describe('TestRunsService', () => {
       await service.update('id', { comment: 'c', baselineName: 'evil.png', ignoreAreas: 'not json' } as never);
 
       expect(m.tv.update).toHaveBeenCalledWith('v', { comment: 'c' });
+    });
+
+    describe('of a feature-branch run compared against the main branch variation', () => {
+      it('updateIgnoreAreas changes only the run and diffs it in the variation project', async () => {
+        const testRun = generateTestRun({ id: 'testRunId', ignoreAreas: JSON.stringify(ignoreAreas) });
+        const { service, m } = await build();
+        m.testRun.update.mockResolvedValueOnce(testRun);
+        findsVariation(m, 'mainVariationId', 'master');
+        service.calculateDiff = jest.fn();
+
+        await service.updateIgnoreAreas(testRun.id, ignoreAreas);
+
+        expect(m.testRun.update).toHaveBeenCalledWith({
+          where: { id: testRun.id },
+          data: { ignoreAreas: JSON.stringify(ignoreAreas) },
+        });
+        expect(m.tv.update).not.toHaveBeenCalled();
+        expect(service.calculateDiff).toHaveBeenCalledWith('someProjectId', testRun);
+      });
+
+      it('update changes only the comment of the run', async () => {
+        const testRun = generateTestRun({ id: 'testRunId' });
+        const { service, m } = await build();
+        m.testRun.update.mockResolvedValueOnce(testRun);
+        findsVariation(m, 'mainVariationId', 'master');
+
+        await service.update(testRun.id, { comment: 'c' });
+
+        expect(m.testRun.update).toHaveBeenCalledWith({ where: { id: testRun.id }, data: { comment: 'c' } });
+        expect(m.tv.update).not.toHaveBeenCalled();
+        expect(m.events.testRunUpdated).toHaveBeenCalledWith(testRun);
+      });
     });
 
     describe.each([
