@@ -54,14 +54,14 @@ lines in `.env` (section `# optional`) show the same variables.
 | `SERVER_HEADERS_TIMEOUT` | Node.js default | HTTP `headersTimeout`, in milliseconds. |
 | `SERVER_KEEP_ALIVE_TIMEOUT` | Node.js default | HTTP `keepAliveTimeout`, in milliseconds. |
 | `LOG_LEVEL` | all levels | Comma-separated Nest log levels to keep, e.g. `log,warn,error,fatal`. |
-| `HTTPS_KEY_PATH` | `./secrets/ssl.key` | TLS private key. HTTPS is used only when both files exist; otherwise the API serves HTTP. |
+| `HTTPS_KEY_PATH` | `./secrets/ssl.key` | TLS private key. HTTPS is used only when both files exist; otherwise the API serves HTTP. A file that exists but cannot be read stops startup. |
 | `HTTPS_CERT_PATH` | `./secrets/ssl.cert` | TLS certificate. |
 
 ### Storage
 
 | Variable | Default | What it does |
 |---|---|---|
-| `STATIC_SERVICE` | `hdd` | Where images are stored: `hdd` (local disk) or `s3`. Odiff works only with `hdd`. |
+| `STATIC_SERVICE` | `hdd` | Where images are stored: `hdd` (`imageUploads/` in the working directory, `/imageUploads` in the image) or `s3`. With `hdd`, startup fails when that directory is not writable. Odiff works only with `hdd`. |
 | `AWS_S3_BUCKET_NAME` | none | Bucket for `STATIC_SERVICE=s3`; required then. |
 | `AWS_REGION` | from the AWS SDK | Read by the AWS SDK v3 default chain, not by VRT code. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from the AWS SDK | Same chain. An IAM role or shared AWS config works without them. |
@@ -94,10 +94,10 @@ lines in `.env` (section `# optional`) show the same variables.
 | `LDAP_ATTRIBUTE_MAIL`, `LDAP_ATTRIBUTE_FIRST_NAME`, `LDAP_ATTRIBUTE_LAST_NAME` | none | Attributes that hold the email, first name and last name. Required when LDAP is enabled. |
 | `LDAP_TLS_NO_VERIFY` | `false` | Skip TLS certificate verification for LDAP. Test servers only. |
 | `OIDC_ENABLED` | `false` | Enables OIDC (SSO) login; see the OIDC section. |
-| `OIDC_ISSUER_URL` | none | Issuer URL of the identity provider. Required when OIDC is enabled. |
+| `OIDC_ISSUER_URL` | none | Issuer URL of the identity provider. Required when OIDC is enabled. An `http://` issuer works (with a warning) for local setups. |
 | `OIDC_CLIENT_ID` | none | OIDC client ID. Required when OIDC is enabled. |
 | `OIDC_CLIENT_SECRET` | none | OIDC client secret. Required when OIDC is enabled. |
-| `OIDC_REDIRECT_URI` | `http://localhost:4200/users/oidc/callback` | Callback URL registered at the identity provider. |
+| `OIDC_REDIRECT_URI` | `http://localhost:4200/users/oidc/callback` | Callback URL registered at the identity provider, without a query string. |
 | `OIDC_SCOPES` | `openid profile email` | Requested scopes. |
 | `OIDC_ATTRIBUTE_MAIL` | `email` | Claim that holds the email. |
 | `OIDC_ATTRIBUTE_FIRST_NAME` | `given_name` | Claim that holds the first name. |
@@ -106,7 +106,7 @@ lines in `.env` (section `# optional`) show the same variables.
 | `OIDC_ADMIN_VALUES` | `vrt-admin,admin` | Comma-separated claim values that give the admin role. |
 | `OIDC_DEFAULT_ROLE` | `editor` | Role for every other user: `admin` or `editor`. |
 | `OIDC_REQUIRE_VERIFIED_EMAIL` | `true` | Reject logins whose email is not verified. |
-| `OIDC_TLS_NO_VERIFY` | `false` | Skip TLS verification for the identity provider. Test servers only. |
+| `OIDC_TLS_NO_VERIFY` | `false` | Skip TLS verification for requests to the issuer's origin; other hosts are still verified. Test servers only. |
 
 ### Service variables
 
@@ -124,6 +124,16 @@ Read by `prisma db seed`.
 | `DEFAULT_USER_EMAIL` | `visual-regression-tracker@example.com` | Email of the default user. |
 | `DEFAULT_USER_PASSWORD` | generated, printed once | Password of the default user. |
 | `DEFAULT_USER_API_KEY` | generated, printed once | API key of the default user. |
+
+## Docker images
+
+The `api` and `migration` images run as uid/gid `1000:1000` (`node`), `dinov2` as `65534:65534` (`nobody`). A volume or bind mount at `/imageUploads`, and TLS files mounted for `HTTPS_KEY_PATH`/`HTTPS_CERT_PATH`, must belong to that user, or the API stops at startup with the path and the fix:
+
+```sh
+chown -R 1000:1000 ./imageUploads ./ssl
+```
+
+A fresh named volume needs nothing: Docker copies the image's `/imageUploads`, which already belongs to `1000:1000`.
 
 ## Optional services
 
@@ -146,7 +156,9 @@ break:
    REDIS_URL=redis://<host>:6379
    ```
    When `REDIS_URL` is unset, the default in-memory adapter is used, so a single
-   instance and local development work with no extra setup.
+   instance and local development work with no extra setup. Any Redis server
+   from 5.0 on works (the API speaks RESP2). If Redis goes down, the API keeps
+   running and reconnects; events emitted meanwhile may miss other instances.
 
 2. **Reverse proxy with sticky sessions + WebSocket upgrade** for `/socket.io/`.
    Without sticky sessions the polling handshake fails with `400 "Session ID

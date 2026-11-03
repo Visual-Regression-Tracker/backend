@@ -82,6 +82,31 @@ describe('Socket.io (e2e)', () => {
     });
   });
 
+  describe('closing by the server', () => {
+    beforeEach(() => start({}));
+
+    const serverClosed = (socket: Socket): Promise<string> =>
+      new Promise((resolve) => socket.once('disconnect', resolve));
+
+    it('closes a socket when its token expires', async () => {
+      const socket = await connect({ token: app.get(JwtService).sign({ sub: user.id }, { expiresIn: 2 }) });
+
+      await expect(serverClosed(socket)).resolves.toBe('io server disconnect');
+    });
+
+    it('closes the sockets of a user when the user is deleted', async () => {
+      const deleted = await haveUserLogged(usersService);
+      const socket = await connect({ token: deleted.token });
+      const other = await connect({ token: user.token });
+      const closed = serverClosed(socket);
+
+      await usersService.deleteMany([deleted.id]);
+
+      await expect(closed).resolves.toBe('io server disconnect');
+      expect(other.connected).toBe(true);
+    });
+  });
+
   describe('rooms', () => {
     let project: Project;
 
