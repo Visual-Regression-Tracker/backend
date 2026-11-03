@@ -8,7 +8,7 @@ import { VlmConfig } from './vlm/vlm.types';
 export type ImageCompareConfig = PixelmatchConfig | LooksSameConfig | OdiffConfig | VlmConfig;
 
 export interface ImageComparator {
-  readonly appliesBlurAmplitudeFilter?: boolean;
+  readonly appliesRenderingNoiseFilter?: boolean;
   getDiff(data: ImageCompareInput, config: ImageCompareConfig): Promise<DiffResult>;
   parseConfig(configJson: string): ImageCompareConfig;
 }

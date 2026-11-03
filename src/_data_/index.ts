@@ -37,6 +37,8 @@ export const generateBaseline = (baseline?: Partial<Baseline>): Baseline => {
     testVariationId: 'testVariationId',
     testRunId: 'testRunId',
     userId: 'userId',
+    ignoreAreasBeforeApproval: null,
+    commentBeforeApproval: null,
     updatedAt: new Date(),
     createdAt: new Date(),
     ...baseline,

@@ -262,13 +262,13 @@ describe('AppModule', () => {
     it('lets a valid JWT through the passport jwt strategy', async () => {
       const user = { id: 'user-id', email: 'user@example.com' };
       prismaInstances.forEach((prisma) => prisma.user.findUnique.mockResolvedValue(user));
-      const token = get(JwtService).sign({ email: user.email });
+      const token = get(JwtService).sign({ sub: user.id, email: user.email });
 
       const response = await request(app.getHttpServer()).get('/projects').set('Authorization', `Bearer ${token}`);
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual([]);
-      expect(prismaOf(get(JwtStrategy)).user.findUnique).toHaveBeenCalledWith({ where: { email: user.email } });
+      expect(prismaOf(get(JwtStrategy)).user.findUnique).toHaveBeenCalledWith({ where: { id: user.id } });
       expect(prismaOf(get(ProjectsService)).project.findMany).toHaveBeenCalled();
     });
 

@@ -75,8 +75,8 @@ describe('JwtStrategy', () => {
       await expect(strategy.validate({ sub: 'ghost' })).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
-    it('rejects a payload with neither sub nor email without a lookup', async () => {
-      await expect(strategy.validate({})).rejects.toBeInstanceOf(UnauthorizedException);
+    it.each([{}, { email: user.email }])('rejects a payload without sub (%p) without a lookup', async (payload) => {
+      await expect(strategy.validate(payload)).rejects.toBeInstanceOf(UnauthorizedException);
 
       expect(prismaService.user.findUnique).not.toHaveBeenCalled();
     });
@@ -113,14 +113,15 @@ describe('JwtStrategy', () => {
       expect(prismaService.user.findUnique).toHaveBeenCalledWith({ where: { id: 'user-id' } });
     });
 
-    it('still accepts an email-only token issued before sub existed', async () => {
+    it('errors with a 401 on an email-only token issued before 6.0', async () => {
       prismaService.user.findUnique.mockResolvedValue(user);
 
       const outcome = authenticate(sign({ email: user.email }, SECRET));
       await settle();
 
-      expect(prismaService.user.findUnique).toHaveBeenCalledWith({ where: { email: user.email } });
-      expect(outcome.success).toHaveBeenCalledWith(user, undefined);
+      expect(outcome.error).toHaveBeenCalledWith(expect.any(UnauthorizedException));
+      expect(outcome.success).not.toHaveBeenCalled();
+      expect(prismaService.user.findUnique).not.toHaveBeenCalled();
     });
 
     it('errors with a 401 when the token belongs to an unknown user', async () => {
