@@ -27,11 +27,19 @@ describe('validateEnv', () => {
       expect(() => validateEnv({ ...GOOD, JWT_SECRET: value }, logger)).toThrow('JWT_SECRET is not set');
     });
 
+    it.each(['jwtPrivateKey', DEVELOPMENT_JWT_SECRET])(
+      'refuses to start with %p when NODE_ENV=production',
+      (secret) => {
+        expect(() => validateEnv({ ...GOOD, JWT_SECRET: secret, NODE_ENV: 'production' }, logger)).toThrow(
+          'publicly known'
+        );
+      }
+    );
+
     it.each([
-      ['the public sample value when NODE_ENV=production', 'jwtPrivateKey', 'production'],
       ['the public sample value when NODE_ENV=development', 'jwtPrivateKey', 'development'],
       ['the public sample value when NODE_ENV is unset', 'jwtPrivateKey', undefined],
-      ['the committed development secret in production', DEVELOPMENT_JWT_SECRET, 'production'],
+      ['the committed development secret when NODE_ENV=test', DEVELOPMENT_JWT_SECRET, 'test'],
     ])('only warns about %s', (_, secret, nodeEnv) => {
       expect(() => validateEnv({ ...GOOD, JWT_SECRET: secret, NODE_ENV: nodeEnv }, logger)).not.toThrow();
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('publicly known'));

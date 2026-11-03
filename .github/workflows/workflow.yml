@@ -106,6 +106,10 @@ jobs:
           cache-from: type=gha,scope=ci-migration
           cache-to: type=gha,mode=max,scope=ci-migration
 
+      # the production image refuses the sample JWT_SECRET in .env
+      - name: Generate a JWT secret
+        run: echo "JWT_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
       - name: Run containers
         run: docker compose up --no-build -d
 

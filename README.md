@@ -25,6 +25,9 @@
 | oidc | `npm run test:oidc` | `COMPOSE_FILE=docker-compose.yml:docker-compose.oidc.yml docker compose up -d` | the OIDC endpoints against the OIDC mock |
 | prisma package | `cd prisma && npm test` | `npm ci` in `prisma/` | the `prisma/` package's own tests |
 
+The compose stack runs the production image, which refuses the sample `JWT_SECRET` in `.env`:
+run `export JWT_SECRET=$(openssl rand -hex 32)` before `docker compose up`.
+
 The e2e suite loads the diff worker threads from `dist/`. Without a build they run
 inline, so `npm run build` makes the e2e run match production.
 
@@ -48,7 +51,7 @@ lines in `.env` (section `# optional`) show the same variables.
 | `APP_PORT` | `3000` | Port the API listens on. |
 | `APP_FRONTEND_URL` | none | Frontend base URL, used to build links in test run results. |
 | `BODY_PARSER_JSON_LIMIT` | body-parser default | Maximum JSON request body size, e.g. `5mb`. |
-| `JWT_SECRET` | none, required | Key that signs login tokens; startup fails when it is unset. Public sample values (`jwtPrivateKey`, the one in `.env`) log a warning. Generate one with `openssl rand -hex 32`. |
+| `JWT_SECRET` | none, required | Key that signs login tokens; startup fails when it is unset. Public sample values (`jwtPrivateKey`, the one in `.env`) stop startup when `NODE_ENV=production` (as in the Docker image) and log a warning otherwise. Generate one with `openssl rand -hex 32`. |
 | `JWT_LIFE_TIME` | `1d` | Token lifetime as a timespan such as `1d`, `12h` or `3600s`. An invalid value falls back to `1d` with a warning. |
 | `SERVER_TIMEOUT` | Node.js default | HTTP `server.timeout`, in milliseconds. |
 | `SERVER_HEADERS_TIMEOUT` | Node.js default | HTTP `headersTimeout`, in milliseconds. |

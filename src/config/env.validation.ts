@@ -22,9 +22,12 @@ export function validateEnv(
     throw new Error('JWT_SECRET is not set. Generate one, e.g. `openssl rand -hex 32`.');
   }
   if (PUBLIC_JWT_SECRETS.includes(secret)) {
-    logger.warn(
-      'JWT_SECRET is a publicly known sample value: anyone can sign tokens for any user. Set a random one, e.g. `openssl rand -hex 32`.'
-    );
+    const message =
+      'JWT_SECRET is a publicly known sample value: anyone can sign tokens for any user. Set a random one, e.g. `openssl rand -hex 32`.';
+    if (text(env.NODE_ENV) === 'production') {
+      throw new Error(message);
+    }
+    logger.warn(message);
   }
 
   const lifeTime = text(env.JWT_LIFE_TIME);
