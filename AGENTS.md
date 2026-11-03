@@ -7,7 +7,7 @@ hand-roll what a project tool produces.
 
 ## Stack
 
-NestJS · Prisma (PostgreSQL) · Jest · worker threads for image work. Node `>=24.15`.
+NestJS · Prisma (PostgreSQL) · Jest · worker threads for image work. Node `>=26`.
 
 ## Database: Prisma only
 
