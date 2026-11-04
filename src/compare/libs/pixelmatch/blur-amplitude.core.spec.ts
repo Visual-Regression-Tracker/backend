@@ -6,6 +6,7 @@ import {
   computeBlurAmplitude,
   analyseDifference,
   DENSITY_WINDOW,
+  looksLikeNoise,
   MAX_MEASURED_PIXELS,
   measureBlurredDifference,
 } from './blur-amplitude.core';
@@ -127,6 +128,24 @@ describe('a faint panel shade', () => {
   });
 });
 
+describe('looksLikeNoise', () => {
+  const thresholds = DEFAULT_NOISE_ANALYSIS_CONFIG.blur;
+
+  it('is noise when the change is weak and thin', () => {
+    expect(looksLikeNoise({ amplitude: 40, solidPixels: 0, solidShare: 0 }, thresholds)).toBe(true);
+  });
+
+  it('is not noise when the change is too strong', () => {
+    expect(looksLikeNoise({ amplitude: 81, solidPixels: 0, solidShare: 0 }, thresholds)).toBe(false);
+  });
+
+  it('is not noise when too much of the change is solid', () => {
+    expect(looksLikeNoise({ amplitude: 31, solidPixels: 1, solidShare: MAX_SOLID_SHARE + 0.001 }, thresholds)).toBe(
+      false
+    );
+  });
+});
+
 describe('computeBlurAmplitude', () => {
   const encode = (raw: RawImage): Buffer => {
     const png = new PNG({ width: raw.width, height: raw.height });
@@ -223,7 +242,7 @@ describe('computeBlurAmplitude', () => {
   });
 
   describe('the density of the change', () => {
-    const CANVAS = 48;
+    const CANVAS = 80;
     const canvas = (paint: (x: number, y: number) => boolean): RawImage => {
       const data = Buffer.alloc(CANVAS * CANVAS * 4, 255);
       for (let y = 0; y < CANVAS; y++) {
@@ -237,11 +256,19 @@ describe('computeBlurAmplitude', () => {
     const run = (changed: RawImage, overrides: Partial<BlurAmplitudeJobInput> = {}) =>
       computeBlurAmplitude(job({ baseline: encode(emptyCanvas), image: encode(changed), ...overrides }));
 
-    it('puts a digit-like blob into one dense window', () => {
-      const output = run(canvas((x, y) => x >= 9 && x <= 13 && y >= 8 && y <= 14));
+    const digit = (left: number, top: number) => canvas((x, y) => x >= left && x < left + 5 && y >= top && y < top + 7);
+
+    it('finds a digit-like blob as one dense window', () => {
+      const output = run(digit(9, 8));
 
       expect(output.density).toBeGreaterThanOrEqual((DENSITY_WINDOW * DENSITY_WINDOW) / 2);
-      expect(output.densest).toEqual([{ x: 8, y: 8, width: 8, height: 8, weight: 35 }]);
+      expect(output.densest).toEqual([{ x: 6, y: 7, width: 8, height: 8, weight: 35 }]);
+    });
+
+    it('gives the same density wherever the blob sits against the 8 px grid', () => {
+      expect(run(digit(9, 8)).density).toBe(35);
+      expect(run(digit(5, 5)).density).toBe(35);
+      expect(run(digit(12, 13)).density).toBe(35);
     });
 
     it('keeps sparse dots below a few pixels per window', () => {
@@ -251,39 +278,64 @@ describe('computeBlurAmplitude', () => {
       expect(output.densest.every(({ weight }) => weight <= 3)).toBe(true);
     });
 
-    it('lists at most five windows, the densest first', () => {
-      const output = run(canvas((x, y) => y < 8 && x < 8 * 7 && x % 8 < 1 + (Math.floor(x / 8) % 7)));
+    it('lists the five densest windows that do not overlap, the densest first', () => {
+      const bars = canvas((x, y) => y <= 60 && y % 10 === 0 && x < y / 10 + 1);
+      const output = run(bars);
 
-      expect(output.densest).toHaveLength(5);
-      const weights = output.densest.map(({ weight }) => weight);
-      expect(weights).toEqual([...weights].sort((a, b) => b - a));
-      expect(output.density).toBe(weights[0]);
+      expect(output.densest.map(({ x, y, weight }) => [x, y, weight])).toEqual([
+        [0, 53, 7],
+        [0, 43, 6],
+        [0, 33, 5],
+        [0, 23, 4],
+        [0, 13, 3],
+      ]);
+      expect(output.density).toBe(7);
+    });
+
+    it('does not list a window that overlaps a denser one', () => {
+      const output = run(canvas((x, y) => y === 20 && x < 12));
+
+      expect(output.densest).toHaveLength(2);
+      expect(output.densest[0].weight).toBe(8);
     });
 
     it('breaks ties by position', () => {
       const output = run(canvas((x, y) => (x === 30 && y === 30) || (x === 2 && y === 20) || (x === 20 && y === 2)));
 
       expect(output.densest.map(({ x, y }) => [x, y])).toEqual([
-        [16, 0],
-        [0, 16],
-        [24, 24],
+        [13, 0],
+        [0, 13],
+        [23, 23],
       ]);
     });
 
-    it('counts a block that straddles a window border in the windows it touches', () => {
+    it('counts a block that straddles a grid line in a single window', () => {
       const output = run(canvas((x, y) => x >= 6 && x < 10 && y >= 0 && y < 2));
 
-      expect(output.densest.map(({ x, weight }) => [x, weight])).toEqual([
-        [0, 4],
-        [8, 4],
-      ]);
+      expect(output.densest).toEqual([{ x: 2, y: 0, width: 8, height: 8, weight: 8 }]);
+    });
+
+    it('keeps windows inside the image', () => {
+      const output = analyseDifference(blank, pixel(19, 19), DEFAULT_NOISE_ANALYSIS_CONFIG.blur);
+
+      expect(output.densest).toEqual([{ x: 12, y: 12, width: 8, height: 8, weight: 1 }]);
+    });
+
+    it('uses the whole image as the window when it is smaller than 8 px', () => {
+      const tiny = (paint: number[]): RawImage => {
+        const data = Buffer.alloc(5 * 6 * 4, 255);
+        paint.forEach((at) => data.fill(0, at * 4, at * 4 + 3));
+        return { data, width: 5, height: 6 };
+      };
+
+      const output = analyseDifference(tiny([]), tiny([0, 29]), DEFAULT_NOISE_ANALYSIS_CONFIG.blur);
+
+      expect(output.density).toBe(2);
+      expect(output.densest).toEqual([{ x: 0, y: 0, width: 5, height: 6, weight: 2 }]);
     });
 
     it('leaves out what the ignore areas cover', () => {
-      const output = run(
-        canvas((x, y) => x >= 9 && x <= 13 && y >= 8 && y <= 14),
-        { ignoreAreas: [{ x: 0, y: 0, width: CANVAS, height: CANVAS }] }
-      );
+      const output = run(digit(9, 8), { ignoreAreas: [{ x: 0, y: 0, width: CANVAS, height: CANVAS }] });
 
       expect(output).toMatchObject({ density: 0, densest: [] });
     });
@@ -308,7 +360,7 @@ describe('computeBlurAmplitude', () => {
     });
 
     it('survives a structured clone', () => {
-      const output = run(canvas((x, y) => x >= 9 && x <= 13 && y >= 8 && y <= 14));
+      const output = run(digit(9, 8));
 
       expect(structuredClone(output)).toEqual(output);
     });

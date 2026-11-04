@@ -36,6 +36,10 @@ const MAX_DENSEST = 5;
 
 const notMeasured = (): BlurAmplitudeJobOutput => ({ measure: null, density: 0, densest: [] });
 
+export function looksLikeNoise(measure: BlurredDifference, thresholds: BlurAmplitudeJobInput['thresholds']): boolean {
+  return measure.amplitude <= thresholds.amplitudeThreshold && measure.solidShare <= thresholds.solidShareMax;
+}
+
 export function analyseDifference(
   baseline: RawImage,
   image: RawImage,
@@ -47,9 +51,7 @@ export function analyseDifference(
     return notMeasured();
   }
   const { density, densest } = box ? windowDensity(baseline, image, box) : { density: 0, densest: [] };
-  const looksLikeNoise =
-    measure.amplitude <= thresholds.amplitudeThreshold && measure.solidShare <= thresholds.solidShareMax;
-  return looksLikeNoise
+  return looksLikeNoise(measure, thresholds)
     ? { measure, density, densest, gate: gateOfDecoded(baseline, image, DINOV2_PATCH) }
     : { measure, density, densest };
 }
@@ -118,36 +120,68 @@ function changedBox({ data: a, width, height }: RawImage, { data: b }: RawImage)
 }
 
 function windowDensity(
-  { data: a, width }: RawImage,
+  { data: a, width, height }: RawImage,
   { data: b }: RawImage,
   { minX, minY, maxX, maxY }: Box
 ): { density: number; densest: NoiseRegion[] } {
-  const firstColumn = Math.floor(minX / DENSITY_WINDOW);
-  const firstRow = Math.floor(minY / DENSITY_WINDOW);
-  const columns = Math.floor(maxX / DENSITY_WINDOW) - firstColumn + 1;
-  const rows = Math.floor(maxY / DENSITY_WINDOW) - firstRow + 1;
-  const counts = new Uint8Array(columns * rows);
+  const windowWidth = Math.min(DENSITY_WINDOW, width);
+  const windowHeight = Math.min(DENSITY_WINDOW, height);
+  const left = Math.max(0, minX - windowWidth + 1);
+  const top = Math.max(0, minY - windowHeight + 1);
+  const columns = Math.min(maxX, width - windowWidth) - left + 1;
+  const rows = Math.min(maxY, height - windowHeight) - top + 1;
+  const spanWidth = columns + windowWidth - 1;
+  const spanHeight = rows + windowHeight - 1;
+
+  const changed = new Uint8Array(spanWidth * spanHeight);
   for (let y = minY; y <= maxY; y++) {
-    const rowStart = (Math.floor(y / DENSITY_WINDOW) - firstRow) * columns - firstColumn;
     for (let x = minX; x <= maxX; x++) {
-      if (isChanged(a, b, (y * width + x) * 4)) counts[rowStart + Math.floor(x / DENSITY_WINDOW)]++;
+      if (isChanged(a, b, (y * width + x) * 4)) changed[(y - top) * spanWidth + (x - left)] = 1;
     }
   }
 
-  const windows: NoiseRegion[] = [];
-  counts.forEach((weight, at) => {
-    if (weight > 0) {
-      windows.push({
-        x: (firstColumn + (at % columns)) * DENSITY_WINDOW,
-        y: (firstRow + Math.floor(at / columns)) * DENSITY_WINDOW,
-        width: DENSITY_WINDOW,
-        height: DENSITY_WINDOW,
-        weight,
-      });
+  const weights = new Uint8Array(columns * rows);
+  const columnSums = new Uint8Array(spanWidth);
+  for (let wy = 0; wy < rows; wy++) {
+    for (let x = 0; x < spanWidth; x++) {
+      if (wy === 0) {
+        for (let r = 0; r < windowHeight; r++) columnSums[x] += changed[r * spanWidth + x];
+      } else {
+        columnSums[x] += changed[(wy + windowHeight - 1) * spanWidth + x] - changed[(wy - 1) * spanWidth + x];
+      }
     }
-  });
-  windows.sort((p, q) => q.weight - p.weight || p.y - q.y || p.x - q.x);
-  return { density: windows[0]?.weight ?? 0, densest: windows.slice(0, MAX_DENSEST) };
+    let sum = 0;
+    for (let x = 0; x < windowWidth; x++) sum += columnSums[x];
+    weights[wy * columns] = sum;
+    for (let wx = 1; wx < columns; wx++) {
+      sum += columnSums[wx + windowWidth - 1] - columnSums[wx - 1];
+      weights[wy * columns + wx] = sum;
+    }
+  }
+
+  const densest: NoiseRegion[] = [];
+  while (densest.length < MAX_DENSEST) {
+    let best = 0;
+    let at = -1;
+    for (let i = 0; i < weights.length; i++) {
+      if (weights[i] > best) {
+        best = weights[i];
+        at = i;
+      }
+    }
+    if (at < 0) break;
+    const wx = at % columns;
+    const wy = Math.floor(at / columns);
+    densest.push({ x: left + wx, y: top + wy, width: windowWidth, height: windowHeight, weight: best });
+    for (let y = Math.max(0, wy - windowHeight + 1); y < Math.min(rows, wy + windowHeight); y++) {
+      weights.fill(
+        0,
+        y * columns + Math.max(0, wx - windowWidth + 1),
+        y * columns + Math.min(columns, wx + windowWidth)
+      );
+    }
+  }
+  return { density: densest[0]?.weight ?? 0, densest };
 }
 
 function sourceIndex(from: number, to: number, radius: number, size: number, boxMin: number, boxMax: number) {
