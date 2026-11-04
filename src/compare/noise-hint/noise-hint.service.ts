@@ -24,7 +24,7 @@ import {
 } from './noise-analysis.types';
 
 const RESULT_VERSION = 1;
-const MAX_WAITING = 256;
+export const MAX_WAITING = 256;
 const MAX_DINOV2_REGIONS = 10;
 
 export type NoiseSkipReason = 'not unresolved' | 'analysis off' | 'queue full';
@@ -170,15 +170,7 @@ export class NoiseHintService implements OnApplicationShutdown {
     const fresh = unique.filter((id) => !this.known.has(id));
     fresh.forEach((id) => this.known.add(id));
     const freshIds = new Set(fresh);
-    const released = new Set<string>();
-    const release = (id: string) => {
-      released.add(id);
-      if (this.requeue.delete(id)) {
-        this.waiting.push(id);
-      } else {
-        this.known.delete(id);
-      }
-    };
+    let held = fresh;
 
     const skipped: NoiseEnqueueResult['skipped'] = [];
     const accepted: string[] = [];
@@ -194,10 +186,7 @@ export class NoiseHintService implements OnApplicationShutdown {
       );
       for (const id of unique) {
         const run = runs.get(id);
-        const reason = this.skipReason(
-          run,
-          run?.project ? parseNoiseAnalysisConfig(run.project.noiseAnalysisConfig) : undefined
-        );
+        const reason = this.skipReason(run, this.configOf(run));
         if (reason) {
           skipped.push({ id, reason });
         } else if (!freshIds.has(id)) {
@@ -210,7 +199,8 @@ export class NoiseHintService implements OnApplicationShutdown {
           reservations += 1;
         }
       }
-      skipped.forEach(({ id }) => freshIds.has(id) && release(id));
+      skipped.forEach(({ id }) => freshIds.has(id) && this.release(id));
+      held = accepted.filter((id) => freshIds.has(id));
 
       if (accepted.length > 0) {
         const pending: NoiseAnalysisPending = { pending: true, requestedAt: new Date().toISOString() };
@@ -223,7 +213,7 @@ export class NoiseHintService implements OnApplicationShutdown {
         }
       }
     } catch (error) {
-      fresh.filter((id) => !released.has(id)).forEach(release);
+      held.forEach((id) => this.release(id));
       this.reserved -= reservations;
       if (this.waiting.length > 0) {
         void this.drain();
@@ -243,6 +233,18 @@ export class NoiseHintService implements OnApplicationShutdown {
     this.waiting = [];
     this.known.clear();
     this.requeue.clear();
+  }
+
+  private release(id: string): void {
+    if (this.requeue.delete(id)) {
+      this.waiting.push(id);
+    } else {
+      this.known.delete(id);
+    }
+  }
+
+  private configOf(run: RunWithProject | null | undefined): NoiseAnalysisConfig | undefined {
+    return run?.project ? parseNoiseAnalysisConfig(run.project.noiseAnalysisConfig) : undefined;
   }
 
   private place(id: string, fresh: boolean): void {
@@ -330,11 +332,7 @@ export class NoiseHintService implements OnApplicationShutdown {
     try {
       for (let id = this.waiting.shift(); id !== undefined; id = this.waiting.shift()) {
         await this.process(id);
-        if (this.requeue.delete(id)) {
-          this.waiting.push(id);
-        } else {
-          this.known.delete(id);
-        }
+        this.release(id);
       }
     } finally {
       this.draining = false;
@@ -349,7 +347,7 @@ export class NoiseHintService implements OnApplicationShutdown {
       if (!run || !requestedAt) {
         return;
       }
-      const config = run.project ? parseNoiseAnalysisConfig(run.project.noiseAnalysisConfig) : undefined;
+      const config = this.configOf(run);
       const marker = markedAt(requestedAt);
       if (!config || this.skipReason(run, config)) {
         await this.replaceMarker(id, Prisma.DbNull, marker);

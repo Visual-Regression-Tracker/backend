@@ -11,7 +11,7 @@ import { VlmService } from './libs/vlm/vlm.service';
 import { isHddStaticServiceConfigured } from '../static/utils';
 import { DiffWorkerPool } from './diff-worker-pool';
 import { SignatureJobInput, SignatureJobOutput } from './libs/pixelmatch/signature.core';
-import { withoutRenderingNoiseFlag } from './libs/rendering-noise.config';
+import { hasRenderingNoiseFlag, withoutRenderingNoiseFlag } from './libs/rendering-noise.config';
 
 @Injectable()
 export class CompareService {
@@ -45,7 +45,7 @@ export class CompareService {
   }
 
   private warnAboutRemovedFlag(config: object): void {
-    if (!this.warnedAboutRemovedFlag && 'ignoreRenderingNoise' in config) {
+    if (!this.warnedAboutRemovedFlag && hasRenderingNoiseFlag(config)) {
       this.warnedAboutRemovedFlag = true;
       this.logger.warn('The ignoreRenderingNoise project setting was removed in 6.0; comparisons run without it.');
     }

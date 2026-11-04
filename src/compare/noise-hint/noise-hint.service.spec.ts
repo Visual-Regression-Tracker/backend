@@ -11,7 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StaticService } from '../../static/static.service';
 import { DEFAULT_NOISE_ANALYSIS_CONFIG, NoiseAnalysisConfig } from './noise-analysis.config';
 import { NoiseAnalysisResult } from './noise-analysis.types';
-import { NoiseHintService } from './noise-hint.service';
+import { MAX_WAITING, NoiseHintService } from './noise-hint.service';
 
 const BASELINE = pngBytes(solidPng(32, 32));
 const IMAGE = pngBytes(solidPng(32, 32, [250, 250, 250]));
@@ -839,7 +839,7 @@ describe('NoiseHintService.enqueue', () => {
 
     it('still analyses an id that a second request marked while the first one refused it as "queue full"', async () => {
       const h = build();
-      const ids = Array.from({ length: 257 }, (_, i) => `run-${i}`);
+      const ids = Array.from({ length: MAX_WAITING + 1 }, (_, i) => `run-${i}`);
       [...ids, 'a'].forEach((id) => h.add(id));
       const gate = blocked(h);
       await h.service.enqueue([ids[0]]);
@@ -854,33 +854,38 @@ describe('NoiseHintService.enqueue', () => {
       expect(second).toEqual({ queued: 1, skipped: [] });
       expect(await first).toEqual({ queued: 0, skipped: [{ id: 'a', reason: 'queue full' }] });
       gate.resolve(noiseOutput());
-      await analysed(h, 258);
+      await analysed(h, MAX_WAITING + 2);
       expect(stored(h, 'a')).toMatchObject({ version: 1 });
     });
 
     it('keeps an id known that a later request reserved while a failing request that skipped it was still running', async () => {
       const h = build();
-      const others = Array.from({ length: 256 }, (_, i) => `run-${i}`);
+      const others = Array.from({ length: MAX_WAITING }, (_, i) => `run-${i}`);
       [...others, 'busy', 'a', 'b'].forEach((id) => h.add(id));
       h.add('a', { status: TestStatus.approved });
       const gate = blocked(h);
       await h.service.enqueue(['busy']);
-      await h.service.enqueue(others.slice(0, 254));
+      await h.service.enqueue(others.slice(0, MAX_WAITING - 2));
       const write = deferred<{ count: number }>();
-      h.prisma.testRun.updateMany.mockReturnValueOnce(write.promise);
+      const requested = deferred<void>();
+      h.prisma.testRun.updateMany.mockImplementationOnce(() => {
+        requested.resolve();
+        return write.promise;
+      });
 
       const failing = h.service.enqueue(['a', 'b']);
-      await settled(() => h.prisma.testRun.updateMany.mock.calls.length === 3);
+      await requested.promise;
       h.add('a');
       await h.service.enqueue(['a']);
       write.reject(new Error('db gone'));
       await expect(failing).rejects.toThrow('db gone');
-      await h.service.enqueue([others[254]]);
+      await h.service.enqueue([others[MAX_WAITING - 2]]);
       const again = await h.service.enqueue(['a']);
 
       expect(again).toEqual({ queued: 1, skipped: [] });
       gate.resolve(noiseOutput());
-      await analysed(h, 257);
+      await analysed(h, MAX_WAITING + 1);
+      expect(stored(h, 'a')).toMatchObject({ version: 1 });
     });
 
     it('does not mark an ineligible id again while its analysis is in flight', async () => {

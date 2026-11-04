@@ -18,13 +18,15 @@ export interface NoiseAnalysisSummary extends Omit<NoiseAnalysisResult, 'blur' |
 
 export type TestRunNoiseAnalysisSummary = NoiseAnalysisSummary | NoiseAnalysisPending;
 
+const hasRegions = (stage: unknown): stage is { regions: NoiseRegion[] } => isJsonObject(stage) && 'regions' in stage;
+
 const dropRegions = <T extends { regions: NoiseRegion[] }>(stage: T): Omit<T, 'regions'> => {
   const { regions: _regions, ...rest } = stage;
   return rest;
 };
 
 const dropDinov2Regions = (stage: Dinov2Stage | null): NoiseAnalysisSummary['dinov2'] =>
-  isJsonObject(stage) && 'regions' in stage ? dropRegions(stage as Dinov2StageResult) : stage;
+  hasRegions(stage) ? dropRegions(stage) : stage;
 
 export function withoutRegions(json: unknown): TestRunNoiseAnalysisSummary | null {
   const analysis = readNoiseAnalysis(json);
@@ -36,7 +38,7 @@ export function withoutRegions(json: unknown): TestRunNoiseAnalysisSummary | nul
   }
   return {
     ...analysis,
-    blur: isJsonObject(analysis.blur) ? dropRegions(analysis.blur as BlurStageResult) : analysis.blur,
+    blur: hasRegions(analysis.blur) ? dropRegions(analysis.blur) : analysis.blur,
     dinov2: dropDinov2Regions(analysis.dinov2),
   };
 }
