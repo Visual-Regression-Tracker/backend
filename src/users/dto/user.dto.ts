@@ -30,12 +30,16 @@ export class UserDto {
   }
 }
 
-export class UserSummaryDto extends OmitType(UserDto, ['apiKey'] as const) {}
+export class UserSummaryDto extends OmitType(UserDto, ['apiKey'] as const) {
+  @ApiProperty()
+  readonly createdAt!: Date;
+}
 
-export const toUserSummary = ({ id, email, firstName, lastName, role }: User): UserSummaryDto => ({
+export const toUserSummary = ({ id, email, firstName, lastName, role, createdAt }: User): UserSummaryDto => ({
   id,
   email,
   firstName,
   lastName,
   role,
+  createdAt,
 });
