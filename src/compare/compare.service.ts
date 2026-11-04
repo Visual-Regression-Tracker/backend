@@ -16,6 +16,7 @@ import { withoutRenderingNoiseFlag } from './libs/rendering-noise.config';
 @Injectable()
 export class CompareService {
   private readonly logger: Logger = new Logger(CompareService.name);
+  private warnedAboutRemovedFlag = false;
 
   constructor(
     private readonly pixelmatchService: PixelmatchService,
@@ -38,7 +39,16 @@ export class CompareService {
     const project: Project =
       loadedProject ?? (await this.prismaService.project.findUnique({ where: { id: projectId } }))!;
     const comparator = this.getComparator(project.imageComparison);
-    return comparator.getDiff(data, withoutRenderingNoiseFlag(comparator.parseConfig(project.imageComparisonConfig)));
+    const config = comparator.parseConfig(project.imageComparisonConfig);
+    this.warnAboutRemovedFlag(config);
+    return comparator.getDiff(data, withoutRenderingNoiseFlag(config));
+  }
+
+  private warnAboutRemovedFlag(config: object): void {
+    if (!this.warnedAboutRemovedFlag && 'ignoreRenderingNoise' in config) {
+      this.warnedAboutRemovedFlag = true;
+      this.logger.warn('The ignoreRenderingNoise project setting was removed in 6.0; comparisons run without it.');
+    }
   }
 
   async getChangeSignature(input: Omit<SignatureJobInput, 'kind'>): Promise<SignatureJobOutput> {

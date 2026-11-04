@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -197,6 +198,30 @@ describe('CompareService with mocked collaborators', () => {
         expect(result).toEqual(unresolved);
       }
     );
+  });
+
+  describe('warning about a stored ignoreRenderingNoise', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('is logged once for two comparisons', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      const { service } = await setup({ config: { ignoreRenderingNoise: true } });
+
+      await diffProject(service);
+      await diffProject(service);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('ignoreRenderingNoise'));
+    });
+
+    it('is not logged for a config without the setting', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      const { service } = await setup({ config: { libraryOption: 1 } });
+
+      await diffProject(service);
+
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 
   describe('getChangeSignature', () => {
