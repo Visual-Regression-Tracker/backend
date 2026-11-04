@@ -1,8 +1,11 @@
-import { TestStatus } from '@prisma/client';
-import { cases, verdict } from './bench';
+import { analyse, cases, closeBench } from './bench';
 
-describe('rendering-noise filter with pixelmatch defaults, on real browser screenshots', () => {
-  it.each(cases.filter((c) => !c.bug))('passes rendering noise: $name', async (c) =>
-    expect(await verdict(c)).toBe(TestStatus.ok)
-  );
+describe('noise hint on rendering noise, real browser screenshots', () => {
+  afterAll(closeBench);
+
+  it.each(cases.filter((c) => !c.bug))('is labelled noise by blur and overall: $name', async (c) => {
+    const result = await analyse(c);
+
+    expect({ blur: result.blur?.verdict, overall: result.verdict }).toEqual({ blur: 'noise', overall: 'noise' });
+  });
 });

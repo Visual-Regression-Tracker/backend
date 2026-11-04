@@ -51,6 +51,9 @@ import { isUUID } from 'class-validator';
 import { BulkResultDto } from './dto/bulk-result.dto';
 import { isPrismaError } from '../prisma/prisma-errors';
 import { httpErrorMessage } from '../utils/errors';
+import { NoiseHintService } from '../compare/noise-hint/noise-hint.service';
+import { NoiseAnalysisRequestDto } from './dto/noise-analysis-request.dto';
+import { NoiseAnalysisResponseDto } from './dto/noise-analysis-response.dto';
 
 const DEFAULT_MULTIPART_FILE_SIZE_LIMIT = 100 * 1024 * 1024;
 
@@ -83,7 +86,10 @@ function pngOrBadRequest(imageBuffer: unknown): Buffer {
 export class TestRunsController {
   private readonly logger: Logger = new Logger(TestRunsController.name);
 
-  constructor(private testRunsService: TestRunsService) {}
+  constructor(
+    private testRunsService: TestRunsService,
+    private noiseHintService: NoiseHintService
+  ) {}
 
   @Get()
   @ApiOkResponse({ type: TestRunDto, isArray: true })
@@ -115,6 +121,23 @@ export class TestRunsController {
   ): Promise<BulkResultDto> {
     this.logger.debug(`Going to approve TestRuns: ${ids}`);
     return this.forEachId('approve', ids, (id) => this.testRunsService.approve(id, merge, false, user.id));
+  }
+
+  @Post('noise-analysis')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Queue the post-analysis noise hint for unresolved test runs',
+    description:
+      'Never changes a run status. Runs that are not unresolved or whose project has the analysis off ' +
+      'are returned in `skipped`.',
+  })
+  @ApiOkResponse({ type: NoiseAnalysisResponseDto })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(Role.admin, Role.editor)
+  requestNoiseAnalysis(@Body() body: NoiseAnalysisRequestDto): Promise<NoiseAnalysisResponseDto> {
+    this.logger.debug(`Going to analyse noise of TestRuns: ${body.ids}`);
+    return this.noiseHintService.enqueue(body.ids);
   }
 
   @Get('matchingSiblings/:id')

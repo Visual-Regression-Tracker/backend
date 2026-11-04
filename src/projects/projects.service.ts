@@ -21,6 +21,7 @@ const projectData = (dto: CreateProjectDto | UpdateProjectDto) => ({
   autoApproveFeature: dto.autoApproveFeature,
   imageComparison: dto.imageComparison,
   imageComparisonConfig: dto.imageComparisonConfig,
+  noiseAnalysisConfig: dto.noiseAnalysisConfig,
   maxBuildAllowed: dto.maxBuildAllowed,
   maxBranchLifetime: dto.maxBranchLifetime,
   bulkApproveVariations: dto.bulkApproveVariations,

@@ -522,6 +522,7 @@ export class TestRunsService {
         changeSignature: diffResult.changeSignature ? JSON.stringify(diffResult.changeSignature) : null,
         imageThumbnailName: diffResult.imageThumbnailName ?? null,
         diffThumbnailName: diffResult.diffThumbnailName ?? null,
+        noiseAnalysis: Prisma.DbNull,
       },
     });
     this.eventsGateway.testRunUpdated(testRun);

@@ -17,6 +17,8 @@ const mockDefaultProject = {
   imageComparisonConfig: '{ "threshold": 0.1, "ignoreAntialiasing": true, "allowDiffDimensions": false }',
   bulkApproveVariations: false,
   bulkApproveGroupBy: 'customTags',
+  noiseAnalysisConfig:
+    '{"blur":{"enabled":true,"amplitudeThreshold":80,"solidShareMax":0.01},"dinov2":{"enabled":true,"distanceThreshold":0.15}}',
 } as const;
 
 const mockDefaultUser = {

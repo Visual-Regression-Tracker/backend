@@ -22,15 +22,20 @@ import { generateTestRun } from '../_data_';
 import { CreateTestRequestBase64Dto } from './dto/create-test-request-base64.dto';
 import { CreateTestRequestMultipartDto } from './dto/create-test-request-multipart.dto';
 import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
+import { NoiseHintService } from '../compare/noise-hint/noise-hint.service';
 
 const png = PNG.sync.write(new PNG({ width: 1, height: 1 }));
 const request = { buildId: 'build', projectId: 'project', name: 'name', branchName: 'develop' };
 
-const initController = async (testRunsService: Partial<Record<keyof TestRunsService, jest.Mock>> = {}) => {
+const initController = async (
+  testRunsService: Partial<Record<keyof TestRunsService, jest.Mock>> = {},
+  noiseHintService: Partial<Record<keyof NoiseHintService, jest.Mock>> = {}
+) => {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [TestRunsController],
     providers: [
       { provide: TestRunsService, useValue: testRunsService },
+      { provide: NoiseHintService, useValue: noiseHintService },
       { provide: TestVariationsService, useValue: {} },
       { provide: PrismaService, useValue: {} },
     ],
@@ -70,6 +75,29 @@ describe('TestRuns Controller', () => {
 
     expect(mock).toHaveBeenCalledWith(testRun.id);
     expect(result).toBe(testRun);
+  });
+
+  describe('requestNoiseAnalysis', () => {
+    it('answers with what the noise hint queue accepted and skipped', async () => {
+      const outcome = { queued: 1, skipped: [{ id: 'b', reason: 'analysis off' }] };
+      const enqueue = jest.fn().mockResolvedValue(outcome);
+      const controller = await initController({}, { enqueue });
+
+      const result = await controller.requestNoiseAnalysis({ ids: ['a', 'b'] });
+
+      expect(enqueue).toHaveBeenCalledWith(['a', 'b']);
+      expect(result).toBe(outcome);
+    });
+
+    it('answers 200', () => {
+      expect(Reflect.getMetadata(HTTP_CODE_METADATA, TestRunsController.prototype.requestNoiseAnalysis)).toBe(200);
+    });
+
+    it('is served at POST test-runs/noise-analysis', () => {
+      expect(Reflect.getMetadata(PATH_METADATA, TestRunsController.prototype.requestNoiseAnalysis)).toBe(
+        'noise-analysis'
+      );
+    });
   });
 
   describe('approveTestRun', () => {
@@ -360,13 +388,19 @@ describe('TestRuns Controller', () => {
       }
     );
 
-    it.each(['approveTestRun', 'reject', 'revert', 'delete', 'updateIgnoreAreas', 'addIgnoreAreas', 'update'] as const)(
-      '%s needs a logged in admin or editor',
-      (method) => {
-        expect(guardsOf(method)).toEqual([JwtAuthGuard, RoleGuard]);
-        expect(rolesOf(method)).toEqual([Role.admin, Role.editor]);
-      }
-    );
+    it.each([
+      'approveTestRun',
+      'reject',
+      'revert',
+      'delete',
+      'updateIgnoreAreas',
+      'addIgnoreAreas',
+      'update',
+      'requestNoiseAnalysis',
+    ] as const)('%s needs a logged in admin or editor', (method) => {
+      expect(guardsOf(method)).toEqual([JwtAuthGuard, RoleGuard]);
+      expect(rolesOf(method)).toEqual([Role.admin, Role.editor]);
+    });
 
     it.each(['postTestRun', 'postTestRunMultipart'] as const)('%s needs an admin or editor api key', (method) => {
       expect(guardsOf(method)).toEqual([ApiGuard, RoleGuard]);

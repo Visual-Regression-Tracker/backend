@@ -1,6 +1,4 @@
-import { RenderingNoiseConfig } from '../rendering-noise.config';
-
-export interface LooksSameConfig extends RenderingNoiseConfig {
+export interface LooksSameConfig {
   strict?: boolean;
   tolerance?: number;
   antialiasingTolerance?: number;

@@ -2,9 +2,11 @@ export interface RenderingNoiseConfig {
   ignoreRenderingNoise?: boolean;
 }
 
-export function splitRenderingNoiseConfig<T extends RenderingNoiseConfig>(
-  config: T
-): { ignoreRenderingNoise: boolean; comparatorConfig: T } {
-  const { ignoreRenderingNoise, ...comparatorConfig } = config;
-  return { ignoreRenderingNoise: ignoreRenderingNoise === true, comparatorConfig: comparatorConfig as T };
+export function hasRenderingNoiseFlag(config: object): boolean {
+  return 'ignoreRenderingNoise' in config;
+}
+
+export function withoutRenderingNoiseFlag<T extends object>(config: T & RenderingNoiseConfig): T {
+  const { ignoreRenderingNoise: _removed, ...comparatorConfig } = config;
+  return comparatorConfig as T;
 }

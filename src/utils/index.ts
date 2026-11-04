@@ -52,3 +52,6 @@ export const parseIgnoreAreas = (json: string | null | undefined): IgnoreAreaDto
     return [];
   }
 };
+
+export const isJsonObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);

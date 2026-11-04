@@ -1,5 +1,6 @@
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { RawImage, readSameSizePair } from '../../utils';
+import { RawImage, readPair, UnmeasuredReason } from '../../utils';
+import { NoiseAnalysisThresholds, NoiseRegion } from '../../noise-hint/noise-analysis.types';
 import { DINOV2_PATCH, gateOfDecoded, PatchGate } from './patch-gate.core';
 
 export interface BlurredDifference {
@@ -13,36 +14,59 @@ export interface BlurAmplitudeJobInput {
   baseline: Buffer | Uint8Array;
   image: Buffer | Uint8Array;
   ignoreAreas: IgnoreAreaDto[];
+  thresholds: NoiseAnalysisThresholds['blur'];
+  wantGate: boolean;
 }
 
 export interface BlurAmplitudeJobOutput {
   measure: BlurredDifference | null;
+  unmeasured?: UnmeasuredReason;
+  densest: NoiseRegion[];
   gate?: PatchGate;
 }
 
 const DEFAULT_BLUR_SIGMA = 1;
-// above the strongest anti-aliasing-only pair measured (75.1)
-export const BLUR_AMPLITUDE_THRESHOLD = 80;
 
 const SOLID_MIN_CHANGE = 6;
 const SOLID_KEEP = 0.9;
-// solid share: sub-pixel shifts up to 0.7%, #e0e0e0 panel 19%
-export const MAX_SOLID_SHARE = 0.01;
 
 export const MAX_MEASURED_PIXELS = 16_000_000;
 
-export function isRenderingNoise(measure: BlurredDifference | null): boolean {
-  return measure !== null && measure.amplitude <= BLUR_AMPLITUDE_THRESHOLD && measure.solidShare <= MAX_SOLID_SHARE;
+export const DENSITY_WINDOW = 8;
+const MAX_DENSEST = 5;
+
+const notMeasured = (unmeasured: UnmeasuredReason): BlurAmplitudeJobOutput => ({
+  measure: null,
+  unmeasured,
+  densest: [],
+});
+
+export function looksLikeNoise(measure: BlurredDifference, thresholds: NoiseAnalysisThresholds['blur']): boolean {
+  return measure.amplitude <= thresholds.amplitudeThreshold && measure.solidShare <= thresholds.solidShareMax;
 }
 
-export function measureRenderingNoise(baseline: RawImage, image: RawImage): BlurAmplitudeJobOutput {
-  const measure = measureBlurredDifference(baseline, image);
-  return isRenderingNoise(measure) ? { measure, gate: gateOfDecoded(baseline, image, DINOV2_PATCH) } : { measure };
+export function analyseDifference(
+  baseline: RawImage,
+  image: RawImage,
+  thresholds: NoiseAnalysisThresholds['blur'],
+  wantGate: boolean
+): BlurAmplitudeJobOutput {
+  const box = changedBox(baseline, image);
+  const measure = measureInBox(baseline, image, box);
+  if (!measure) {
+    return notMeasured('image too large');
+  }
+  const densest = box ? windowDensity(baseline, image, box) : [];
+  return wantGate && looksLikeNoise(measure, thresholds)
+    ? { measure, densest, gate: gateOfDecoded(baseline, image, DINOV2_PATCH) }
+    : { measure, densest };
 }
 
 export function computeBlurAmplitude(input: BlurAmplitudeJobInput): BlurAmplitudeJobOutput {
-  const pair = readSameSizePair(input.baseline, input.image, input.ignoreAreas);
-  return pair ? measureRenderingNoise(pair.baseline, pair.image) : { measure: null };
+  const pair = readPair(input.baseline, input.image, input.ignoreAreas);
+  return 'unmeasured' in pair
+    ? notMeasured(pair.unmeasured)
+    : analyseDifference(pair.baseline, pair.image, input.thresholds, input.wantGate);
 }
 
 function gaussianKernel(sigma: number): Float32Array {
@@ -73,6 +97,17 @@ interface Box {
   maxY: number;
 }
 
+function isChanged(a: Buffer | Uint8Array, b: Buffer | Uint8Array, o: number): boolean {
+  if (a[o] === b[o] && a[o + 1] === b[o + 1] && a[o + 2] === b[o + 2] && a[o + 3] === b[o + 3]) {
+    return false;
+  }
+  return (
+    channel(a, o, 0) !== channel(b, o, 0) ||
+    channel(a, o, 1) !== channel(b, o, 1) ||
+    channel(a, o, 2) !== channel(b, o, 2)
+  );
+}
+
 function changedBox({ data: a, width, height }: RawImage, { data: b }: RawImage): Box | null {
   let minX = width;
   let minY = height;
@@ -80,15 +115,7 @@ function changedBox({ data: a, width, height }: RawImage, { data: b }: RawImage)
   let maxY = -1;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const o = (y * width + x) * 4;
-      if (a[o] === b[o] && a[o + 1] === b[o + 1] && a[o + 2] === b[o + 2] && a[o + 3] === b[o + 3]) {
-        continue;
-      }
-      if (
-        channel(a, o, 0) === channel(b, o, 0) &&
-        channel(a, o, 1) === channel(b, o, 1) &&
-        channel(a, o, 2) === channel(b, o, 2)
-      ) {
+      if (!isChanged(a, b, (y * width + x) * 4)) {
         continue;
       }
       if (x < minX) minX = x;
@@ -98,6 +125,71 @@ function changedBox({ data: a, width, height }: RawImage, { data: b }: RawImage)
     }
   }
   return maxX < 0 ? null : { minX, minY, maxX, maxY };
+}
+
+function windowDensity(
+  { data: a, width, height }: RawImage,
+  { data: b }: RawImage,
+  { minX, minY, maxX, maxY }: Box
+): NoiseRegion[] {
+  const windowWidth = Math.min(DENSITY_WINDOW, width);
+  const windowHeight = Math.min(DENSITY_WINDOW, height);
+  const left = Math.max(0, minX - windowWidth + 1);
+  const top = Math.max(0, minY - windowHeight + 1);
+  const columns = Math.min(maxX, width - windowWidth) - left + 1;
+  const rows = Math.min(maxY, height - windowHeight) - top + 1;
+  const spanWidth = columns + windowWidth - 1;
+  const spanHeight = rows + windowHeight - 1;
+
+  const changed = new Uint8Array(spanWidth * spanHeight);
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (isChanged(a, b, (y * width + x) * 4)) changed[(y - top) * spanWidth + (x - left)] = 1;
+    }
+  }
+
+  const weights = new Uint8Array(columns * rows);
+  const columnSums = new Uint8Array(spanWidth);
+  for (let wy = 0; wy < rows; wy++) {
+    for (let x = 0; x < spanWidth; x++) {
+      if (wy === 0) {
+        for (let r = 0; r < windowHeight; r++) columnSums[x] += changed[r * spanWidth + x];
+      } else {
+        columnSums[x] += changed[(wy + windowHeight - 1) * spanWidth + x] - changed[(wy - 1) * spanWidth + x];
+      }
+    }
+    let sum = 0;
+    for (let x = 0; x < windowWidth; x++) sum += columnSums[x];
+    weights[wy * columns] = sum;
+    for (let wx = 1; wx < columns; wx++) {
+      sum += columnSums[wx + windowWidth - 1] - columnSums[wx - 1];
+      weights[wy * columns + wx] = sum;
+    }
+  }
+
+  const densest: NoiseRegion[] = [];
+  while (densest.length < MAX_DENSEST) {
+    let best = 0;
+    let at = -1;
+    for (let i = 0; i < weights.length; i++) {
+      if (weights[i] > best) {
+        best = weights[i];
+        at = i;
+      }
+    }
+    if (at < 0) break;
+    const wx = at % columns;
+    const wy = Math.floor(at / columns);
+    densest.push({ x: left + wx, y: top + wy, width: windowWidth, height: windowHeight, weight: best });
+    for (let y = Math.max(0, wy - windowHeight + 1); y < Math.min(rows, wy + windowHeight); y++) {
+      weights.fill(
+        0,
+        y * columns + Math.max(0, wx - windowWidth + 1),
+        y * columns + Math.min(columns, wx + windowWidth)
+      );
+    }
+  }
+  return densest;
 }
 
 function sourceIndex(from: number, to: number, radius: number, size: number, boxMin: number, boxMax: number) {
@@ -114,7 +206,11 @@ export function measureBlurredDifference(baseline: RawImage, image: RawImage): B
   if (image.width !== width || image.height !== height) {
     throw new Error(`Cannot blur-compare ${width}x${height} with ${image.width}x${image.height}`);
   }
-  const box = changedBox(baseline, image);
+  return measureInBox(baseline, image, changedBox(baseline, image));
+}
+
+function measureInBox(baseline: RawImage, image: RawImage, box: Box | null): BlurredDifference | null {
+  const { width, height } = baseline;
   if (!box) {
     return { amplitude: 0, solidPixels: 0, solidShare: 0 };
   }

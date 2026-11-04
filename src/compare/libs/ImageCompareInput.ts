@@ -7,5 +7,4 @@ export interface ImageCompareInput {
   diffTollerancePercent: number;
   ignoreAreas: IgnoreAreaDto[];
   saveDiffAsFile: boolean;
-  ignoreRenderingNoise?: boolean;
 }

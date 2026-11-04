@@ -18,6 +18,7 @@ const project: ProjectDto = {
   maxBuildAllowed: 0,
   maxBranchLifetime: 0,
   imageComparisonConfig: '{}',
+  noiseAnalysisConfig: '{}',
   bulkApproveVariations: false,
   bulkApproveGroupBy: 'customTags',
 };
@@ -106,5 +107,17 @@ describe('Projects (e2e)', () => {
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
     });
+  });
+
+  it('PUT / accepts a project without noiseAnalysisConfig', async () => {
+    const { noiseAnalysisConfig: _omitted, ...oldClientProject } = project;
+
+    await requestWithAuth(app, 'put', `/projects`, loggedUser.token).send(oldClientProject).expect(200);
+  });
+
+  it('PUT / answers 400 for a noiseAnalysisConfig that is not JSON', async () => {
+    await requestWithAuth(app, 'put', `/projects`, loggedUser.token)
+      .send({ ...project, noiseAnalysisConfig: 'not json' })
+      .expect(400);
   });
 });

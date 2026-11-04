@@ -1,5 +1,5 @@
 import { generateTestRun, generateTestVariation } from '../_data_';
-import { getTestVariationUniqueData, parseIgnoreAreas, testRunImageNames, variationKey } from '.';
+import { getTestVariationUniqueData, isJsonObject, parseIgnoreAreas, testRunImageNames, variationKey } from '.';
 
 describe('getTestVariationUniqueData', () => {
   it('picks the fields that identify a test variation', () => {
@@ -118,5 +118,15 @@ describe('variationKey', () => {
       viewport: '800x600',
       customTags: '',
     });
+  });
+});
+
+describe('isJsonObject', () => {
+  it.each([{}, { a: 1 }])('accepts %j', (value) => {
+    expect(isJsonObject(value)).toBe(true);
+  });
+
+  it.each([null, undefined, [], [1], 'text', 3, true])('rejects %j', (value) => {
+    expect(isJsonObject(value)).toBe(false);
   });
 });

@@ -1,21 +1,20 @@
 import { CallHandler, Injectable, NestInterceptor } from '@nestjs/common';
 import { map, Observable } from 'rxjs';
+import { isJsonObject } from '../utils';
 
 const MASK = '••••';
 const MIN_KEY_LENGTH_TO_SHOW_TAIL = 12;
 
-type JsonObject = Record<string, unknown>;
-
-const parseObject = (json: string | undefined): JsonObject | undefined => {
+const parseObject = (json: string | undefined): Record<string, unknown> | undefined => {
   try {
     const value: unknown = JSON.parse(json ?? '');
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : undefined;
+    return isJsonObject(value) ? value : undefined;
   } catch {
     return undefined;
   }
 };
 
-const apiKeyOf = (config: JsonObject | undefined): string | undefined =>
+const apiKeyOf = (config: Record<string, unknown> | undefined): string | undefined =>
   typeof config?.apiKey === 'string' ? config.apiKey : undefined;
 
 export const maskApiKey = (key: string): string =>

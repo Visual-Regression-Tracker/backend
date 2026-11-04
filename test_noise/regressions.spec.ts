@@ -1,21 +1,40 @@
-import { TestStatus } from '@prisma/client';
-import { cases, verdict } from './bench';
-import { KNOWN_FALSE_PASSES } from './known-misses';
+import { analyse, cases, closeBench } from './bench';
+import { BLUR_LABELLED_NOISE, LABELLED_NOISE } from './bugs-labelled-noise';
 
-describe('rendering-noise filter with pixelmatch defaults, on real browser screenshots', () => {
+describe('noise hint on regressions, real browser screenshots', () => {
   const bugs = cases.filter((c) => c.bug);
 
-  it.each(bugs.filter((c) => !(c.name in KNOWN_FALSE_PASSES)))('sends a regression to review: $name', async (c) =>
-    expect(await verdict(c)).toBe(TestStatus.unresolved)
-  );
+  afterAll(closeBench);
 
-  it.each(bugs.filter((c) => c.name in KNOWN_FALSE_PASSES))('known false pass: $name', async (c) =>
-    expect(await verdict(c)).toBe(TestStatus.ok)
-  );
+  it.each(bugs)('labels a regression as the lists say: $name', async (c) => {
+    const result = await analyse(c);
+
+    expect({
+      blur: result.blur?.verdict,
+      overall: result.verdict,
+    }).toEqual({
+      blur: c.name in BLUR_LABELLED_NOISE ? 'noise' : 'change',
+      overall: c.name in LABELLED_NOISE ? 'noise' : 'change',
+    });
+  });
+
+  it('lists 28 bugs that blur alone labels noise', () => {
+    expect(Object.keys(BLUR_LABELLED_NOISE)).toHaveLength(28);
+  });
+
+  it('lists 18 bugs that the overall verdict labels noise', () => {
+    expect(Object.keys(LABELLED_NOISE)).toHaveLength(18);
+  });
 
   it('lists only bug cases the fixtures hold', () => {
     const names = new Set(bugs.map((c) => c.name));
 
-    expect(Object.keys(KNOWN_FALSE_PASSES).filter((name) => !names.has(name))).toEqual([]);
+    expect([...Object.keys(BLUR_LABELLED_NOISE), ...Object.keys(LABELLED_NOISE)].filter((n) => !names.has(n))).toEqual(
+      []
+    );
+  });
+
+  it('lists every bug the overall verdict labels noise among those blur labels noise', () => {
+    expect(Object.keys(LABELLED_NOISE).filter((name) => !(name in BLUR_LABELLED_NOISE))).toEqual([]);
   });
 });

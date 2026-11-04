@@ -1,5 +1,7 @@
 import { INestApplication } from '@nestjs/common';
-import { Project } from '@prisma/client';
+import { Prisma, Project, TestStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { PrismaService } from '../src/prisma/prisma.service';
 import { BuildsController } from '../src/builds/builds.controller';
 import { CreateBuildDto } from '../src/builds/dto/build-create.dto';
 import { BuildsService } from '../src/builds/builds.service';
@@ -17,6 +19,7 @@ describe('Builds (e2e)', () => {
   let projectsService: ProjectsService;
   let usersService: UsersService;
   let testRunsService: TestRunsService;
+  let prismaService: PrismaService;
   let user: LoggedUser;
   let project: Project;
 
@@ -28,6 +31,7 @@ describe('Builds (e2e)', () => {
     usersService = created.get(UsersService);
     projectsService = created.get(ProjectsService);
     testRunsService = created.get(TestRunsService);
+    prismaService = created.get(PrismaService);
   });
 
   beforeEach(async () => {
@@ -142,6 +146,104 @@ describe('Builds (e2e)', () => {
         .expect((res) => {
           expect(JSON.stringify(res.body)).toEqual(JSON.stringify(build));
         });
+    });
+  });
+
+  describe('GET /:id/noise-summary', () => {
+    type Seed = {
+      status?: TestStatus;
+      noiseAnalysis?: Prisma.InputJsonValue | null;
+      browser?: string;
+      os?: string;
+    };
+    const verdict = (value: string): Prisma.InputJsonValue => ({ version: 1, verdict: value });
+
+    const haveBuildWithRuns = async (runs: Seed[], createdAt = new Date()) => {
+      const build = await prismaService.build.create({ data: { projectId: project.id, createdAt } });
+      await prismaService.testRun.createMany({
+        data: runs.map(({ noiseAnalysis, ...run }) => ({
+          imageName: randomUUID(),
+          buildId: build.id,
+          projectId: project.id,
+          status: TestStatus.unresolved,
+          ...run,
+          noiseAnalysis: noiseAnalysis ?? Prisma.DbNull,
+        })),
+      });
+      return build;
+    };
+    const haveHistory = (noiseOfTwo: number[]) =>
+      Promise.all(
+        noiseOfTwo.map((noise, i) =>
+          haveBuildWithRuns(
+            [0, 1].map((run) => ({ noiseAnalysis: verdict(run < noise ? 'noise' : 'change') })),
+            new Date(Date.now() - i * 60_000)
+          )
+        )
+      );
+    afterEach(() => prismaService.testRun.deleteMany({ where: { projectId: project.id } }));
+
+    const getSummary = (id: string) => requestWithAuth(app, 'get', `/builds/${id}/noise-summary`, user.token).send();
+
+    it('counts unresolved runs by their verdict and environment', async () => {
+      const build = await haveBuildWithRuns([
+        { browser: 'chrome', os: 'linux', noiseAnalysis: verdict('noise') },
+        { browser: 'chrome', os: 'linux', noiseAnalysis: verdict('change') },
+        { browser: 'chrome', os: 'linux', noiseAnalysis: verdict('unknown') },
+        { browser: 'chrome', os: 'linux', noiseAnalysis: { pending: true, requestedAt: new Date().toISOString() } },
+        { browser: 'chrome', os: 'linux' },
+        { noiseAnalysis: verdict('noise') },
+        { status: TestStatus.ok, browser: 'chrome', os: 'linux', noiseAnalysis: verdict('noise') },
+      ]);
+
+      const res = await getSummary(build.id).expect(200);
+
+      expect(res.body).toEqual({
+        unresolved: 6,
+        analysed: 4,
+        noiseLike: 2,
+        byEnvironment: expect.arrayContaining([
+          { browser: 'chrome', os: 'linux', device: null, unresolved: 5, noiseLike: 1 },
+          { browser: null, os: null, device: null, unresolved: 1, noiseLike: 1 },
+        ]),
+      });
+      expect(res.body.byEnvironment).toHaveLength(2);
+    });
+
+    it('reports a build without unresolved runs as zeros', async () => {
+      const build = await haveBuildWithRuns([{ status: TestStatus.ok, noiseAnalysis: verdict('noise') }]);
+
+      const res = await getSummary(build.id).expect(200);
+
+      expect(res.body).toEqual({ unresolved: 0, analysed: 0, noiseLike: 0, byEnvironment: [] });
+    });
+
+    it('adds the median noise share of the project once 5 builds have analysed runs', async () => {
+      await haveHistory([0, 1, 2, 1]);
+      const build = await haveBuildWithRuns([
+        { noiseAnalysis: { pending: true, requestedAt: new Date().toISOString() } },
+      ]);
+
+      expect((await getSummary(build.id).expect(200)).body).not.toHaveProperty('projectTypical');
+
+      await haveHistory([0]);
+
+      expect((await getSummary(build.id).expect(200)).body.projectTypical).toBeCloseTo(0.5);
+    });
+
+    it('counts a build with only unknown verdicts as analysed, with share 0', async () => {
+      await haveHistory([2, 2, 0, 0]);
+      const build = await haveBuildWithRuns([{ noiseAnalysis: verdict('unknown') }]);
+
+      expect((await getSummary(build.id).expect(200)).body.projectTypical).toBeCloseTo(0);
+    });
+
+    it('404 for an unknown build', async () => {
+      await getSummary(randomUUID()).expect(404);
+    });
+
+    it('401 without a token', async () => {
+      await requestWithAuth(app, 'get', `/builds/${randomUUID()}/noise-summary`, '').send().expect(401);
     });
   });
 

@@ -4,15 +4,18 @@ import {
   BlurAmplitudeJobInput,
   BlurredDifference,
   computeBlurAmplitude,
-  BLUR_AMPLITUDE_THRESHOLD,
-  isRenderingNoise,
+  analyseDifference,
+  DENSITY_WINDOW,
+  looksLikeNoise,
   MAX_MEASURED_PIXELS,
-  MAX_SOLID_SHARE,
   measureBlurredDifference,
 } from './blur-amplitude.core';
+import { DEFAULT_NOISE_ANALYSIS_CONFIG } from '../../noise-hint/noise-analysis.config';
 import { DINOV2_PATCH, gateOfDecoded } from './patch-gate.core';
 import { runWorkerJob } from './worker-job';
 
+const { amplitudeThreshold: BLUR_AMPLITUDE_THRESHOLD, solidShareMax: MAX_SOLID_SHARE } =
+  DEFAULT_NOISE_ANALYSIS_CONFIG.blur;
 const SIZE = 20;
 type Rgba = [number, number, number, number];
 const WHITE: Rgba = [255, 255, 255, 255];
@@ -105,24 +108,8 @@ describe('measureBlurredDifference', () => {
   });
 });
 
-describe('isRenderingNoise', () => {
-  it('is noise when the change is weak and thin', () => {
-    expect(isRenderingNoise({ amplitude: 40, solidPixels: 0, solidShare: 0 })).toBe(true);
-  });
-
-  it('is not noise when the change is too strong', () => {
-    expect(isRenderingNoise({ amplitude: 81, solidPixels: 0, solidShare: 0 })).toBe(false);
-  });
-
-  it('is not noise when too much of the change is solid, however faint', () => {
-    expect(isRenderingNoise({ amplitude: 31, solidPixels: 1, solidShare: MAX_SOLID_SHARE + 0.001 })).toBe(false);
-  });
-
-  it('is not noise when nothing could be measured', () => {
-    expect(isRenderingNoise(null)).toBe(false);
-  });
-
-  it('sees a faint panel shade as a change', () => {
+describe('a faint panel shade', () => {
+  it('is solid enough to count as a change', () => {
     const size = 200;
     const flat = (shade: number): RawImage => {
       const data = Buffer.alloc(size * size * 4, 255);
@@ -137,7 +124,35 @@ describe('isRenderingNoise', () => {
     const measure = measured(flat(255), flat(224));
 
     expect(measure.amplitude).toBeLessThan(BLUR_AMPLITUDE_THRESHOLD);
-    expect(isRenderingNoise(measure)).toBe(false);
+    expect(measure.solidShare).toBeGreaterThan(MAX_SOLID_SHARE);
+  });
+});
+
+describe('looksLikeNoise', () => {
+  const thresholds = DEFAULT_NOISE_ANALYSIS_CONFIG.blur;
+
+  it('is noise when the change is weak and thin', () => {
+    expect(looksLikeNoise({ amplitude: 40, solidPixels: 0, solidShare: 0 }, thresholds)).toBe(true);
+  });
+
+  it('is noise at an amplitude equal to the threshold', () => {
+    expect(
+      looksLikeNoise({ amplitude: thresholds.amplitudeThreshold, solidPixels: 0, solidShare: 0 }, thresholds)
+    ).toBe(true);
+  });
+
+  it('is noise at a solid share equal to the limit', () => {
+    expect(looksLikeNoise({ amplitude: 31, solidPixels: 1, solidShare: MAX_SOLID_SHARE }, thresholds)).toBe(true);
+  });
+
+  it('is not noise when the change is too strong', () => {
+    expect(looksLikeNoise({ amplitude: 81, solidPixels: 0, solidShare: 0 }, thresholds)).toBe(false);
+  });
+
+  it('is not noise when too much of the change is solid', () => {
+    expect(looksLikeNoise({ amplitude: 31, solidPixels: 1, solidShare: MAX_SOLID_SHARE + 0.001 }, thresholds)).toBe(
+      false
+    );
   });
 });
 
@@ -153,6 +168,8 @@ describe('computeBlurAmplitude', () => {
     baseline: encode(blank),
     image: encode(block),
     ignoreAreas: [],
+    thresholds: DEFAULT_NOISE_ANALYSIS_CONFIG.blur,
+    wantGate: true,
     ...overrides,
   });
 
@@ -171,11 +188,19 @@ describe('computeBlurAmplitude', () => {
   it('has no answer for screenshots of different sizes', () => {
     const smaller = encode({ data: Buffer.alloc(4 * 4 * 4, 255), width: 4, height: 4 });
 
-    expect(computeBlurAmplitude(job({ image: smaller })).measure).toBeNull();
+    expect(computeBlurAmplitude(job({ image: smaller }))).toEqual({
+      measure: null,
+      unmeasured: 'sizes differ',
+      densest: [],
+    });
   });
 
   it('has no answer for bytes that are not a PNG', () => {
-    expect(computeBlurAmplitude(job({ image: Buffer.from('not a png') })).measure).toBeNull();
+    expect(computeBlurAmplitude(job({ image: Buffer.from('not a png') }))).toEqual({
+      measure: null,
+      unmeasured: 'unreadable',
+      densest: [],
+    });
   });
 
   it('reads the Uint8Array views a worker message turns Buffers into', () => {
@@ -191,7 +216,6 @@ describe('computeBlurAmplitude', () => {
     it('comes with a pair taken for rendering noise', () => {
       const output = computeBlurAmplitude(noise());
 
-      expect(isRenderingNoise(output.measure)).toBe(true);
       expect(output.gate).toEqual(gateOfDecoded(blank, dot, DINOV2_PATCH));
       expect(output.gate?.cells).toEqual([0]);
     });
@@ -210,7 +234,22 @@ describe('computeBlurAmplitude', () => {
     });
 
     it('is absent for screenshots it cannot line up', () => {
-      expect(computeBlurAmplitude(noise({ image: Buffer.from('not a png') }))).toEqual({ measure: null });
+      expect(computeBlurAmplitude(noise({ image: Buffer.from('not a png') })).gate).toBeUndefined();
+    });
+
+    it('is not asked for when the job does not want it', () => {
+      const output = computeBlurAmplitude(noise({ wantGate: false }));
+
+      expect(output.measure?.amplitude).toBeLessThanOrEqual(BLUR_AMPLITUDE_THRESHOLD);
+      expect(output.gate).toBeUndefined();
+    });
+
+    it('follows the thresholds of the job', () => {
+      const strict = { amplitudeThreshold: 10, solidShareMax: 0 };
+      const loose = { amplitudeThreshold: 300, solidShareMax: 1 };
+
+      expect(computeBlurAmplitude(noise({ thresholds: strict })).gate).toBeUndefined();
+      expect(computeBlurAmplitude(job({ thresholds: loose })).gate).toBeDefined();
     });
 
     it('survives a structured clone', () => {
@@ -222,5 +261,127 @@ describe('computeBlurAmplitude', () => {
 
   it('is what the worker runs for a blur-amplitude job', () => {
     expect(runWorkerJob(job())).toEqual(computeBlurAmplitude(job()));
+  });
+
+  describe('the density of the change', () => {
+    const CANVAS = 80;
+    const canvas = (paint: (x: number, y: number) => boolean): RawImage => {
+      const data = Buffer.alloc(CANVAS * CANVAS * 4, 255);
+      for (let y = 0; y < CANVAS; y++) {
+        for (let x = 0; x < CANVAS; x++) {
+          if (paint(x, y)) data.fill(0, (y * CANVAS + x) * 4, (y * CANVAS + x) * 4 + 3);
+        }
+      }
+      return { data, width: CANVAS, height: CANVAS };
+    };
+    const emptyCanvas = canvas(() => false);
+    const run = (changed: RawImage, overrides: Partial<BlurAmplitudeJobInput> = {}) =>
+      computeBlurAmplitude(job({ baseline: encode(emptyCanvas), image: encode(changed), ...overrides }));
+
+    const digit = (left: number, top: number) => canvas((x, y) => x >= left && x < left + 5 && y >= top && y < top + 7);
+
+    it('finds a digit-like blob as one dense window', () => {
+      const output = run(digit(9, 8));
+
+      expect(output.densest[0].weight).toBeGreaterThanOrEqual((DENSITY_WINDOW * DENSITY_WINDOW) / 2);
+      expect(output.densest).toEqual([{ x: 6, y: 7, width: 8, height: 8, weight: 35 }]);
+    });
+
+    it('gives the same density wherever the blob sits against the 8 px grid', () => {
+      expect(run(digit(9, 8)).densest[0].weight).toBe(35);
+      expect(run(digit(5, 5)).densest[0].weight).toBe(35);
+      expect(run(digit(12, 13)).densest[0].weight).toBe(35);
+    });
+
+    it('keeps sparse dots below a few pixels per window', () => {
+      const output = run(canvas((x, y) => x % 4 === 2 && y % 8 === 3));
+
+      expect(output.densest.every(({ weight }) => weight <= 3)).toBe(true);
+    });
+
+    it('lists the five densest windows that do not overlap, the densest first', () => {
+      const bars = canvas((x, y) => y <= 60 && y % 10 === 0 && x < y / 10 + 1);
+      const output = run(bars);
+
+      expect(output.densest.map(({ x, y, weight }) => [x, y, weight])).toEqual([
+        [0, 53, 7],
+        [0, 43, 6],
+        [0, 33, 5],
+        [0, 23, 4],
+        [0, 13, 3],
+      ]);
+    });
+
+    it('does not list a window that overlaps a denser one', () => {
+      const output = run(canvas((x, y) => y === 20 && x < 12));
+
+      expect(output.densest).toHaveLength(2);
+      expect(output.densest[0].weight).toBe(8);
+    });
+
+    it('breaks ties by position', () => {
+      const output = run(canvas((x, y) => (x === 30 && y === 30) || (x === 2 && y === 20) || (x === 20 && y === 2)));
+
+      expect(output.densest.map(({ x, y }) => [x, y])).toEqual([
+        [13, 0],
+        [0, 13],
+        [23, 23],
+      ]);
+    });
+
+    it('counts a block that straddles a grid line in a single window', () => {
+      const output = run(canvas((x, y) => x >= 6 && x < 10 && y >= 0 && y < 2));
+
+      expect(output.densest).toEqual([{ x: 2, y: 0, width: 8, height: 8, weight: 8 }]);
+    });
+
+    it('keeps windows inside the image', () => {
+      const output = analyseDifference(blank, pixel(19, 19), DEFAULT_NOISE_ANALYSIS_CONFIG.blur, true);
+
+      expect(output.densest).toEqual([{ x: 12, y: 12, width: 8, height: 8, weight: 1 }]);
+    });
+
+    it('uses the whole image as the window when it is smaller than 8 px', () => {
+      const tiny = (paint: number[]): RawImage => {
+        const data = Buffer.alloc(5 * 6 * 4, 255);
+        paint.forEach((at) => data.fill(0, at * 4, at * 4 + 3));
+        return { data, width: 5, height: 6 };
+      };
+
+      const output = analyseDifference(tiny([]), tiny([0, 29]), DEFAULT_NOISE_ANALYSIS_CONFIG.blur, true);
+
+      expect(output.densest).toEqual([{ x: 0, y: 0, width: 5, height: 6, weight: 2 }]);
+    });
+
+    it('leaves out what the ignore areas cover', () => {
+      const output = run(digit(9, 8), { ignoreAreas: [{ x: 0, y: 0, width: CANVAS, height: CANVAS }] });
+
+      expect(output).toMatchObject({ densest: [] });
+    });
+
+    it('is zero for identical screenshots', () => {
+      expect(run(emptyCanvas)).toMatchObject({ densest: [] });
+    });
+
+    it('is not measured beyond the size limit', () => {
+      const width = 4000;
+      const height = Math.ceil(MAX_MEASURED_PIXELS / width) + 1;
+      const a: RawImage = { data: Buffer.alloc(width * height * 4, 255), width, height };
+      const b: RawImage = { data: Buffer.from(a.data), width, height };
+      b.data[0] = 0;
+      b.data[b.data.length - 4] = 0;
+
+      expect(analyseDifference(a, b, DEFAULT_NOISE_ANALYSIS_CONFIG.blur, true)).toEqual({
+        measure: null,
+        unmeasured: 'image too large',
+        densest: [],
+      });
+    });
+
+    it('survives a structured clone', () => {
+      const output = run(digit(9, 8));
+
+      expect(structuredClone(output)).toEqual(output);
+    });
   });
 });

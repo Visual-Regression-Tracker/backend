@@ -1,9 +1,9 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsString, IsNumber, IsInt, IsBoolean, IsEnum, IsJSON, IsDate } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsUUID, IsString, IsNumber, IsInt, IsBoolean, IsEnum, IsJSON, IsDate, IsOptional } from 'class-validator';
 import { ImageComparison, Project } from '@prisma/client';
 import { Type } from 'class-transformer';
 
-export class ProjectDto implements Project {
+export class ProjectDto implements Omit<Project, 'noiseAnalysisConfig'> {
   @ApiProperty()
   @IsUUID()
   readonly id!: string;
@@ -49,6 +49,11 @@ export class ProjectDto implements Project {
   @ApiProperty()
   @IsJSON()
   imageComparisonConfig!: string;
+
+  @ApiPropertyOptional()
+  @IsJSON()
+  @IsOptional()
+  noiseAnalysisConfig?: string;
 
   @ApiProperty()
   @IsBoolean()

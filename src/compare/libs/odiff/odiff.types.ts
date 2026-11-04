@@ -1,6 +1,4 @@
-import { RenderingNoiseConfig } from '../rendering-noise.config';
-
-export type OdiffConfig = RenderingNoiseConfig & {
+export type OdiffConfig = {
   outputDiffMask: boolean;
   failOnLayoutDiff: boolean;
   threshold: number;

@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { PNG } from 'pngjs';
 import { IgnoreAreaDto } from '../../test-runs/dto/ignore-area.dto';
 import { asBuffer } from '../../static/utils';
+import { isJsonObject } from '../../utils';
 
 export function scaleImageToSize(image: PNG, width: number, height: number): PNG {
   if (width > image.width || height > image.height) {
@@ -24,18 +25,20 @@ export function tryReadPng(data: Buffer | Uint8Array): PNG | null {
   }
 }
 
-export function readSameSizePair(
+export type UnmeasuredReason = 'sizes differ' | 'image too large' | 'unreadable';
+
+export function readPair(
   baselineBytes: Buffer | Uint8Array,
   imageBytes: Buffer | Uint8Array,
   ignoreAreas: IgnoreAreaDto[]
-): { baseline: PNG; image: PNG } | null {
+): { baseline: PNG; image: PNG } | { unmeasured: UnmeasuredReason } {
   const baseline = tryReadPng(baselineBytes);
   const image = baseline && tryReadPng(imageBytes);
   if (!baseline || !image) {
-    return null;
+    return { unmeasured: 'unreadable' };
   }
   if (baseline.width !== image.width || baseline.height !== image.height) {
-    return null;
+    return { unmeasured: 'sizes differ' };
   }
   applyIgnoreAreas(baseline, ignoreAreas);
   applyIgnoreAreas(image, ignoreAreas);
@@ -64,7 +67,7 @@ export function applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): PNG 
 export const parseConfig = <T>(configJson: string, defaultConfig: T, logger: Logger): T => {
   try {
     const config = JSON.parse(configJson);
-    if (config !== null && typeof config === 'object' && !Array.isArray(config)) {
+    if (isJsonObject(config)) {
       return { ...defaultConfig, ...config };
     }
     if (config !== null) {

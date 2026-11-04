@@ -1,6 +1,4 @@
-import { RenderingNoiseConfig } from '../rendering-noise.config';
-
-export interface PixelmatchConfig extends RenderingNoiseConfig {
+export interface PixelmatchConfig {
   allowDiffDimensions?: boolean;
   ignoreAntialiasing: boolean;
   threshold: number;
