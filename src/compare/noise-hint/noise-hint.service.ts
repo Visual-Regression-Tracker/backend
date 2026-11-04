@@ -9,8 +9,8 @@ import { messageOf } from '../../utils/errors';
 import { DiffWorkerPool } from '../diff-worker-pool';
 import { Dinov2Service, strongestPatchDistance } from '../libs/dinov2/dinov2.service';
 import { looksLikeNoise, MAX_MEASURED_PIXELS } from '../libs/pixelmatch/blur-amplitude.core';
-import { UnmeasuredReason } from '../utils';
 import { DINOV2_PATCH, PatchGate } from '../libs/pixelmatch/patch-gate.core';
+import { UnmeasuredReason } from '../utils';
 import { NoiseAnalysisConfig, parseNoiseAnalysisConfig } from './noise-analysis.config';
 import {
   BlurStageResult,
