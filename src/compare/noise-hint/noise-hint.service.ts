@@ -196,8 +196,11 @@ export class NoiseHintService implements OnApplicationShutdown {
         }
       }
     } catch (error) {
-      fresh.forEach((id) => this.known.delete(id));
+      fresh.forEach((id) => (this.requeue.delete(id) ? this.waiting.push(id) : this.known.delete(id)));
       this.reserved -= reservations;
+      if (this.waiting.length > 0) {
+        void this.drain();
+      }
       throw error;
     }
 
@@ -313,9 +316,10 @@ export class NoiseHintService implements OnApplicationShutdown {
   }
 
   private async process(id: string): Promise<void> {
+    let requestedAt: string | null | undefined;
     try {
       const run = await this.prismaService.testRun.findUnique({ where: { id }, include: { project: true } });
-      const requestedAt = run && pendingSince(run.noiseAnalysis);
+      requestedAt = run && pendingSince(run.noiseAnalysis);
       if (!run?.project || !requestedAt) {
         return;
       }
@@ -332,15 +336,15 @@ export class NoiseHintService implements OnApplicationShutdown {
       }
     } catch (error) {
       this.logger.error(`Noise analysis of test run ${id} failed: ${messageOf(error)}`);
-      await this.clearPending(id).catch((resetError) =>
+      await this.clearPending(id, requestedAt ?? undefined).catch((resetError) =>
         this.logger.error(`Could not reset test run ${id}: ${messageOf(resetError)}`)
       );
     }
   }
 
-  private async clearPending(id: string): Promise<void> {
+  private async clearPending(id: string, requestedAt?: string): Promise<void> {
     const { count } = await this.prismaService.testRun.updateMany({
-      where: { id, noiseAnalysis: { path: ['pending'], equals: true } },
+      where: { id, ...(requestedAt ? markedAt(requestedAt) : { noiseAnalysis: { path: ['pending'], equals: true } }) },
       data: { noiseAnalysis: Prisma.DbNull },
     });
     const updated = count > 0 && (await this.prismaService.testRun.findUnique({ where: { id } }));

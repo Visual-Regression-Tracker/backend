@@ -62,8 +62,12 @@ const settled = async (done: () => boolean) => {
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => (resolve = r));
-  return { promise, resolve };
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 };
 
 const PENDING = { pending: true, requestedAt: '2026-11-04T10:00:00.000Z' };
@@ -767,6 +771,43 @@ describe('NoiseHintService.enqueue', () => {
       expect(h.pool.run).toHaveBeenCalledTimes(2);
     });
 
+    it('keeps the marker of a re-request made while the first pass crashed and analyses it afterwards', async () => {
+      const h = build();
+      h.add('a');
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      const gate = blocked(h);
+      await h.service.enqueue(['a']);
+      await settled(() => h.pool.run.mock.calls.length === 1);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      await h.service.enqueue(['a']);
+      const newer = stored(h, 'a');
+      const second = blocked(h);
+
+      gate.reject(new Error('worker died'));
+      await settled(() => h.pool.run.mock.calls.length === 2);
+
+      expect(stored(h, 'a')).toEqual(newer);
+      second.resolve(noiseOutput());
+      await analysed(h, 1);
+      expect(stored(h, 'a')).toMatchObject({ version: 1, verdict: 'noise' });
+    });
+
+    it('still analyses an id that a second request marked while the first request failed', async () => {
+      const h = build();
+      h.add('a');
+      const lookup = deferred<StoredRun[]>();
+      h.prisma.testRun.findMany.mockReturnValueOnce(lookup.promise);
+
+      const first = h.service.enqueue(['a']);
+      const second = await h.service.enqueue(['a']);
+      lookup.reject(new Error('db gone'));
+
+      await expect(first).rejects.toThrow('db gone');
+      expect(second).toEqual({ queued: 1, skipped: [] });
+      await analysed(h, 1);
+      expect(stored(h, 'a')).toMatchObject({ version: 1, verdict: 'noise' });
+    });
+
     it('does not mark an id again that is ineligible, and keeps its place if it was queued', async () => {
       const h = build();
       h.add('a');
@@ -1022,7 +1063,7 @@ describe('NoiseHintService.enqueue', () => {
       await analysed(h, 2);
 
       expect(h.prisma.testRun.updateMany).toHaveBeenCalledWith({
-        where: { id: 'a', noiseAnalysis: { path: ['pending'], equals: true } },
+        where: { id: 'a', noiseAnalysis: { path: ['requestedAt'], equals: expect.any(String) } },
         data: { noiseAnalysis: Prisma.DbNull },
       });
       expect(stored(h, 'a')).toBeNull();
@@ -1041,7 +1082,7 @@ describe('NoiseHintService.enqueue', () => {
         ReturnType<typeof h.prisma.testRun.updateMany.getMockImplementation>
       >;
       h.prisma.testRun.updateMany.mockImplementation((args) =>
-        args.where.noiseAnalysis?.path[0] === 'pending' ? Promise.reject(new Error('db gone')) : write(args)
+        args.data.noiseAnalysis === Prisma.DbNull ? Promise.reject(new Error('db gone')) : write(args)
       );
 
       await h.service.enqueue(['a', 'b']);
