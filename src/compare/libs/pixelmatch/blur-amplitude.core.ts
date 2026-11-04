@@ -1,5 +1,6 @@
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
 import { RawImage, readSameSizePair } from '../../utils';
+import { NoiseAnalysisThresholds, NoiseRegion } from '../../noise-hint/noise-analysis.types';
 import { DINOV2_PATCH, gateOfDecoded, PatchGate } from './patch-gate.core';
 
 export interface BlurredDifference {
@@ -13,36 +14,49 @@ export interface BlurAmplitudeJobInput {
   baseline: Buffer | Uint8Array;
   image: Buffer | Uint8Array;
   ignoreAreas: IgnoreAreaDto[];
+  thresholds: NoiseAnalysisThresholds['blur'];
 }
 
 export interface BlurAmplitudeJobOutput {
   measure: BlurredDifference | null;
+  density: number;
+  densest: NoiseRegion[];
   gate?: PatchGate;
 }
 
 const DEFAULT_BLUR_SIGMA = 1;
-// above the strongest anti-aliasing-only pair measured (75.1)
-export const BLUR_AMPLITUDE_THRESHOLD = 80;
 
 const SOLID_MIN_CHANGE = 6;
 const SOLID_KEEP = 0.9;
-// solid share: sub-pixel shifts up to 0.7%, #e0e0e0 panel 19%
-export const MAX_SOLID_SHARE = 0.01;
 
 export const MAX_MEASURED_PIXELS = 16_000_000;
 
-export function isRenderingNoise(measure: BlurredDifference | null): boolean {
-  return measure !== null && measure.amplitude <= BLUR_AMPLITUDE_THRESHOLD && measure.solidShare <= MAX_SOLID_SHARE;
-}
+export const DENSITY_WINDOW = 8;
+const MAX_DENSEST = 5;
 
-export function measureRenderingNoise(baseline: RawImage, image: RawImage): BlurAmplitudeJobOutput {
-  const measure = measureBlurredDifference(baseline, image);
-  return isRenderingNoise(measure) ? { measure, gate: gateOfDecoded(baseline, image, DINOV2_PATCH) } : { measure };
+const notMeasured = (): BlurAmplitudeJobOutput => ({ measure: null, density: 0, densest: [] });
+
+export function analyseDifference(
+  baseline: RawImage,
+  image: RawImage,
+  thresholds: BlurAmplitudeJobInput['thresholds']
+): BlurAmplitudeJobOutput {
+  const box = changedBox(baseline, image);
+  const measure = measureInBox(baseline, image, box);
+  if (!measure) {
+    return notMeasured();
+  }
+  const { density, densest } = box ? windowDensity(baseline, image, box) : { density: 0, densest: [] };
+  const looksLikeNoise =
+    measure.amplitude <= thresholds.amplitudeThreshold && measure.solidShare <= thresholds.solidShareMax;
+  return looksLikeNoise
+    ? { measure, density, densest, gate: gateOfDecoded(baseline, image, DINOV2_PATCH) }
+    : { measure, density, densest };
 }
 
 export function computeBlurAmplitude(input: BlurAmplitudeJobInput): BlurAmplitudeJobOutput {
   const pair = readSameSizePair(input.baseline, input.image, input.ignoreAreas);
-  return pair ? measureRenderingNoise(pair.baseline, pair.image) : { measure: null };
+  return pair ? analyseDifference(pair.baseline, pair.image, input.thresholds) : notMeasured();
 }
 
 function gaussianKernel(sigma: number): Float32Array {
@@ -73,6 +87,17 @@ interface Box {
   maxY: number;
 }
 
+function isChanged(a: Buffer | Uint8Array, b: Buffer | Uint8Array, o: number): boolean {
+  if (a[o] === b[o] && a[o + 1] === b[o + 1] && a[o + 2] === b[o + 2] && a[o + 3] === b[o + 3]) {
+    return false;
+  }
+  return (
+    channel(a, o, 0) !== channel(b, o, 0) ||
+    channel(a, o, 1) !== channel(b, o, 1) ||
+    channel(a, o, 2) !== channel(b, o, 2)
+  );
+}
+
 function changedBox({ data: a, width, height }: RawImage, { data: b }: RawImage): Box | null {
   let minX = width;
   let minY = height;
@@ -80,15 +105,7 @@ function changedBox({ data: a, width, height }: RawImage, { data: b }: RawImage)
   let maxY = -1;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const o = (y * width + x) * 4;
-      if (a[o] === b[o] && a[o + 1] === b[o + 1] && a[o + 2] === b[o + 2] && a[o + 3] === b[o + 3]) {
-        continue;
-      }
-      if (
-        channel(a, o, 0) === channel(b, o, 0) &&
-        channel(a, o, 1) === channel(b, o, 1) &&
-        channel(a, o, 2) === channel(b, o, 2)
-      ) {
+      if (!isChanged(a, b, (y * width + x) * 4)) {
         continue;
       }
       if (x < minX) minX = x;
@@ -98,6 +115,39 @@ function changedBox({ data: a, width, height }: RawImage, { data: b }: RawImage)
     }
   }
   return maxX < 0 ? null : { minX, minY, maxX, maxY };
+}
+
+function windowDensity(
+  { data: a, width }: RawImage,
+  { data: b }: RawImage,
+  { minX, minY, maxX, maxY }: Box
+): { density: number; densest: NoiseRegion[] } {
+  const firstColumn = Math.floor(minX / DENSITY_WINDOW);
+  const firstRow = Math.floor(minY / DENSITY_WINDOW);
+  const columns = Math.floor(maxX / DENSITY_WINDOW) - firstColumn + 1;
+  const rows = Math.floor(maxY / DENSITY_WINDOW) - firstRow + 1;
+  const counts = new Uint8Array(columns * rows);
+  for (let y = minY; y <= maxY; y++) {
+    const rowStart = (Math.floor(y / DENSITY_WINDOW) - firstRow) * columns - firstColumn;
+    for (let x = minX; x <= maxX; x++) {
+      if (isChanged(a, b, (y * width + x) * 4)) counts[rowStart + Math.floor(x / DENSITY_WINDOW)]++;
+    }
+  }
+
+  const windows: NoiseRegion[] = [];
+  counts.forEach((weight, at) => {
+    if (weight > 0) {
+      windows.push({
+        x: (firstColumn + (at % columns)) * DENSITY_WINDOW,
+        y: (firstRow + Math.floor(at / columns)) * DENSITY_WINDOW,
+        width: DENSITY_WINDOW,
+        height: DENSITY_WINDOW,
+        weight,
+      });
+    }
+  });
+  windows.sort((p, q) => q.weight - p.weight || p.y - q.y || p.x - q.x);
+  return { density: windows[0]?.weight ?? 0, densest: windows.slice(0, MAX_DENSEST) };
 }
 
 function sourceIndex(from: number, to: number, radius: number, size: number, boxMin: number, boxMax: number) {
@@ -114,7 +164,11 @@ export function measureBlurredDifference(baseline: RawImage, image: RawImage): B
   if (image.width !== width || image.height !== height) {
     throw new Error(`Cannot blur-compare ${width}x${height} with ${image.width}x${image.height}`);
   }
-  const box = changedBox(baseline, image);
+  return measureInBox(baseline, image, changedBox(baseline, image));
+}
+
+function measureInBox(baseline: RawImage, image: RawImage, box: Box | null): BlurredDifference | null {
+  const { width, height } = baseline;
   if (!box) {
     return { amplitude: 0, solidPixels: 0, solidShare: 0 };
   }
