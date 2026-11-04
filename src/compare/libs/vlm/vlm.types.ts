@@ -1,6 +1,4 @@
-import { RenderingNoiseConfig } from '../rendering-noise.config';
-
-interface BaseVlmConfig extends RenderingNoiseConfig {
+interface BaseVlmConfig {
   model: string;
   prompt: string;
   temperature: number;

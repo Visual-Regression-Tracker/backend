@@ -34,7 +34,6 @@ export const DEFAULT_CONFIG: OllamaVlmConfig = {
 @Injectable()
 export class VlmService implements ImageComparator {
   private readonly logger: Logger = new Logger(VlmService.name);
-  readonly appliesRenderingNoiseFilter = true;
   private readonly limiter = new ConcurrencyLimiter(4);
 
   constructor(

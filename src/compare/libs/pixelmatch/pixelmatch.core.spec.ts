@@ -1,12 +1,9 @@
 import Pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
-import { BLUR_AMPLITUDE_THRESHOLD } from './blur-amplitude.core';
-import { readSameSizePair } from '../../utils';
-import { DINOV2_PATCH, gateOfDecoded } from './patch-gate.core';
 import { computePixelmatchDiff, PixelmatchJobInput } from './pixelmatch.core';
 import { computeChangeSignature } from './signature.core';
 import { THUMBNAIL_MAX_DIMENSION } from './thumbnail.core';
-import { paintedPng, pngBytes, Rgb, solidPng, square } from '../../test-utils';
+import { paintedPng, pngBytes, Rgb, square } from '../../test-utils';
 
 const WIDTH = 60;
 const HEIGHT = 60;
@@ -26,7 +23,6 @@ const diffJob = (
     diffTolerancePercent = 0,
     includeAA = false,
     allowDiffDimensions = false,
-    ignoreRenderingNoise = false,
     ignoreAreas = [] as PixelmatchJobInput['ignoreAreas'],
   } = {}
 ) =>
@@ -40,7 +36,6 @@ const diffJob = (
     allowDiffDimensions,
     diffTolerancePercent,
     saveDiff,
-    ignoreRenderingNoise,
   });
 
 describe('computePixelmatchDiff with a signature', () => {
@@ -121,86 +116,5 @@ describe('computePixelmatchDiff with thumbnails', () => {
 
   it('makes none when the screenshots are identical', () => {
     expect(diffJob(blank, blank).imageThumbnail).toBeUndefined();
-  });
-});
-
-describe('computePixelmatchDiff with the rendering-noise filter', () => {
-  const hairline = (column: number): Buffer => png((x) => (x === column ? [0, 0, 0] : undefined));
-  const withFilter = (baseline: Buffer, image: Buffer, options: Parameters<typeof diffJob>[2] = {}) =>
-    diffJob(baseline, image, { includeAA: true, ignoreRenderingNoise: true, ...options });
-
-  it('lets a real change through with its diff', () => {
-    const result = withFilter(blank, block(10, 10, RED));
-
-    expect(result.blurAmplitude).toBeGreaterThan(BLUR_AMPLITUDE_THRESHOLD);
-    expect(result.gate).toBeUndefined();
-    expect(result.diffBuffer).toBeDefined();
-    expect(result.imageThumbnail).toBeDefined();
-  });
-
-  it('lets a faint but solid change through', () => {
-    const result = withFilter(blank, pngBytes(solidPng(WIDTH, HEIGHT, [224, 224, 224])));
-
-    expect(result.blurAmplitude).toBeLessThan(BLUR_AMPLITUDE_THRESHOLD);
-    expect(result.gate).toBeUndefined();
-  });
-
-  it('does not judge screenshots of different sizes', () => {
-    const taller = pngBytes(solidPng(WIDTH, HEIGHT + 5));
-
-    const result = withFilter(blank, taller, { allowDiffDimensions: true });
-
-    expect(result.isSameDimension).toBe(false);
-    expect(result.gate).toBeUndefined();
-    expect(result.blurAmplitude).toBeUndefined();
-  });
-
-  it('gates a change no stronger than rendering noise for DINOv2, and keeps its diff for when DINOv2 disagrees', () => {
-    const result = withFilter(hairline(10), hairline(11));
-
-    expect(result.pixelMisMatchCount).toBeGreaterThan(0);
-    expect(result.blurAmplitude).toBeLessThan(BLUR_AMPLITUDE_THRESHOLD);
-    expect(result.gate).toBeDefined();
-    expect(result.diffBuffer).toBeDefined();
-    expect(result.imageThumbnail).toBeDefined();
-  });
-
-  describe('the DINOv2 patch gate', () => {
-    const gateOf = (baseline: Buffer, image: Buffer, ignoreAreas: PixelmatchJobInput['ignoreAreas']) => {
-      const pair = readSameSizePair(baseline, image, ignoreAreas)!;
-      return gateOfDecoded(pair.baseline, pair.image, DINOV2_PATCH);
-    };
-
-    it('is computed for a noise-like change', () => {
-      const ignoreAreas = [{ x: 40, y: 40, width: 5, height: 5 }];
-      const result = withFilter(hairline(10), hairline(11), { ignoreAreas });
-
-      expect(result.gate).toEqual(gateOf(hairline(10), hairline(11), ignoreAreas));
-      expect(result.gate?.cells.length).toBeGreaterThan(0);
-    });
-
-    it('leaves out what the ignore areas cover', () => {
-      const ignoreAreas = [{ x: 0, y: 0, width: 30, height: 28 }];
-      const result = withFilter(hairline(10), hairline(11), { ignoreAreas });
-
-      expect(result.gate?.cells.length).toBeGreaterThan(0);
-      expect(result.gate?.cells.every((cell) => Math.floor(cell / 5) >= 2)).toBe(true);
-      expect(result.gate).toEqual(gateOf(hairline(10), hairline(11), ignoreAreas));
-    });
-  });
-
-  it('measures nothing and computes no gate when the filter is off', () => {
-    const result = diffJob(hairline(10), hairline(11), { includeAA: true });
-
-    expect(result.gate).toBeUndefined();
-    expect(result.blurAmplitude).toBeUndefined();
-    expect(result.diffBuffer).toBeDefined();
-  });
-
-  it('measures nothing when the change is under tolerance', () => {
-    const result = withFilter(hairline(10), hairline(11), { diffTolerancePercent: 90 });
-
-    expect(result.blurAmplitude).toBeUndefined();
-    expect(result.gate).toBeUndefined();
   });
 });

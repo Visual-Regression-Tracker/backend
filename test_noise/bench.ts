@@ -24,8 +24,7 @@ const dinov2 = new Dinov2Service(new ConfigService({ DINOV2_URL: 'http://dinov2'
 const confirmsNoiseForGate = dinov2.confirmsNoiseForGate.bind(dinov2);
 const service = new PixelmatchService(
   { getImageBuffer: async (file: string) => read(file) } as unknown as StaticService,
-  { run: async (job: PixelmatchJobInput) => computePixelmatchDiff(job) } as unknown as DiffWorkerPool,
-  dinov2
+  { run: async (job: PixelmatchJobInput) => computePixelmatchDiff(job) } as unknown as DiffWorkerPool
 );
 
 export async function verdict({ baseline, image, dinov2: recorded }: NoiseCase): Promise<TestStatus | undefined> {
@@ -44,7 +43,7 @@ export async function verdict({ baseline, image, dinov2: recorded }: NoiseCase):
     .spyOn(global, 'fetch')
     .mockResolvedValue(Response.json({ width: recorded.width, height: recorded.height, distances }));
   const result = await service.getDiff(
-    { baseline, image, diffTollerancePercent: 0, ignoreAreas: [], saveDiffAsFile: false, ignoreRenderingNoise: true },
+    { baseline, image, diffTollerancePercent: 0, ignoreAreas: [], saveDiffAsFile: false },
     DEFAULT_CONFIG
   );
   return result.status;

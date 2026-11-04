@@ -10,7 +10,6 @@ import { ImageCompareInput } from '../ImageCompareInput';
 import { PixelmatchConfig } from './pixelmatch.types';
 import { PixelmatchJobOutput } from './pixelmatch.core';
 import { DiffWorkerPool } from '../../diff-worker-pool';
-import { Dinov2Service } from '../dinov2/dinov2.service';
 
 export const DEFAULT_CONFIG: PixelmatchConfig = { threshold: 0.1, ignoreAntialiasing: true };
 
@@ -23,12 +22,10 @@ function sameDimensions(a: Buffer, b: Buffer): boolean {
 @Injectable()
 export class PixelmatchService implements ImageComparator {
   private readonly logger: Logger = new Logger(PixelmatchService.name);
-  readonly appliesRenderingNoiseFilter = true;
 
   constructor(
     private readonly staticService: StaticService,
-    private readonly diffWorkerPool: DiffWorkerPool,
-    private readonly dinov2Service: Dinov2Service
+    private readonly diffWorkerPool: DiffWorkerPool
   ) {}
 
   parseConfig(configJson: string): PixelmatchConfig {
@@ -63,7 +60,6 @@ export class PixelmatchService implements ImageComparator {
       allowDiffDimensions: config.allowDiffDimensions,
       diffTolerancePercent: data.diffTollerancePercent,
       saveDiff: data.saveDiffAsFile,
-      ignoreRenderingNoise: data.ignoreRenderingNoise,
     });
 
     if (output.equal) {
@@ -88,17 +84,6 @@ export class PixelmatchService implements ImageComparator {
           }
         : {}),
     };
-
-    if (
-      output.gate &&
-      (await this.dinov2Service.confirmsNoiseForGate(output.gate, baselineBuffer, imageBuffer)).noise
-    ) {
-      this.logger.debug(
-        `Diff of ${result.diffPercent}% passed as rendering noise (blur amplitude ${output.blurAmplitude?.toFixed(1)}, ${output.solidPixels} solid pixels)`
-      );
-      result.status = TestStatus.ok;
-      return result;
-    }
 
     if (result.diffPercent! > data.diffTollerancePercent) {
       if (output.diffBuffer) {

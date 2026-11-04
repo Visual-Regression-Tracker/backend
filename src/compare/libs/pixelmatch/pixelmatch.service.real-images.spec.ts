@@ -2,7 +2,6 @@ import { Test } from '@nestjs/testing';
 import { TestStatus } from '@prisma/client';
 import { StaticService } from '../../../static/static.service';
 import { DiffWorkerPool } from '../../diff-worker-pool';
-import { Dinov2Service } from '../dinov2/dinov2.service';
 import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
 
 const diffBuffer = Buffer.from('diff');
@@ -19,7 +18,6 @@ const initService = async (output: Record<string, unknown>) => {
     providers: [
       PixelmatchService,
       { provide: DiffWorkerPool, useValue: { run: jest.fn().mockResolvedValue(output) } },
-      { provide: Dinov2Service, useValue: { confirmsNoise: jest.fn() } },
       {
         provide: StaticService,
         useValue: { getImageBuffer: jest.fn().mockResolvedValue(Buffer.from('png')), saveImage },

@@ -10,7 +10,7 @@ import { ImageCompareInput } from '../ImageCompareInput';
 import { DEFAULT_CONFIG, PixelmatchService } from './pixelmatch.service';
 import { PixelmatchConfig } from './pixelmatch.types';
 import { computePixelmatchDiff } from './pixelmatch.core';
-import { Dinov2Service } from '../dinov2/dinov2.service';
+import { paintedPng, pngBytes } from '../../test-utils';
 
 jest.mock('pixelmatch');
 
@@ -25,7 +25,6 @@ interface Deps {
   saveImage?: jest.Mock;
   deleteImage?: jest.Mock;
   pool?: { run: unknown };
-  confirmsNoiseForGate?: jest.Mock;
 }
 
 const setup = async ({
@@ -33,13 +32,11 @@ const setup = async ({
   saveImage = jest.fn(),
   deleteImage = jest.fn(),
   pool,
-  confirmsNoiseForGate = jest.fn(),
 }: Deps = {}) => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       PixelmatchService,
       pool ? { provide: DiffWorkerPool, useValue: pool } : DiffWorkerPool,
-      { provide: Dinov2Service, useValue: { confirmsNoiseForGate } },
       { provide: StaticService, useValue: { getImageBuffer, saveImage, deleteImage } },
     ],
   }).compile();
@@ -49,7 +46,6 @@ const setup = async ({
     getImageBuffer,
     saveImage,
     deleteImage,
-    confirmsNoiseForGate,
   };
 };
 
@@ -369,73 +365,31 @@ describe('change signature', () => {
   });
 });
 
-describe('rendering-noise filter', () => {
-  const gate = { width: 5, height: 3, cells: [7] };
-  const noise = {
-    ...mismatch,
-    blurAmplitude: 40,
-    diffBuffer: Buffer.from('the diff'),
-    gate,
-  };
-  const init = (output: Record<string, unknown>, confirmsNoiseForGate = jest.fn()) =>
-    setup({
-      pool: poolOf(output),
-      getImageBuffer: pngReader(),
+describe('ignoreRenderingNoise', () => {
+  const hairline = (column: number): Buffer =>
+    pngBytes(paintedPng(60, 60, (x) => (x === column ? [0, 0, 0] : undefined)));
+
+  it.each([[true], [false]])('leaves a faint change unresolved with ignoreRenderingNoise %p', async (flag) => {
+    mocked(Pixelmatch).mockImplementation(jest.requireActual('pixelmatch'));
+    const run = jest.fn().mockImplementation(async (input) => computePixelmatchDiff(input));
+    const { service } = await setup({
+      pool: { run },
+      getImageBuffer: sequence(hairline(10), hairline(11)),
       saveImage: jest.fn().mockResolvedValue('diff.png'),
-      confirmsNoiseForGate,
     });
-  const compareWith = (service: PixelmatchService, ignoreRenderingNoise?: boolean) =>
-    compare(service, { saveDiffAsFile: true, ...(ignoreRenderingNoise ? { ignoreRenderingNoise } : {}) });
+    const config = { ...DEFAULT_CONFIG, ignoreRenderingNoise: flag };
+    const data = {
+      baseline: 'b.png',
+      image: 'i.png',
+      ignoreAreas: [],
+      diffTollerancePercent: 0,
+      saveDiffAsFile: true,
+      ignoreRenderingNoise: flag,
+    };
 
-  it('applies the filter itself', async () => {
-    const { service } = await init(mismatch);
-
-    expect(service.appliesRenderingNoiseFilter).toBe(true);
-  });
-
-  it.each([[undefined], [true]])('tells the worker ignoreRenderingNoise %p', async (ignoreRenderingNoise) => {
-    const { service, run } = await init(mismatch);
-
-    await compareWith(service, ignoreRenderingNoise);
-
-    expect(run.mock.calls[0][0].ignoreRenderingNoise).toBe(ignoreRenderingNoise);
-  });
-
-  it('passes a run DINOv2 confirms is only noise, with the gate the diff job computed', async () => {
-    const confirmsNoiseForGate = jest.fn().mockResolvedValue({ noise: true, score: 0.05 });
-    const { service, saveImage } = await init(noise, confirmsNoiseForGate);
-
-    const result = await compareWith(service, true);
-
-    expect(confirmsNoiseForGate).toHaveBeenCalledWith(gate, Buffer.from('png'), Buffer.from('png'));
-    expect(result.status).toBe(TestStatus.ok);
-    expect(result.diffPercent).toBe(5);
-    expect(result.diffName).toBeNull();
-    expect(saveImage).not.toHaveBeenCalled();
-  });
-
-  it('fails a run in which DINOv2 sees a change of content, with its diff', async () => {
-    const confirmsNoiseForGate = jest.fn().mockResolvedValue({ noise: false, score: 0.56 });
-    const { service, saveImage } = await init(noise, confirmsNoiseForGate);
-
-    const result = await compareWith(service, true);
+    const result = await service.getDiff(data, config);
 
     expect(result.status).toBe(TestStatus.unresolved);
     expect(result.diffName).toBe('diff.png');
-    expect(saveImage).toHaveBeenCalledWith('diff', Buffer.from('the diff'));
-  });
-
-  it('fails a run whose change is stronger than rendering noise, without asking DINOv2', async () => {
-    const confirmsNoiseForGate = jest.fn();
-    const { service } = await init(
-      { ...mismatch, blurAmplitude: 200, diffBuffer: Buffer.from('the diff') },
-      confirmsNoiseForGate
-    );
-
-    const result = await compareWith(service, true);
-
-    expect(result.status).toBe(TestStatus.unresolved);
-    expect(result.diffName).toBe('diff.png');
-    expect(confirmsNoiseForGate).not.toHaveBeenCalled();
   });
 });
