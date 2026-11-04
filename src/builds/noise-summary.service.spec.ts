@@ -4,7 +4,7 @@ import { NoiseSummaryService } from './noise-summary.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const verdictIs = (verdict: string) => ({ noiseAnalysis: { path: ['verdict'], equals: verdict } });
-const analysed = { OR: [verdictIs('noise'), verdictIs('change')] };
+const analysed = { OR: [verdictIs('noise'), verdictIs('change'), verdictIs('unknown')] };
 
 const setup = () => {
   const prisma = {

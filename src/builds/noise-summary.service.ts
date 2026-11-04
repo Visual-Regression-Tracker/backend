@@ -9,7 +9,9 @@ const MIN_HISTORY_BUILDS = 5;
 const verdictIs = (verdict: string): Prisma.TestRunWhereInput => ({
   noiseAnalysis: { path: ['verdict'], equals: verdict },
 });
-const ANALYSED: Prisma.TestRunWhereInput = { OR: [verdictIs('noise'), verdictIs('change')] };
+const ANALYSED: Prisma.TestRunWhereInput = {
+  OR: [verdictIs('noise'), verdictIs('change'), verdictIs('unknown')],
+};
 const NOISE_LIKE = verdictIs('noise');
 
 const median = (values: number[]): number => {

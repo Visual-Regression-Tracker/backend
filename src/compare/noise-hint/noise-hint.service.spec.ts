@@ -79,7 +79,7 @@ const storedRun = (id: string, patch: Partial<StoredRun> = {}): StoredRun => ({
 interface Where {
   id: string | { in: string[] };
   status?: TestStatus;
-  noiseAnalysis?: { path: string[]; equals: string };
+  noiseAnalysis?: { path: string[]; equals: string | boolean };
 }
 
 const asJson = (value: unknown) => (value === Prisma.DbNull ? null : value);
@@ -93,7 +93,8 @@ const build = () => {
       .filter(
         (run) =>
           !where.noiseAnalysis ||
-          (run.noiseAnalysis as { requestedAt?: string } | null)?.requestedAt === where.noiseAnalysis.equals
+          (run.noiseAnalysis as Record<string, unknown> | null)?.[where.noiseAnalysis.path[0]] ===
+            where.noiseAnalysis.equals
       );
   const prisma = {
     testRun: {
@@ -105,11 +106,6 @@ const build = () => {
         const runs = matching(where);
         runs.forEach((run) => store.set(run.id, { ...run, noiseAnalysis: asJson(data.noiseAnalysis) as never }));
         return Promise.resolve({ count: runs.length });
-      }),
-      update: jest.fn(({ where, data }: { where: { id: string }; data: { noiseAnalysis: unknown } }) => {
-        const run = { ...(store.get(where.id) as StoredRun), noiseAnalysis: asJson(data.noiseAnalysis) as never };
-        store.set(where.id, run);
-        return Promise.resolve(run);
       }),
     },
   };
@@ -379,6 +375,34 @@ describe('NoiseHintService.analyse', () => {
       });
     });
 
+    it('clips the regions at the right and bottom edge of the image', async () => {
+      const { service, pool, dinov2, staticService } = build();
+      const odd = pngBytes(solidPng(20, 30));
+      staticService.getImageBuffer.mockResolvedValue(odd);
+      pool.run.mockResolvedValue(noiseOutput({ gate: { width: 2, height: 3, cells: [1, 4, 5] } }));
+      dinov2.patchDistances.mockResolvedValue({ distances: [0, 0.3, 0, 0, 0.29, 0.28], width: 2, height: 3 });
+
+      const result = await service.analyse(analysedRun(), config());
+
+      expect(result.dinov2).toMatchObject({
+        regions: [
+          { x: 14, y: 0, width: 6, height: 14 },
+          { x: 0, y: 28, width: 14, height: 2 },
+          { x: 14, y: 28, width: 6, height: 2 },
+        ],
+      });
+    });
+
+    it('keeps whole patches when the image size cannot be read', async () => {
+      const { service, staticService, dinov2 } = build();
+      staticService.getImageBuffer.mockResolvedValue(Buffer.from('not a png'));
+      dinov2.patchDistances.mockResolvedValue(distances({ 5: 0.12 }));
+
+      const result = await service.analyse(analysedRun(), config());
+
+      expect(result.dinov2).toMatchObject({ regions: [{ x: 14, y: 14, width: 14, height: 14 }] });
+    });
+
     it('lists at most 10 regions', async () => {
       const { service, pool, dinov2 } = build();
       const cells = Array.from({ length: 14 }, (_, i) => i);
@@ -604,16 +628,16 @@ describe('NoiseHintService.enqueue', () => {
     expect(answer.queued).toBe(1);
   });
 
-  it('accepts an id once when two requests overlap', async () => {
+  it('analyses an id once when two requests overlap', async () => {
     const h = build();
     h.add('a');
 
     const [first, second] = await Promise.all([h.service.enqueue(['a']), h.service.enqueue(['a'])]);
 
-    expect(first.queued + second.queued).toBe(1);
-    expect(markerWrites(h)).toHaveLength(1);
+    expect(first.queued + second.queued).toBe(2);
     await analysed(h, 1);
     await settled(() => h.pool.run.mock.calls.length === 1);
+    await new Promise((resolve) => setImmediate(resolve));
     expect(h.pool.run).toHaveBeenCalledTimes(1);
   });
 
@@ -681,21 +705,82 @@ describe('NoiseHintService.enqueue', () => {
       return gate;
     };
 
-    it('does not queue or mark an id that is already queued, in flight or waiting', async () => {
+    it('counts an id that is waiting as queued, rewrites its marker and analyses it once', async () => {
       const h = build();
       h.add('a');
       h.add('b');
       const gate = blocked(h);
       await h.service.enqueue(['a']);
       await h.service.enqueue(['b']);
+      const before = stored(h, 'b');
+      await new Promise((resolve) => setTimeout(resolve, 2));
 
-      const again = await h.service.enqueue(['a', 'b']);
+      const again = await h.service.enqueue(['b']);
 
-      expect(again).toEqual({ queued: 0, skipped: [] });
-      expect(markerWrites(h)).toHaveLength(2);
+      expect(again).toEqual({ queued: 1, skipped: [] });
+      expect(markerWrites(h)).toHaveLength(3);
+      expect(markerWrites(h)[2][0].where).toEqual({ id: { in: ['b'] }, status: TestStatus.unresolved });
+      expect(stored(h, 'b')).toMatchObject({ pending: true });
+      expect(stored(h, 'b')).not.toEqual(before);
       gate.resolve(noiseOutput());
       await analysed(h, 2);
+      await settled(() => h.pool.run.mock.calls.length === 2);
       expect(h.pool.run).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not take a place in the queue for an id that is already known', async () => {
+      const h = build();
+      const ids = Array.from({ length: 258 }, (_, i) => `run-${i}`);
+      ids.forEach((id) => h.add(id));
+      const gate = blocked(h);
+      await h.service.enqueue([ids[0]]);
+      await h.service.enqueue(ids.slice(1, 257));
+
+      const again = await h.service.enqueue([ids[5], ids[257]]);
+
+      expect(again).toEqual({ queued: 1, skipped: [{ id: 'run-257', reason: 'queue full' }] });
+      gate.resolve(noiseOutput());
+      await analysed(h, 257);
+    });
+
+    it('analyses an id in flight again after the current pass and keeps the newer marker meanwhile', async () => {
+      const h = build();
+      h.add('a');
+      const gate = blocked(h);
+      await h.service.enqueue(['a']);
+      await settled(() => h.pool.run.mock.calls.length === 1);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+
+      const again = await h.service.enqueue(['a']);
+
+      expect(again).toEqual({ queued: 1, skipped: [] });
+      const newer = stored(h, 'a');
+      expect(newer).toMatchObject({ pending: true });
+      const second = blocked(h);
+      gate.resolve(noiseOutput());
+      await settled(() => h.pool.run.mock.calls.length === 2);
+      expect(resultEvents(h)).toHaveLength(0);
+      expect(stored(h, 'a')).toEqual(newer);
+      second.resolve(noiseOutput());
+      await analysed(h, 1);
+      expect(stored(h, 'a')).toMatchObject({ version: 1 });
+      expect(h.pool.run).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not mark an id again that is ineligible, and keeps its place if it was queued', async () => {
+      const h = build();
+      h.add('a');
+      const gate = blocked(h);
+      await h.service.enqueue(['a']);
+      h.store.set('a', { ...(h.store.get('a') as StoredRun), status: TestStatus.approved });
+
+      const again = await h.service.enqueue(['a']);
+
+      expect(again).toEqual({ queued: 0, skipped: [{ id: 'a', reason: 'not unresolved' }] });
+      gate.resolve(noiseOutput());
+      await settled(() => h.pool.run.mock.calls.length === 1);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(h.pool.run).toHaveBeenCalledTimes(1);
     });
 
     it('queues an id again once its analysis has finished', async () => {
@@ -886,6 +971,33 @@ describe('NoiseHintService.enqueue', () => {
       });
     });
 
+    it('clears the marker of a run whose project switched to the VLM comparator after queueing', async () => {
+      const h = build();
+      h.add('a');
+      h.add('b');
+      decideBeforeProcessing(h, 'a', { project: { ...TEST_PROJECT, imageComparison: ImageComparison.vlm } });
+
+      await h.service.enqueue(['a', 'b']);
+      await analysed(h, 2);
+
+      expect(stored(h, 'a')).toBeNull();
+      expect(h.pool.run).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears the marker of a run whose project switched the blur stage off after queueing', async () => {
+      const h = build();
+      h.add('a');
+      decideBeforeProcessing(h, 'a', {
+        project: { ...TEST_PROJECT, noiseAnalysisConfig: '{"blur":{"enabled":false}}' },
+      });
+
+      await h.service.enqueue(['a']);
+      await analysed(h, 1);
+
+      expect(stored(h, 'a')).toBeNull();
+      expect(h.pool.run).not.toHaveBeenCalled();
+    });
+
     it('skips the event when the run vanished right after the write', async () => {
       const h = build();
       h.add('a');
@@ -899,7 +1011,7 @@ describe('NoiseHintService.enqueue', () => {
       expect(resultEvents(h)).toHaveLength(0);
     });
 
-    it('resets the field to null, logs once and carries on when an analysis fails', async () => {
+    it('resets the pending marker to null, logs once and carries on when an analysis fails', async () => {
       const h = build();
       h.add('a');
       h.add('b');
@@ -909,8 +1021,8 @@ describe('NoiseHintService.enqueue', () => {
       await h.service.enqueue(['a', 'b']);
       await analysed(h, 2);
 
-      expect(h.prisma.testRun.update).toHaveBeenCalledWith({
-        where: { id: 'a' },
+      expect(h.prisma.testRun.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a', noiseAnalysis: { path: ['pending'], equals: true } },
         data: { noiseAnalysis: Prisma.DbNull },
       });
       expect(stored(h, 'a')).toBeNull();
@@ -925,13 +1037,45 @@ describe('NoiseHintService.enqueue', () => {
       h.add('b');
       const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       h.pool.run.mockRejectedValueOnce(new Error('worker crashed'));
-      h.prisma.testRun.update.mockRejectedValueOnce(new Error('db gone'));
+      const write = h.prisma.testRun.updateMany.getMockImplementation() as NonNullable<
+        ReturnType<typeof h.prisma.testRun.updateMany.getMockImplementation>
+      >;
+      h.prisma.testRun.updateMany.mockImplementation((args) =>
+        args.where.noiseAnalysis?.path[0] === 'pending' ? Promise.reject(new Error('db gone')) : write(args)
+      );
 
       await h.service.enqueue(['a', 'b']);
       await analysed(h, 1);
 
       expect(error).toHaveBeenCalledWith(expect.stringContaining('db gone'));
       expect(stored(h, 'b')).toMatchObject({ version: 1 });
+    });
+
+    it('keeps a result that was stored before the failure and resets only a pending marker', async () => {
+      const h = build();
+      h.add('a');
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      h.prisma.testRun.findUnique
+        .mockImplementationOnce(({ where }: { where: { id: string } }) => Promise.resolve(h.store.get(where.id)))
+        .mockRejectedValueOnce(new Error('read back failed'));
+
+      await h.service.enqueue(['a']);
+      await settled(() => h.prisma.testRun.findUnique.mock.calls.length === 2);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(stored(h, 'a')).toMatchObject({ version: 1, verdict: 'noise' });
+    });
+
+    it('resets the pending marker when the run could not even be loaded', async () => {
+      const h = build();
+      h.add('a');
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      h.prisma.testRun.findUnique.mockRejectedValueOnce(new Error('load failed'));
+
+      await h.service.enqueue(['a']);
+      await settled(() => stored(h, 'a') === null);
+
+      expect(stored(h, 'a')).toBeNull();
     });
   });
 });

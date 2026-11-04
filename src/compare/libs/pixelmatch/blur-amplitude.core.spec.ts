@@ -135,6 +135,16 @@ describe('looksLikeNoise', () => {
     expect(looksLikeNoise({ amplitude: 40, solidPixels: 0, solidShare: 0 }, thresholds)).toBe(true);
   });
 
+  it('is noise at an amplitude equal to the threshold', () => {
+    expect(
+      looksLikeNoise({ amplitude: thresholds.amplitudeThreshold, solidPixels: 0, solidShare: 0 }, thresholds)
+    ).toBe(true);
+  });
+
+  it('is noise at a solid share equal to the limit', () => {
+    expect(looksLikeNoise({ amplitude: 31, solidPixels: 1, solidShare: MAX_SOLID_SHARE }, thresholds)).toBe(true);
+  });
+
   it('is not noise when the change is too strong', () => {
     expect(looksLikeNoise({ amplitude: 81, solidPixels: 0, solidShare: 0 }, thresholds)).toBe(false);
   });

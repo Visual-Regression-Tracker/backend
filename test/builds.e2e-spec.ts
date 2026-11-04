@@ -200,7 +200,7 @@ describe('Builds (e2e)', () => {
 
       expect(res.body).toEqual({
         unresolved: 6,
-        analysed: 3,
+        analysed: 4,
         noiseLike: 2,
         byEnvironment: expect.arrayContaining([
           { browser: 'chrome', os: 'linux', device: null, unresolved: 5, noiseLike: 1 },
@@ -220,13 +220,22 @@ describe('Builds (e2e)', () => {
 
     it('adds the median noise share of the project once 5 builds have analysed runs', async () => {
       await haveHistory([0, 1, 2, 1]);
-      const build = await haveBuildWithRuns([{ noiseAnalysis: verdict('unknown') }]);
+      const build = await haveBuildWithRuns([
+        { noiseAnalysis: { pending: true, requestedAt: new Date().toISOString() } },
+      ]);
 
       expect((await getSummary(build.id).expect(200)).body).not.toHaveProperty('projectTypical');
 
       await haveHistory([0]);
 
       expect((await getSummary(build.id).expect(200)).body.projectTypical).toBeCloseTo(0.5);
+    });
+
+    it('counts a build with only unknown verdicts as analysed, with share 0', async () => {
+      await haveHistory([2, 2, 2, 0]);
+      const build = await haveBuildWithRuns([{ noiseAnalysis: verdict('unknown') }]);
+
+      expect((await getSummary(build.id).expect(200)).body.projectTypical).toBeCloseTo(1);
     });
 
     it('404 for an unknown build', async () => {

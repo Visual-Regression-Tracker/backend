@@ -55,6 +55,7 @@ export class NoiseHintService implements OnApplicationShutdown {
   private readonly logger: Logger = new Logger(NoiseHintService.name);
   private waiting: string[] = [];
   private known = new Set<string>();
+  private requeue = new Set<string>();
   private reserved = 0;
   private draining = false;
 
@@ -127,7 +128,14 @@ export class NoiseHintService implements OnApplicationShutdown {
     } else if (!output.gate) {
       throw new Error('Blur job returned no patch gate for a pair it takes for noise');
     } else {
-      dinov2 = await this.dinov2Stage(output.gate, baseline, image, thresholds, blur.score);
+      dinov2 = await this.dinov2Stage(
+        output.gate,
+        baseline,
+        image,
+        thresholds,
+        blur.score,
+        measurable ? baselineSize : null
+      );
     }
 
     const last = 'verdict' in dinov2 ? dinov2 : blur;
@@ -144,32 +152,38 @@ export class NoiseHintService implements OnApplicationShutdown {
   }
 
   async enqueue(ids: string[]): Promise<NoiseEnqueueResult> {
-    const fresh = [...new Set(ids)].filter((id) => !this.known.has(id));
+    const unique = [...new Set(ids)];
+    const fresh = unique.filter((id) => !this.known.has(id));
     fresh.forEach((id) => this.known.add(id));
+    const freshIds = new Set(fresh);
 
     const skipped: NoiseEnqueueResult['skipped'] = [];
     const accepted: string[] = [];
+    let reservations = 0;
     try {
       const runs = new Map<string, RunWithProject>(
         (
           await this.prismaService.testRun.findMany({
-            where: { id: { in: fresh } },
+            where: { id: { in: unique } },
             include: { project: true },
           })
         ).map((run) => [run.id, run])
       );
-      for (const id of fresh) {
+      for (const id of unique) {
         const reason = this.skipReason(runs.get(id));
         if (reason) {
           skipped.push({ id, reason });
+        } else if (!freshIds.has(id)) {
+          accepted.push(id);
         } else if (this.waiting.length + this.reserved >= MAX_WAITING) {
           skipped.push({ id, reason: 'queue full' });
         } else {
           accepted.push(id);
           this.reserved += 1;
+          reservations += 1;
         }
       }
-      skipped.forEach(({ id }) => this.known.delete(id));
+      skipped.forEach(({ id }) => freshIds.has(id) && this.known.delete(id));
 
       if (accepted.length > 0) {
         const pending: NoiseAnalysisPending = { pending: true, requestedAt: new Date().toISOString() };
@@ -183,13 +197,13 @@ export class NoiseHintService implements OnApplicationShutdown {
       }
     } catch (error) {
       fresh.forEach((id) => this.known.delete(id));
-      this.reserved -= accepted.length;
+      this.reserved -= reservations;
       throw error;
     }
 
-    this.reserved -= accepted.length;
+    this.reserved -= reservations;
+    accepted.forEach((id) => this.place(id, freshIds.has(id)));
     if (accepted.length > 0) {
-      this.waiting.push(...accepted);
       void this.drain();
     }
     return { queued: accepted.length, skipped };
@@ -198,6 +212,16 @@ export class NoiseHintService implements OnApplicationShutdown {
   onApplicationShutdown(): void {
     this.waiting = [];
     this.known.clear();
+    this.requeue.clear();
+  }
+
+  private place(id: string, fresh: boolean): void {
+    if (fresh || !this.known.has(id)) {
+      this.known.add(id);
+      this.waiting.push(id);
+    } else if (!this.waiting.includes(id)) {
+      this.requeue.add(id);
+    }
   }
 
   private skipReason(run: RunWithProject | undefined): NoiseSkipReason | null {
@@ -236,7 +260,8 @@ export class NoiseHintService implements OnApplicationShutdown {
     baseline: Buffer,
     image: Buffer,
     thresholds: NoiseAnalysisThresholds,
-    blurScore: number
+    blurScore: number,
+    size: { width: number; height: number } | null
   ): Promise<Dinov2Stage> {
     const measured = await this.dinov2Service.patchDistances(gate, baseline, image);
     if (!measured) {
@@ -249,13 +274,17 @@ export class NoiseHintService implements OnApplicationShutdown {
       .filter(({ weight }) => weight > distanceThreshold / 2)
       .sort((a, b) => b.weight - a.weight)
       .slice(0, MAX_DINOV2_REGIONS)
-      .map(({ cell, weight }) => ({
-        x: (cell % gate.width) * DINOV2_PATCH,
-        y: Math.floor(cell / gate.width) * DINOV2_PATCH,
-        width: DINOV2_PATCH,
-        height: DINOV2_PATCH,
-        weight,
-      }));
+      .map(({ cell, weight }) => {
+        const x = (cell % gate.width) * DINOV2_PATCH;
+        const y = Math.floor(cell / gate.width) * DINOV2_PATCH;
+        return {
+          x,
+          y,
+          width: size ? Math.min(DINOV2_PATCH, size.width - x) : DINOV2_PATCH,
+          height: size ? Math.min(DINOV2_PATCH, size.height - y) : DINOV2_PATCH,
+          weight,
+        };
+      });
     return {
       verdict: distance > distanceThreshold ? 'change' : 'noise',
       score: Math.max(blurScore, Math.min(1, distance / (2 * distanceThreshold))),
@@ -272,7 +301,11 @@ export class NoiseHintService implements OnApplicationShutdown {
     try {
       for (let id = this.waiting.shift(); id !== undefined; id = this.waiting.shift()) {
         await this.process(id);
-        this.known.delete(id);
+        if (this.requeue.delete(id)) {
+          this.waiting.push(id);
+        } else {
+          this.known.delete(id);
+        }
       }
     } finally {
       this.draining = false;
@@ -286,7 +319,7 @@ export class NoiseHintService implements OnApplicationShutdown {
       if (!run?.project || !requestedAt) {
         return;
       }
-      if (run.status !== TestStatus.unresolved) {
+      if (run.status !== TestStatus.unresolved || this.skipReason(run)) {
         await this.replaceMarker(id, requestedAt, Prisma.DbNull);
         return;
       }
@@ -299,10 +332,20 @@ export class NoiseHintService implements OnApplicationShutdown {
       }
     } catch (error) {
       this.logger.error(`Noise analysis of test run ${id} failed: ${messageOf(error)}`);
-      await this.prismaService.testRun
-        .update({ where: { id }, data: { noiseAnalysis: Prisma.DbNull } })
-        .then((updated) => this.eventsGateway.testRunUpdated(updated))
-        .catch((resetError) => this.logger.error(`Could not reset test run ${id}: ${messageOf(resetError)}`));
+      await this.clearPending(id).catch((resetError) =>
+        this.logger.error(`Could not reset test run ${id}: ${messageOf(resetError)}`)
+      );
+    }
+  }
+
+  private async clearPending(id: string): Promise<void> {
+    const { count } = await this.prismaService.testRun.updateMany({
+      where: { id, noiseAnalysis: { path: ['pending'], equals: true } },
+      data: { noiseAnalysis: Prisma.DbNull },
+    });
+    const updated = count > 0 && (await this.prismaService.testRun.findUnique({ where: { id } }));
+    if (updated) {
+      this.eventsGateway.testRunUpdated(updated);
     }
   }
 

@@ -89,7 +89,7 @@ lines in `.env` (section `# optional`) show the same variables.
 
 Both stages are on by default and are set per project in the "Post-analysis" section (`noiseAnalysisConfig`). Projects that use the VLM comparator are excluded. `DINOV2_URL` enables the second stage; without it the blur stage works alone. Runs are analysed one at a time from a queue in the API process. `POST /test-runs/noise-analysis` queues a list of run ids, and `GET /builds/:id/noise-summary` returns the counts shown in the build banner. The `ignoreRenderingNoise` key in `imageComparisonConfig` (rc1–rc3) is ignored.
 
-On our benchmark of 168 real screenshot pairs it labels about 1 in 4 small text changes noise with blur alone (28 of 120 bugs) and 1 in 7 with DINOv2 (18 of 120); no noise pair is labelled a change. The lists live in `test_noise/bugs-labelled-noise.ts`; `npm run test:noise` keeps them current.
+On our benchmark of 168 real screenshot pairs it labels about 1 in 4 of the benchmark's bugs noise with blur alone (28 of 120, mostly small text changes, faint borders and light icons) and 1 in 7 with DINOv2 (18 of 120); no noise pair is labelled a change. The lists live in `test_noise/bugs-labelled-noise.ts`; `npm run test:noise` keeps them current.
 
 ### Auth
 
