@@ -7,17 +7,16 @@ import { messageOf } from '../../../utils/errors';
 const TILE_PATCHES = 16;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const STATUS_TIMEOUT_MS = 3_000;
-// above the strongest anti-aliasing-only pair measured (0.133)
-export const DINOV2_THRESHOLD = 0.15;
 
 export interface Dinov2Status {
   configured: boolean;
   available: boolean;
 }
 
-interface Dinov2Verdict {
-  noise: boolean;
-  score?: number;
+export interface PatchDistances {
+  distances: number[];
+  width: number;
+  height: number;
 }
 
 export function strongestPatchDistance(distances: number[], cells: number[]): number {
@@ -60,14 +59,15 @@ export class Dinov2Service {
     return this.serviceUrl() !== undefined;
   }
 
-  async confirmsNoiseForGate(gate: PatchGate, baseline: Buffer, image: Buffer): Promise<Dinov2Verdict> {
+  async patchDistances(gate: PatchGate, baseline: Buffer, image: Buffer): Promise<PatchDistances | null> {
     const url = this.serviceUrl();
     if (!url) {
-      return { noise: false };
+      this.logger.debug('DINOv2 service is not configured, no patch distances');
+      return null;
     }
     try {
       if (gate.cells.length === 0) {
-        return { noise: true, score: 0 };
+        return { distances: [], width: gate.width, height: gate.height };
       }
 
       const timeoutMs = positiveNumber(this.configService.get('DINOV2_TIMEOUT_MS'), DEFAULT_TIMEOUT_MS);
@@ -84,21 +84,19 @@ export class Dinov2Service {
       if (!response.ok) {
         throw new Error(`service answered ${response.status}`);
       }
-      const answer: { width: number; height: number; distances: number[] } = await response.json();
+      const answer: PatchDistances = await response.json();
       if (answer.width !== gate.width || answer.height !== gate.height) {
         throw new Error(
           `service measured ${answer.width}x${answer.height} patches, expected ${gate.width}x${gate.height}`
         );
       }
-
-      const score = strongestPatchDistance(answer.distances, gate.cells);
-      if (score > DINOV2_THRESHOLD) {
-        this.logger.debug(`DINOv2 sees a change of content (score ${score.toFixed(3)}): to review`);
+      if (!Array.isArray(answer.distances) || answer.distances.length !== answer.width * answer.height) {
+        throw new Error('service answered without a distance for every patch');
       }
-      return { noise: score <= DINOV2_THRESHOLD, score };
+      return { distances: answer.distances, width: answer.width, height: answer.height };
     } catch (error) {
-      this.logger.warn(`DINOv2 check failed, the run goes to review: ${messageOf(error)}`);
-      return { noise: false };
+      this.logger.warn(`DINOv2 patch distances failed: ${messageOf(error)}`);
+      return null;
     }
   }
 

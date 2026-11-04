@@ -21,19 +21,19 @@ export const { cases }: { cases: NoiseCase[] } = JSON.parse(fs.readFileSync(path
 const read = (file: string) => fs.readFileSync(path.join(FIXTURES, 'images', file));
 
 const dinov2 = new Dinov2Service(new ConfigService({ DINOV2_URL: 'http://dinov2' }));
-const confirmsNoiseForGate = dinov2.confirmsNoiseForGate.bind(dinov2);
+const patchDistances = dinov2.patchDistances.bind(dinov2);
 const service = new PixelmatchService(
   { getImageBuffer: async (file: string) => read(file) } as unknown as StaticService,
   { run: async (job: PixelmatchJobInput) => computePixelmatchDiff(job) } as unknown as DiffWorkerPool
 );
 
 export async function verdict({ baseline, image, dinov2: recorded }: NoiseCase): Promise<TestStatus | undefined> {
-  jest.spyOn(dinov2, 'confirmsNoiseForGate').mockImplementation((gate, ...images) => {
+  jest.spyOn(dinov2, 'patchDistances').mockImplementation((gate, ...images) => {
     const unrecorded = gate.cells.filter((cell) => !(cell in recorded.cells));
     if (unrecorded.length) {
       throw new Error(`no recorded DINOv2 distance for patches ${unrecorded.join(', ')}: re-export the fixtures`);
     }
-    return confirmsNoiseForGate(gate, ...images);
+    return patchDistances(gate, ...images);
   });
   const distances = new Array<number>(recorded.width * recorded.height).fill(0);
   for (const [cell, distance] of Object.entries(recorded.cells)) {

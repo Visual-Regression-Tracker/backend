@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { strongestPatchDistance, Dinov2Service, DINOV2_THRESHOLD, tilesOf } from './dinov2.service';
+import { strongestPatchDistance, Dinov2Service, tilesOf } from './dinov2.service';
 
 const WIDTH = 32;
 const HEIGHT = 20;
@@ -58,15 +59,15 @@ describe('Dinov2Service', () => {
   const fetchMock = jest.spyOn(global, 'fetch');
   afterEach(() => fetchMock.mockReset());
 
-  const confirm = (service: Dinov2Service, given = gate) =>
-    service.confirmsNoiseForGate(given, Buffer.from('baseline'), Buffer.from('image'));
+  const measure = (service: Dinov2Service, given = gate) =>
+    service.patchDistances(given, Buffer.from('baseline'), Buffer.from('image'));
 
   it('takes the service address with or without a trailing slash, and its own timeout', async () => {
     const { service } = await init({ DINOV2_URL: 'http://dinov2:8000/', DINOV2_TIMEOUT_MS: '5000' });
     const timeout = jest.spyOn(AbortSignal, 'timeout');
     fetchMock.mockResolvedValue(answer({}) as Response);
 
-    await confirm(service);
+    await measure(service);
 
     expect(fetchMock.mock.calls[0][0]).toBe('http://dinov2:8000/v1/patch-distances');
     expect(timeout).toHaveBeenCalledWith(5000);
@@ -79,19 +80,21 @@ describe('Dinov2Service', () => {
     const timeout = jest.spyOn(AbortSignal, 'timeout');
     fetchMock.mockResolvedValue(answer({}) as Response);
 
-    await confirm(service);
+    await measure(service);
 
     expect(timeout).toHaveBeenCalledWith(60_000);
     timeout.mockRestore();
   });
 
-  it('confirms noise when the content did not change', async () => {
+  it('returns the distances the service measured and sends the baseline, image and tiles', async () => {
     const { service } = await init();
-    fetchMock.mockResolvedValue(answer({ [at(3, 3)]: 0.05, [at(3, 4)]: 0.04 }) as Response);
+    const distances = grid({ [at(3, 3)]: 0.05, [at(3, 4)]: 0.6 });
+    fetchMock.mockResolvedValue(answer({ [at(3, 3)]: 0.05, [at(3, 4)]: 0.6 }) as Response);
 
-    expect(await confirm(service)).toEqual({ noise: true, score: 0.05 });
+    expect(await measure(service)).toEqual({ distances, width: WIDTH, height: HEIGHT });
     const [url, request] = fetchMock.mock.calls[0];
     expect(url).toBe('http://dinov2:8000/v1/patch-distances');
+    expect(request?.method).toBe('POST');
     expect(JSON.parse(request?.body as string)).toEqual({
       baseline: Buffer.from('baseline').toString('base64'),
       image: Buffer.from('image').toString('base64'),
@@ -99,41 +102,24 @@ describe('Dinov2Service', () => {
     });
   });
 
-  it('sees a change in content', async () => {
-    const { service } = await init();
-    fetchMock.mockResolvedValue(answer({ [at(3, 3)]: 0.6, [at(3, 4)]: 0.5 }) as Response);
-
-    expect(await confirm(service)).toEqual({ noise: false, score: 0.6 });
-  });
-
-  it.each([
-    [DINOV2_THRESHOLD, true],
-    [DINOV2_THRESHOLD + 0.001, false],
-  ])('takes a score of %p for noise: %p', async (score, noise) => {
-    const { service } = await init();
-    fetchMock.mockResolvedValue(answer({ [at(3, 3)]: score, [at(3, 4)]: score }) as Response);
-
-    expect((await confirm(service)).noise).toBe(noise);
-  });
-
-  it('confirms noise without a call when no patch is marked', async () => {
+  it('measures nothing and sends no request when no patch is marked', async () => {
     const { service } = await init();
 
-    expect(await confirm(service, { ...gate, cells: [] })).toEqual({ noise: true, score: 0 });
+    expect(await measure(service, { ...gate, cells: [] })).toEqual({ distances: [], width: WIDTH, height: HEIGHT });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('sends a gate it cannot read to review instead of throwing', async () => {
+  it('returns null for a gate it cannot read', async () => {
     const { service } = await init();
 
-    expect(await confirm(service, { width: WIDTH, height: HEIGHT } as typeof gate)).toEqual({ noise: false });
+    expect(await measure(service, { width: WIDTH, height: HEIGHT } as typeof gate)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('does not confirm noise without a service configured', async () => {
+  it('returns null without a service configured', async () => {
     const { service } = await init({ DINOV2_URL: '' });
 
-    expect((await confirm(service)).noise).toBe(false);
+    expect(await measure(service)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -146,25 +132,47 @@ describe('Dinov2Service', () => {
     expect(service.isConfigured()).toBe(configured);
   });
 
-  it('does not confirm noise when the answer does not fit the screenshots', async () => {
+  it('returns null when the answer does not fit the screenshots', async () => {
     const { service } = await init();
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ patch: 14, width: 3, height: 3, distances: [0, 0, 0, 0, 0, 0, 0, 0, 0] }),
     } as Response);
 
-    expect((await confirm(service)).noise).toBe(false);
+    expect(await measure(service)).toBeNull();
   });
 
-  it('does not confirm noise when the service fails or is unreachable', async () => {
+  it.each([
+    ['without a distances list', { width: WIDTH, height: HEIGHT }],
+    ['with distances that are not a list', { width: WIDTH, height: HEIGHT, distances: 'none' }],
+    ['with a distance list of the wrong length', { width: WIDTH, height: HEIGHT, distances: [0, 0] }],
+  ])('returns null for an answer %s', async (_, body) => {
     const { service } = await init();
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) } as Response);
-    fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
-    fetchMock.mockRejectedValueOnce('socket hang up');
+    fetchMock.mockResolvedValue({ ok: true, json: async () => body } as Response);
 
-    expect((await confirm(service)).noise).toBe(false);
-    expect((await confirm(service)).noise).toBe(false);
-    expect((await confirm(service)).noise).toBe(false);
+    expect(await measure(service)).toBeNull();
+  });
+
+  it.each([413, 500, 503])('returns null when the service answers %p', async (status) => {
+    const { service } = await init();
+    fetchMock.mockResolvedValue({ ok: false, status, json: async () => ({}) } as Response);
+
+    expect(await measure(service)).toBeNull();
+  });
+
+  it.each([
+    ['is unreachable', new TypeError('fetch failed')],
+    ['times out', new DOMException('The operation was aborted due to timeout', 'TimeoutError')],
+    ['fails with something that is not an Error', 'socket hang up'],
+  ])('returns null once, without a retry, when the service %s', async (_, failure) => {
+    const { service } = await init();
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    fetchMock.mockRejectedValue(failure);
+
+    expect(await measure(service)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
   describe('status', () => {
