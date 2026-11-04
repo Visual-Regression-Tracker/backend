@@ -1,5 +1,6 @@
 import { Baseline, Build, ImageComparison, Project, TestRun, TestVariation } from '@prisma/client';
 import { PNG } from 'pngjs';
+import { DEFAULT_NOISE_ANALYSIS_CONFIG } from '../compare/noise-hint/noise-analysis.config';
 
 export const TEST_PROJECT: Project = {
   id: '1',
@@ -12,6 +13,7 @@ export const TEST_PROJECT: Project = {
   updatedAt: new Date(),
   autoApproveFeature: true,
   imageComparisonConfig: '{ "threshold": 0.1, "ignoreAntialiasing": true, "allowDiffDimensions": false }',
+  noiseAnalysisConfig: JSON.stringify(DEFAULT_NOISE_ANALYSIS_CONFIG),
   imageComparison: ImageComparison.pixelmatch,
   bulkApproveVariations: false,
   bulkApproveGroupBy: 'customTags',
@@ -105,6 +107,7 @@ export const generateTestRun = (testRun?: Partial<TestRun>): TestRun => {
     changeSignature: null,
     imageThumbnailName: null,
     diffThumbnailName: null,
+    noiseAnalysis: null,
     ...testRun,
   };
 };
