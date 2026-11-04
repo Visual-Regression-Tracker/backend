@@ -24,22 +24,31 @@ export function tryReadPng(data: Buffer | Uint8Array): PNG | null {
   }
 }
 
+export function readPair(
+  baselineBytes: Buffer | Uint8Array,
+  imageBytes: Buffer | Uint8Array,
+  ignoreAreas: IgnoreAreaDto[]
+): { baseline: PNG; image: PNG } | { unmeasured: 'unreadable' | 'sizes differ' } {
+  const baseline = tryReadPng(baselineBytes);
+  const image = baseline && tryReadPng(imageBytes);
+  if (!baseline || !image) {
+    return { unmeasured: 'unreadable' };
+  }
+  if (baseline.width !== image.width || baseline.height !== image.height) {
+    return { unmeasured: 'sizes differ' };
+  }
+  applyIgnoreAreas(baseline, ignoreAreas);
+  applyIgnoreAreas(image, ignoreAreas);
+  return { baseline, image };
+}
+
 export function readSameSizePair(
   baselineBytes: Buffer | Uint8Array,
   imageBytes: Buffer | Uint8Array,
   ignoreAreas: IgnoreAreaDto[]
 ): { baseline: PNG; image: PNG } | null {
-  const baseline = tryReadPng(baselineBytes);
-  const image = baseline && tryReadPng(imageBytes);
-  if (!baseline || !image) {
-    return null;
-  }
-  if (baseline.width !== image.width || baseline.height !== image.height) {
-    return null;
-  }
-  applyIgnoreAreas(baseline, ignoreAreas);
-  applyIgnoreAreas(image, ignoreAreas);
-  return { baseline, image };
+  const pair = readPair(baselineBytes, imageBytes, ignoreAreas);
+  return 'unmeasured' in pair ? null : pair;
 }
 
 export function applyIgnoreAreas(image: PNG, ignoreAreas: IgnoreAreaDto[]): PNG {

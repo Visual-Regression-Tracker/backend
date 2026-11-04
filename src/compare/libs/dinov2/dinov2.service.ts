@@ -13,12 +13,6 @@ export interface Dinov2Status {
   available: boolean;
 }
 
-export interface PatchDistances {
-  distances: number[];
-  width: number;
-  height: number;
-}
-
 export function strongestPatchDistance(distances: number[], cells: number[]): number {
   return cells.reduce((strongest, cell) => Math.max(strongest, distances[cell]), 0);
 }
@@ -59,15 +53,11 @@ export class Dinov2Service {
     return this.serviceUrl() !== undefined;
   }
 
-  async patchDistances(gate: PatchGate, baseline: Buffer, image: Buffer): Promise<PatchDistances | null> {
+  async patchDistances(gate: PatchGate, baseline: Buffer, image: Buffer): Promise<number[] | null> {
     const url = this.serviceUrl();
-    if (!url) {
-      this.logger.debug('DINOv2 service is not configured, no patch distances');
-      return null;
-    }
     try {
       if (gate.cells.length === 0) {
-        return { distances: [], width: gate.width, height: gate.height };
+        return [];
       }
 
       const timeoutMs = positiveNumber(this.configService.get('DINOV2_TIMEOUT_MS'), DEFAULT_TIMEOUT_MS);
@@ -84,7 +74,7 @@ export class Dinov2Service {
       if (!response.ok) {
         throw new Error(`service answered ${response.status}`);
       }
-      const answer: PatchDistances = await response.json();
+      const answer: { distances: number[]; width: number; height: number } = await response.json();
       if (answer.width !== gate.width || answer.height !== gate.height) {
         throw new Error(
           `service measured ${answer.width}x${answer.height} patches, expected ${gate.width}x${gate.height}`
@@ -93,7 +83,7 @@ export class Dinov2Service {
       if (!Array.isArray(answer.distances) || answer.distances.length !== answer.width * answer.height) {
         throw new Error('service answered without a distance for every patch');
       }
-      return { distances: answer.distances, width: answer.width, height: answer.height };
+      return answer.distances;
     } catch (error) {
       this.logger.warn(`DINOv2 patch distances failed: ${messageOf(error)}`);
       return null;

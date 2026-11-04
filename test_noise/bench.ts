@@ -48,7 +48,7 @@ const patchDistances: Dinov2Service['patchDistances'] = async (gate) => {
   for (const [cell, distance] of Object.entries(recorded.cells)) {
     distances[Number(cell)] = distance;
   }
-  return { distances, width: recorded.width, height: recorded.height };
+  return distances;
 };
 
 const service = new NoiseHintService(

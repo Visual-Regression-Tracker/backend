@@ -169,6 +169,7 @@ describe('computeBlurAmplitude', () => {
     image: encode(block),
     ignoreAreas: [],
     thresholds: DEFAULT_NOISE_ANALYSIS_CONFIG.blur,
+    wantGate: true,
     ...overrides,
   });
 
@@ -187,11 +188,19 @@ describe('computeBlurAmplitude', () => {
   it('has no answer for screenshots of different sizes', () => {
     const smaller = encode({ data: Buffer.alloc(4 * 4 * 4, 255), width: 4, height: 4 });
 
-    expect(computeBlurAmplitude(job({ image: smaller })).measure).toBeNull();
+    expect(computeBlurAmplitude(job({ image: smaller }))).toEqual({
+      measure: null,
+      unmeasured: 'sizes differ',
+      densest: [],
+    });
   });
 
   it('has no answer for bytes that are not a PNG', () => {
-    expect(computeBlurAmplitude(job({ image: Buffer.from('not a png') })).measure).toBeNull();
+    expect(computeBlurAmplitude(job({ image: Buffer.from('not a png') }))).toEqual({
+      measure: null,
+      unmeasured: 'unreadable',
+      densest: [],
+    });
   });
 
   it('reads the Uint8Array views a worker message turns Buffers into', () => {
@@ -225,11 +234,14 @@ describe('computeBlurAmplitude', () => {
     });
 
     it('is absent for screenshots it cannot line up', () => {
-      expect(computeBlurAmplitude(noise({ image: Buffer.from('not a png') }))).toEqual({
-        measure: null,
-        density: 0,
-        densest: [],
-      });
+      expect(computeBlurAmplitude(noise({ image: Buffer.from('not a png') })).gate).toBeUndefined();
+    });
+
+    it('is not asked for when the job does not want it', () => {
+      const output = computeBlurAmplitude(noise({ wantGate: false }));
+
+      expect(output.measure?.amplitude).toBeLessThanOrEqual(BLUR_AMPLITUDE_THRESHOLD);
+      expect(output.gate).toBeUndefined();
     });
 
     it('follows the thresholds of the job', () => {
@@ -271,20 +283,19 @@ describe('computeBlurAmplitude', () => {
     it('finds a digit-like blob as one dense window', () => {
       const output = run(digit(9, 8));
 
-      expect(output.density).toBeGreaterThanOrEqual((DENSITY_WINDOW * DENSITY_WINDOW) / 2);
+      expect(output.densest[0].weight).toBeGreaterThanOrEqual((DENSITY_WINDOW * DENSITY_WINDOW) / 2);
       expect(output.densest).toEqual([{ x: 6, y: 7, width: 8, height: 8, weight: 35 }]);
     });
 
     it('gives the same density wherever the blob sits against the 8 px grid', () => {
-      expect(run(digit(9, 8)).density).toBe(35);
-      expect(run(digit(5, 5)).density).toBe(35);
-      expect(run(digit(12, 13)).density).toBe(35);
+      expect(run(digit(9, 8)).densest[0].weight).toBe(35);
+      expect(run(digit(5, 5)).densest[0].weight).toBe(35);
+      expect(run(digit(12, 13)).densest[0].weight).toBe(35);
     });
 
     it('keeps sparse dots below a few pixels per window', () => {
       const output = run(canvas((x, y) => x % 4 === 2 && y % 8 === 3));
 
-      expect(output.density).toBeLessThanOrEqual(3);
       expect(output.densest.every(({ weight }) => weight <= 3)).toBe(true);
     });
 
@@ -299,7 +310,6 @@ describe('computeBlurAmplitude', () => {
         [0, 23, 4],
         [0, 13, 3],
       ]);
-      expect(output.density).toBe(7);
     });
 
     it('does not list a window that overlaps a denser one', () => {
@@ -326,7 +336,7 @@ describe('computeBlurAmplitude', () => {
     });
 
     it('keeps windows inside the image', () => {
-      const output = analyseDifference(blank, pixel(19, 19), DEFAULT_NOISE_ANALYSIS_CONFIG.blur);
+      const output = analyseDifference(blank, pixel(19, 19), DEFAULT_NOISE_ANALYSIS_CONFIG.blur, true);
 
       expect(output.densest).toEqual([{ x: 12, y: 12, width: 8, height: 8, weight: 1 }]);
     });
@@ -338,20 +348,19 @@ describe('computeBlurAmplitude', () => {
         return { data, width: 5, height: 6 };
       };
 
-      const output = analyseDifference(tiny([]), tiny([0, 29]), DEFAULT_NOISE_ANALYSIS_CONFIG.blur);
+      const output = analyseDifference(tiny([]), tiny([0, 29]), DEFAULT_NOISE_ANALYSIS_CONFIG.blur, true);
 
-      expect(output.density).toBe(2);
       expect(output.densest).toEqual([{ x: 0, y: 0, width: 5, height: 6, weight: 2 }]);
     });
 
     it('leaves out what the ignore areas cover', () => {
       const output = run(digit(9, 8), { ignoreAreas: [{ x: 0, y: 0, width: CANVAS, height: CANVAS }] });
 
-      expect(output).toMatchObject({ density: 0, densest: [] });
+      expect(output).toMatchObject({ densest: [] });
     });
 
     it('is zero for identical screenshots', () => {
-      expect(run(emptyCanvas)).toMatchObject({ density: 0, densest: [] });
+      expect(run(emptyCanvas)).toMatchObject({ densest: [] });
     });
 
     it('is not measured beyond the size limit', () => {
@@ -362,9 +371,9 @@ describe('computeBlurAmplitude', () => {
       b.data[0] = 0;
       b.data[b.data.length - 4] = 0;
 
-      expect(analyseDifference(a, b, DEFAULT_NOISE_ANALYSIS_CONFIG.blur)).toEqual({
+      expect(analyseDifference(a, b, DEFAULT_NOISE_ANALYSIS_CONFIG.blur, true)).toEqual({
         measure: null,
-        density: 0,
+        unmeasured: 'image too large',
         densest: [],
       });
     });

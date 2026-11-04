@@ -1,5 +1,5 @@
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { RawImage, readSameSizePair } from '../../utils';
+import { RawImage, readPair } from '../../utils';
 import { NoiseAnalysisThresholds, NoiseRegion } from '../../noise-hint/noise-analysis.types';
 import { DINOV2_PATCH, gateOfDecoded, PatchGate } from './patch-gate.core';
 
@@ -15,11 +15,14 @@ export interface BlurAmplitudeJobInput {
   image: Buffer | Uint8Array;
   ignoreAreas: IgnoreAreaDto[];
   thresholds: NoiseAnalysisThresholds['blur'];
+  wantGate: boolean;
 }
+
+export type UnmeasuredReason = 'sizes differ' | 'image too large' | 'unreadable';
 
 export interface BlurAmplitudeJobOutput {
   measure: BlurredDifference | null;
-  density: number;
+  unmeasured?: UnmeasuredReason;
   densest: NoiseRegion[];
   gate?: PatchGate;
 }
@@ -34,7 +37,11 @@ export const MAX_MEASURED_PIXELS = 16_000_000;
 export const DENSITY_WINDOW = 8;
 const MAX_DENSEST = 5;
 
-const notMeasured = (): BlurAmplitudeJobOutput => ({ measure: null, density: 0, densest: [] });
+const notMeasured = (unmeasured: UnmeasuredReason): BlurAmplitudeJobOutput => ({
+  measure: null,
+  unmeasured,
+  densest: [],
+});
 
 export function looksLikeNoise(measure: BlurredDifference, thresholds: NoiseAnalysisThresholds['blur']): boolean {
   return measure.amplitude <= thresholds.amplitudeThreshold && measure.solidShare <= thresholds.solidShareMax;
@@ -43,22 +50,25 @@ export function looksLikeNoise(measure: BlurredDifference, thresholds: NoiseAnal
 export function analyseDifference(
   baseline: RawImage,
   image: RawImage,
-  thresholds: NoiseAnalysisThresholds['blur']
+  thresholds: NoiseAnalysisThresholds['blur'],
+  wantGate: boolean
 ): BlurAmplitudeJobOutput {
   const box = changedBox(baseline, image);
   const measure = measureInBox(baseline, image, box);
   if (!measure) {
-    return notMeasured();
+    return notMeasured('image too large');
   }
-  const { density, densest } = box ? windowDensity(baseline, image, box) : { density: 0, densest: [] };
-  return looksLikeNoise(measure, thresholds)
-    ? { measure, density, densest, gate: gateOfDecoded(baseline, image, DINOV2_PATCH) }
-    : { measure, density, densest };
+  const densest = box ? windowDensity(baseline, image, box) : [];
+  return wantGate && looksLikeNoise(measure, thresholds)
+    ? { measure, densest, gate: gateOfDecoded(baseline, image, DINOV2_PATCH) }
+    : { measure, densest };
 }
 
 export function computeBlurAmplitude(input: BlurAmplitudeJobInput): BlurAmplitudeJobOutput {
-  const pair = readSameSizePair(input.baseline, input.image, input.ignoreAreas);
-  return pair ? analyseDifference(pair.baseline, pair.image, input.thresholds) : notMeasured();
+  const pair = readPair(input.baseline, input.image, input.ignoreAreas);
+  return 'unmeasured' in pair
+    ? notMeasured(pair.unmeasured)
+    : analyseDifference(pair.baseline, pair.image, input.thresholds, input.wantGate);
 }
 
 function gaussianKernel(sigma: number): Float32Array {
@@ -123,7 +133,7 @@ function windowDensity(
   { data: a, width, height }: RawImage,
   { data: b }: RawImage,
   { minX, minY, maxX, maxY }: Box
-): { density: number; densest: NoiseRegion[] } {
+): NoiseRegion[] {
   const windowWidth = Math.min(DENSITY_WINDOW, width);
   const windowHeight = Math.min(DENSITY_WINDOW, height);
   const left = Math.max(0, minX - windowWidth + 1);
@@ -181,7 +191,7 @@ function windowDensity(
       );
     }
   }
-  return { density: densest[0]?.weight ?? 0, densest };
+  return densest;
 }
 
 function sourceIndex(from: number, to: number, radius: number, size: number, boxMin: number, boxMax: number) {

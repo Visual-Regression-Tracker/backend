@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { ImageComparison, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { generateTestRun, TEST_PROJECT } from '../../_data_';
 import { DiffWorkerPool } from '../diff-worker-pool';
-import { Dinov2Service, PatchDistances } from '../libs/dinov2/dinov2.service';
+import { Dinov2Service } from '../libs/dinov2/dinov2.service';
 import { BlurAmplitudeJobOutput, MAX_MEASURED_PIXELS } from '../libs/pixelmatch/blur-amplitude.core';
 import { PatchGate } from '../libs/pixelmatch/patch-gate.core';
 import { pngBytes, solidPng } from '../test-utils';
@@ -35,7 +35,6 @@ const GATE: PatchGate = { width: 4, height: 4, cells: [0, 5, 10] };
 
 const noiseOutput = (patch: Partial<BlurAmplitudeJobOutput> = {}): BlurAmplitudeJobOutput => ({
   measure: { amplitude: 40, solidPixels: 0, solidShare: 0 },
-  density: 11,
   densest: [{ x: 8, y: 8, width: 8, height: 8, weight: 11 }],
   gate: GATE,
   ...patch,
@@ -43,15 +42,11 @@ const noiseOutput = (patch: Partial<BlurAmplitudeJobOutput> = {}): BlurAmplitude
 
 const changeOutput = (): BlurAmplitudeJobOutput => ({
   measure: { amplitude: 120, solidPixels: 0, solidShare: 0 },
-  density: 30,
   densest: [{ x: 0, y: 0, width: 8, height: 8, weight: 30 }],
 });
 
-const distances = (values: Record<number, number>, size = 16): PatchDistances => ({
-  distances: Array.from({ length: size }, (_, i) => values[i] ?? 0),
-  width: 4,
-  height: 4,
-});
+const distances = (values: Record<number, number>, size = 16): number[] =>
+  Array.from({ length: size }, (_, i) => values[i] ?? 0);
 
 const settled = async (done: () => boolean) => {
   for (let i = 0; i < 200 && !done(); i++) {
@@ -172,6 +167,7 @@ describe('NoiseHintService.analyse', () => {
         { x: 5, y: 6, width: 7, height: 8 },
       ],
       thresholds: { amplitudeThreshold: 80, solidShareMax: 0.01 },
+      wantGate: true,
     });
   });
 
@@ -225,9 +221,19 @@ describe('NoiseHintService.analyse', () => {
 
     it('says "image too large" when the worker could not measure the pair', async () => {
       const { service, pool } = build();
-      pool.run.mockResolvedValue({ measure: null, density: 0, densest: [] });
+      pool.run.mockResolvedValue({ measure: null, unmeasured: 'image too large', densest: [] });
 
       expectUnknown(await service.analyse(analysedRun(), config()), 'image too large');
+    });
+
+    it.each([
+      ['sizes differ', 'sizes differ'],
+      ['unreadable', 'image too large'],
+    ] as const)('maps the worker reason "%s" to "%s"', async (unmeasured, reason) => {
+      const { service, pool } = build();
+      pool.run.mockResolvedValue({ measure: null, unmeasured, densest: [] });
+
+      expectUnknown(await service.analyse(analysedRun(), config()), reason);
     });
 
     it('lets the worker try images whose header cannot be read', async () => {
@@ -272,7 +278,6 @@ describe('NoiseHintService.analyse', () => {
       const { service, pool } = build();
       pool.run.mockResolvedValue({
         measure: { amplitude: 10, solidPixels: 100, solidShare: 0.5 },
-        density: 4,
         densest: [],
       });
 
@@ -292,6 +297,34 @@ describe('NoiseHintService.analyse', () => {
       expect(result.dinov2).toEqual({ skipped: 'off' });
       expect(result).toMatchObject({ verdict: 'noise', score: 0.5 });
       expect(dinov2.patchDistances).not.toHaveBeenCalled();
+    });
+
+    it('asks the worker for a patch gate only when DINOv2 can be used', async () => {
+      const { service, pool, dinov2 } = build();
+      const asked = () => pool.run.mock.calls.at(-1)?.[0].wantGate;
+
+      await service.analyse(analysedRun(), config());
+      expect(asked()).toBe(true);
+
+      await service.analyse(analysedRun(), config({ dinov2: { enabled: false, distanceThreshold: 0.15 } }));
+      expect(asked()).toBe(false);
+
+      dinov2.isConfigured.mockReturnValue(false);
+      await service.analyse(analysedRun(), config());
+      expect(asked()).toBe(false);
+    });
+
+    it('reports DINOv2 as "off" for a noise-like pair without asking for a gate', async () => {
+      const { service, pool } = build();
+      pool.run.mockResolvedValue(noiseOutput({ gate: undefined }));
+
+      const result = await service.analyse(
+        analysedRun(),
+        config({ dinov2: { enabled: false, distanceThreshold: 0.15 } })
+      );
+
+      expect(pool.run).toHaveBeenCalledWith(expect.objectContaining({ wantGate: false }));
+      expect(result.dinov2).toEqual({ skipped: 'off' });
     });
 
     it('skips DINOv2 as "off" when DINOV2_URL is not set', async () => {
@@ -384,7 +417,7 @@ describe('NoiseHintService.analyse', () => {
       const odd = pngBytes(solidPng(20, 30));
       staticService.getImageBuffer.mockResolvedValue(odd);
       pool.run.mockResolvedValue(noiseOutput({ gate: { width: 2, height: 3, cells: [1, 4, 5] } }));
-      dinov2.patchDistances.mockResolvedValue({ distances: [0, 0.3, 0, 0, 0.29, 0.28], width: 2, height: 3 });
+      dinov2.patchDistances.mockResolvedValue([0, 0.3, 0, 0, 0.29, 0.28]);
 
       const result = await service.analyse(analysedRun(), config());
 
@@ -411,11 +444,7 @@ describe('NoiseHintService.analyse', () => {
       const { service, pool, dinov2 } = build();
       const cells = Array.from({ length: 14 }, (_, i) => i);
       pool.run.mockResolvedValue(noiseOutput({ gate: { width: 14, height: 1, cells } }));
-      dinov2.patchDistances.mockResolvedValue({
-        distances: cells.map((cell) => 0.1 + cell / 1000),
-        width: 14,
-        height: 1,
-      });
+      dinov2.patchDistances.mockResolvedValue(cells.map((cell) => 0.1 + cell / 1000));
 
       const result = await service.analyse(analysedRun(), config());
 

@@ -91,7 +91,7 @@ describe('Dinov2Service', () => {
     const distances = grid({ [at(3, 3)]: 0.05, [at(3, 4)]: 0.6 });
     fetchMock.mockResolvedValue(answer({ [at(3, 3)]: 0.05, [at(3, 4)]: 0.6 }) as Response);
 
-    expect(await measure(service)).toEqual({ distances, width: WIDTH, height: HEIGHT });
+    expect(await measure(service)).toEqual(distances);
     const [url, request] = fetchMock.mock.calls[0];
     expect(url).toBe('http://dinov2:8000/v1/patch-distances');
     expect(request?.method).toBe('POST');
@@ -105,7 +105,7 @@ describe('Dinov2Service', () => {
   it('measures nothing and sends no request when no patch is marked', async () => {
     const { service } = await init();
 
-    expect(await measure(service, { ...gate, cells: [] })).toEqual({ distances: [], width: WIDTH, height: HEIGHT });
+    expect(await measure(service, { ...gate, cells: [] })).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -113,13 +113,6 @@ describe('Dinov2Service', () => {
     const { service } = await init();
 
     expect(await measure(service, { width: WIDTH, height: HEIGHT } as typeof gate)).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('returns null without a service configured', async () => {
-    const { service } = await init({ DINOV2_URL: '' });
-
-    expect(await measure(service)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
