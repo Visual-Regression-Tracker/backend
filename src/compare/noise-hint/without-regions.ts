@@ -1,3 +1,4 @@
+import { isJsonObject } from '../../utils';
 import {
   BlurStageResult,
   Dinov2Stage,
@@ -23,7 +24,7 @@ const dropRegions = <T extends { regions: NoiseRegion[] }>(stage: T): Omit<T, 'r
 };
 
 const dropDinov2Regions = (stage: Dinov2Stage | null): NoiseAnalysisSummary['dinov2'] =>
-  stage !== null && 'regions' in stage ? dropRegions(stage) : stage;
+  isJsonObject(stage) && 'regions' in stage ? dropRegions(stage as Dinov2StageResult) : stage;
 
 export function withoutRegions(json: unknown): TestRunNoiseAnalysisSummary | null {
   const analysis = readNoiseAnalysis(json);
@@ -35,7 +36,7 @@ export function withoutRegions(json: unknown): TestRunNoiseAnalysisSummary | nul
   }
   return {
     ...analysis,
-    blur: analysis.blur && dropRegions(analysis.blur),
+    blur: isJsonObject(analysis.blur) ? dropRegions(analysis.blur as BlurStageResult) : analysis.blur,
     dinov2: dropDinov2Regions(analysis.dinov2),
   };
 }

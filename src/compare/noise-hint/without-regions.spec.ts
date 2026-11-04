@@ -69,4 +69,16 @@ describe('withoutRegions', () => {
 
     expect(withoutRegions(analysis)).toEqual(analysis);
   });
+
+  it.each([
+    ['no stages', { version: 1, verdict: 'noise' }],
+    ['no first stage', { version: 1, verdict: 'noise', dinov2: { skipped: 'off' } }],
+    ['a non-object second stage', { version: 1, verdict: 'noise', blur: null, dinov2: 'off' }],
+  ])('passes a stored result with %s through unchanged', (_, stored) => {
+    expect(withoutRegions(stored)).toEqual(stored);
+  });
+
+  it('returns a result without a pending flag unchanged', () => {
+    expect(withoutRegions({ pending: false })).toEqual({ pending: false });
+  });
 });
