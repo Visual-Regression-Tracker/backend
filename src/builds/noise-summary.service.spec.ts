@@ -30,7 +30,7 @@ const haveHistory = ({ prisma }: Setup, shares: [number, number][]) => {
   prisma.build.findMany.mockResolvedValue(ids);
   prisma.testRun.groupBy.mockImplementation(async ({ by, where }) => {
     if (by[0] !== 'buildId') return [];
-    const noise = JSON.stringify(where).includes('"noise"') && !JSON.stringify(where).includes('"change"');
+    const noise = Boolean(where.noiseAnalysis);
     return shares.map(([analysedCount, noiseCount], i) => ({
       buildId: `h${i}`,
       _count: { _all: noise ? noiseCount : analysedCount },
@@ -158,9 +158,7 @@ describe('NoiseSummaryService', () => {
     prisma.build.findMany.mockResolvedValue([0, 1, 2, 3, 4].map((i) => ({ id: `h${i}` })));
     prisma.testRun.groupBy.mockImplementation(async ({ by, where }) => {
       if (by[0] !== 'buildId') return [];
-      return JSON.stringify(where).includes('"noise"') && !JSON.stringify(where).includes('"change"')
-        ? []
-        : [0, 1, 2, 3, 4].map((i) => ({ buildId: `h${i}`, _count: { _all: 3 } }));
+      return where.noiseAnalysis ? [] : [0, 1, 2, 3, 4].map((i) => ({ buildId: `h${i}`, _count: { _all: 3 } }));
     });
 
     expect((await setupResult.service.forBuild('b0')).projectTypical).toBe(0);

@@ -366,6 +366,8 @@ describe('change signature', () => {
 });
 
 describe('ignoreRenderingNoise', () => {
+  afterEach(() => mocked(Pixelmatch).mockReset());
+
   const hairline = (column: number): Buffer =>
     pngBytes(paintedPng(60, 60, (x) => (x === column ? [0, 0, 0] : undefined)));
 

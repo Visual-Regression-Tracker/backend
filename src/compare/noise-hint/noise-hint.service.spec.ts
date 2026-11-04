@@ -431,6 +431,8 @@ describe('NoiseHintService.analyse', () => {
 });
 
 describe('NoiseHintService.enqueue', () => {
+  afterEach(() => jest.restoreAllMocks());
+
   const isPending = ([run]: [TestRun]) => (run.noiseAnalysis as { pending?: boolean } | null)?.pending === true;
 
   const announced = (h: ReturnType<typeof build>) => h.events.testRunUpdated.mock.calls.filter(isPending);
@@ -529,10 +531,10 @@ describe('NoiseHintService.enqueue', () => {
     const answer = await h.service.enqueue(['a', 'b']);
 
     expect(answer).toEqual({ queued: 2, skipped: [] });
+    expect(announced(h)).toHaveLength(2);
     expect(error).toHaveBeenCalledWith(expect.stringContaining('socket gone'));
     await analysed(h, 2);
     expect(stored(h, 'b')).toMatchObject({ version: 1 });
-    error.mockRestore();
   });
 
   it('queues the runs and logs when reading them back fails', async () => {
@@ -549,7 +551,6 @@ describe('NoiseHintService.enqueue', () => {
     expect(answer).toEqual({ queued: 1, skipped: [] });
     expect(error).toHaveBeenCalledWith(expect.stringContaining('db gone'));
     await analysed(h, 1);
-    error.mockRestore();
   });
 
   it('does not write anything when nothing is eligible', async () => {
@@ -916,7 +917,6 @@ describe('NoiseHintService.enqueue', () => {
       expect(stored(h, 'b')).toMatchObject({ version: 1 });
       expect(error).toHaveBeenCalledTimes(1);
       expect(error).toHaveBeenCalledWith(expect.stringContaining('worker crashed'));
-      error.mockRestore();
     });
 
     it('logs and moves on when even the reset fails', async () => {
@@ -932,7 +932,6 @@ describe('NoiseHintService.enqueue', () => {
 
       expect(error).toHaveBeenCalledWith(expect.stringContaining('db gone'));
       expect(stored(h, 'b')).toMatchObject({ version: 1 });
-      error.mockRestore();
     });
   });
 });
