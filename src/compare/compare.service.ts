@@ -11,7 +11,7 @@ import { VlmService } from './libs/vlm/vlm.service';
 import { isHddStaticServiceConfigured } from '../static/utils';
 import { DiffWorkerPool } from './diff-worker-pool';
 import { SignatureJobInput, SignatureJobOutput } from './libs/pixelmatch/signature.core';
-import { splitRenderingNoiseConfig } from './libs/rendering-noise.config';
+import { withoutRenderingNoiseFlag } from './libs/rendering-noise.config';
 
 @Injectable()
 export class CompareService {
@@ -38,8 +38,7 @@ export class CompareService {
     const project: Project =
       loadedProject ?? (await this.prismaService.project.findUnique({ where: { id: projectId } }))!;
     const comparator = this.getComparator(project.imageComparison);
-    const { comparatorConfig } = splitRenderingNoiseConfig(comparator.parseConfig(project.imageComparisonConfig));
-    return comparator.getDiff(data, comparatorConfig);
+    return comparator.getDiff(data, withoutRenderingNoiseFlag(comparator.parseConfig(project.imageComparisonConfig)));
   }
 
   async getChangeSignature(input: Omit<SignatureJobInput, 'kind'>): Promise<SignatureJobOutput> {

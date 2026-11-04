@@ -20,6 +20,14 @@ describe('withoutRegions', () => {
     expect(withoutRegions(null)).toBeNull();
   });
 
+  it.each([
+    ['a string', 'text'],
+    ['a number', 3],
+    ['an array', []],
+  ])('returns null for %s', (_, value) => {
+    expect(withoutRegions(value as unknown as NoiseAnalysisResult)).toBeNull();
+  });
+
   it('passes the pending marker through unchanged', () => {
     const pending: NoiseAnalysisPending = { pending: true, requestedAt: '2026-11-04T10:00:00.000Z' };
 

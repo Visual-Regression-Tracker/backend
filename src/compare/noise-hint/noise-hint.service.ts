@@ -39,12 +39,16 @@ const thresholdsOf = (config: NoiseAnalysisConfig): NoiseAnalysisThresholds => (
   dinov2: { distanceThreshold: config.dinov2.distanceThreshold },
 });
 
-const pendingSince = (value: Prisma.JsonValue): string | null =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) && value.pending === true
-    ? typeof value.requestedAt === 'string'
-      ? value.requestedAt
-      : null
-    : null;
+const pendingSince = (value: Prisma.JsonValue): string | null => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || value.pending !== true) {
+    return null;
+  }
+  return typeof value.requestedAt === 'string' ? value.requestedAt : null;
+};
+
+const markedAt = (requestedAt: string): Prisma.TestRunWhereInput => ({
+  noiseAnalysis: { path: ['requestedAt'], equals: requestedAt },
+});
 
 @Injectable()
 export class NoiseHintService implements OnApplicationShutdown {
@@ -84,14 +88,14 @@ export class NoiseHintService implements OnApplicationShutdown {
     }
     const baselineSize = readPngDimensions(baseline);
     const imageSize = readPngDimensions(image);
-    const sameSize = baselineSize && imageSize;
-    if (sameSize && (baselineSize.width !== imageSize.width || baselineSize.height !== imageSize.height)) {
+    const measurable = baselineSize && imageSize;
+    if (measurable && (baselineSize.width !== imageSize.width || baselineSize.height !== imageSize.height)) {
       return unknown('sizes differ');
     }
     if (!run.diffName) {
       return unknown('no diff');
     }
-    if (sameSize && baselineSize.width * baselineSize.height > MAX_MEASURED_PIXELS) {
+    if (measurable && baselineSize.width * baselineSize.height > MAX_MEASURED_PIXELS) {
       return unknown('image too large');
     }
 
@@ -212,10 +216,16 @@ export class NoiseHintService implements OnApplicationShutdown {
         where: {
           id: { in: ids },
           status: TestStatus.unresolved,
-          noiseAnalysis: { path: ['requestedAt'], equals: requestedAt },
+          ...markedAt(requestedAt),
         },
       });
-      marked.forEach((run) => this.eventsGateway.testRunUpdated(run));
+      marked.forEach((run) => {
+        try {
+          this.eventsGateway.testRunUpdated(run);
+        } catch (error) {
+          this.logger.error(`Could not announce test run ${run.id} queued for noise analysis: ${messageOf(error)}`);
+        }
+      });
     } catch (error) {
       this.logger.error(`Could not announce runs queued for noise analysis: ${messageOf(error)}`);
     }
@@ -303,7 +313,7 @@ export class NoiseHintService implements OnApplicationShutdown {
     where: Prisma.TestRunWhereInput = {}
   ): Promise<boolean> {
     const { count } = await this.prismaService.testRun.updateMany({
-      where: { ...where, id, noiseAnalysis: { path: ['requestedAt'], equals: requestedAt } },
+      where: { ...where, id, ...markedAt(requestedAt) },
       data: { noiseAnalysis: value },
     });
     if (count === 0) {

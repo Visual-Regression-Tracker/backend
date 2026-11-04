@@ -36,14 +36,14 @@ const MAX_DENSEST = 5;
 
 const notMeasured = (): BlurAmplitudeJobOutput => ({ measure: null, density: 0, densest: [] });
 
-export function looksLikeNoise(measure: BlurredDifference, thresholds: BlurAmplitudeJobInput['thresholds']): boolean {
+export function looksLikeNoise(measure: BlurredDifference, thresholds: NoiseAnalysisThresholds['blur']): boolean {
   return measure.amplitude <= thresholds.amplitudeThreshold && measure.solidShare <= thresholds.solidShareMax;
 }
 
 export function analyseDifference(
   baseline: RawImage,
   image: RawImage,
-  thresholds: BlurAmplitudeJobInput['thresholds']
+  thresholds: NoiseAnalysisThresholds['blur']
 ): BlurAmplitudeJobOutput {
   const box = changedBox(baseline, image);
   const measure = measureInBox(baseline, image, box);

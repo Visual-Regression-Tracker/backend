@@ -26,7 +26,10 @@ const dropDinov2Regions = (stage: Dinov2Stage | null): NoiseAnalysisSummary['din
   stage !== null && 'regions' in stage ? dropRegions(stage) : stage;
 
 export function withoutRegions(analysis: TestRunNoiseAnalysis | null): TestRunNoiseAnalysisSummary | null {
-  if (analysis === null || 'pending' in analysis) {
+  if (typeof analysis !== 'object' || analysis === null || Array.isArray(analysis)) {
+    return null;
+  }
+  if ('pending' in analysis) {
     return analysis;
   }
   return {
