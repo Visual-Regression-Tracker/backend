@@ -431,8 +431,13 @@ describe('NoiseHintService.analyse', () => {
 });
 
 describe('NoiseHintService.enqueue', () => {
-  const analysed = async (h: ReturnType<typeof build>, count: number) =>
-    settled(() => h.events.testRunUpdated.mock.calls.length >= count);
+  const isPending = ([run]: [TestRun]) => (run.noiseAnalysis as { pending?: boolean } | null)?.pending === true;
+
+  const announced = (h: ReturnType<typeof build>) => h.events.testRunUpdated.mock.calls.filter(isPending);
+
+  const resultEvents = (h: ReturnType<typeof build>) => h.events.testRunUpdated.mock.calls.filter((c) => !isPending(c));
+
+  const analysed = async (h: ReturnType<typeof build>, count: number) => settled(() => resultEvents(h).length >= count);
 
   const stored = (h: ReturnType<typeof build>, id: string) =>
     h.store.get(id)?.noiseAnalysis as unknown as NoiseAnalysisResult | { pending: true; requestedAt: string } | null;
@@ -460,6 +465,91 @@ describe('NoiseHintService.enqueue', () => {
     expect(stored(h, 'a')).toMatchObject({ version: 1, verdict: 'noise' });
     expect(stored(h, 'b')).toMatchObject({ version: 1, verdict: 'noise' });
     expect(h.events.testRunUpdated).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }));
+  });
+
+  it('announces each marked run once, carrying the pending marker', async () => {
+    const h = build();
+    h.add('a');
+    h.add('b');
+    const gate = deferred<BlurAmplitudeJobOutput>();
+    h.pool.run.mockReturnValueOnce(gate.promise);
+
+    await h.service.enqueue(['a', 'b']);
+
+    expect(announced(h).map(([run]) => run.id)).toEqual(['a', 'b']);
+    announced(h).forEach(([run]) =>
+      expect(run.noiseAnalysis).toEqual({ pending: true, requestedAt: expect.any(String) })
+    );
+    gate.resolve(noiseOutput());
+    await analysed(h, 2);
+  });
+
+  it('announces only the runs it marked when one was decided before the write', async () => {
+    const h = build();
+    h.add('a');
+    h.add('b');
+    const lookup = h.prisma.testRun.findMany.getMockImplementation() as (args: {
+      where: Where;
+    }) => Promise<StoredRun[]>;
+    h.prisma.testRun.findMany.mockImplementationOnce(async (args: { where: Where }) => {
+      const runs = await lookup(args);
+      h.store.set('a', { ...(h.store.get('a') as StoredRun), status: TestStatus.approved });
+      return runs;
+    });
+    const gate = deferred<BlurAmplitudeJobOutput>();
+    h.pool.run.mockReturnValueOnce(gate.promise);
+
+    await h.service.enqueue(['a', 'b']);
+
+    expect(announced(h).map(([run]) => run.id)).toEqual(['b']);
+    gate.resolve(noiseOutput());
+    await analysed(h, 1);
+  });
+
+  it('announces nothing when the write marked no run', async () => {
+    const h = build();
+    h.add('a');
+    h.prisma.testRun.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await h.service.enqueue(['a']);
+
+    expect(h.prisma.testRun.findMany).toHaveBeenCalledTimes(1);
+    expect(announced(h)).toHaveLength(0);
+  });
+
+  it('queues the runs and logs when announcing them fails', async () => {
+    const h = build();
+    h.add('a');
+    h.add('b');
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    h.events.testRunUpdated.mockImplementationOnce(() => {
+      throw new Error('socket gone');
+    });
+
+    const answer = await h.service.enqueue(['a', 'b']);
+
+    expect(answer).toEqual({ queued: 2, skipped: [] });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('socket gone'));
+    await analysed(h, 2);
+    expect(stored(h, 'b')).toMatchObject({ version: 1 });
+    error.mockRestore();
+  });
+
+  it('queues the runs and logs when reading them back fails', async () => {
+    const h = build();
+    h.add('a');
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const lookup = h.prisma.testRun.findMany.getMockImplementation() as (args: {
+      where: Where;
+    }) => Promise<StoredRun[]>;
+    h.prisma.testRun.findMany.mockImplementationOnce(lookup).mockRejectedValueOnce(new Error('db gone'));
+
+    const answer = await h.service.enqueue(['a']);
+
+    expect(answer).toEqual({ queued: 1, skipped: [] });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('db gone'));
+    await analysed(h, 1);
+    error.mockRestore();
   });
 
   it('does not write anything when nothing is eligible', async () => {
@@ -752,7 +842,7 @@ describe('NoiseHintService.enqueue', () => {
         await changeDuringAnalysis(h, { noiseAnalysis: null });
 
         expect(stored(h, 'a')).toBeNull();
-        expect(h.events.testRunUpdated).not.toHaveBeenCalled();
+        expect(resultEvents(h)).toHaveLength(0);
       });
 
       it('does not write the stale result over a newer request', async () => {
@@ -763,7 +853,7 @@ describe('NoiseHintService.enqueue', () => {
         await changeDuringAnalysis(h, { noiseAnalysis: newer });
 
         expect(stored(h, 'a')).toEqual(newer);
-        expect(h.events.testRunUpdated).not.toHaveBeenCalled();
+        expect(resultEvents(h)).toHaveLength(0);
       });
 
       it('clears the marker instead of writing a result when the run was decided meanwhile', async () => {
@@ -774,7 +864,7 @@ describe('NoiseHintService.enqueue', () => {
         await analysed(h, 1);
 
         expect(stored(h, 'a')).toBeNull();
-        expect(h.events.testRunUpdated).toHaveBeenCalledTimes(1);
+        expect(resultEvents(h)).toHaveLength(1);
       });
 
       it('guards the result write with the status and the marker it read', async () => {
@@ -805,7 +895,7 @@ describe('NoiseHintService.enqueue', () => {
       await h.service.enqueue(['a']);
       await settled(() => h.prisma.testRun.findUnique.mock.calls.length === 2);
 
-      expect(h.events.testRunUpdated).not.toHaveBeenCalled();
+      expect(resultEvents(h)).toHaveLength(0);
     });
 
     it('resets the field to null, logs once and carries on when an analysis fails', async () => {

@@ -169,10 +169,13 @@ export class NoiseHintService implements OnApplicationShutdown {
 
       if (accepted.length > 0) {
         const pending: NoiseAnalysisPending = { pending: true, requestedAt: new Date().toISOString() };
-        await this.prismaService.testRun.updateMany({
+        const { count } = await this.prismaService.testRun.updateMany({
           where: { id: { in: accepted }, status: TestStatus.unresolved },
           data: { noiseAnalysis: pending as unknown as Prisma.InputJsonObject },
         });
+        if (count > 0) {
+          await this.announcePending(accepted, pending.requestedAt);
+        }
       }
     } catch (error) {
       fresh.forEach((id) => this.known.delete(id));
@@ -201,6 +204,21 @@ export class NoiseHintService implements OnApplicationShutdown {
       return 'analysis off';
     }
     return parseNoiseAnalysisConfig(run.project.noiseAnalysisConfig).blur.enabled ? null : 'analysis off';
+  }
+
+  private async announcePending(ids: string[], requestedAt: string): Promise<void> {
+    try {
+      const marked = await this.prismaService.testRun.findMany({
+        where: {
+          id: { in: ids },
+          status: TestStatus.unresolved,
+          noiseAnalysis: { path: ['requestedAt'], equals: requestedAt },
+        },
+      });
+      marked.forEach((run) => this.eventsGateway.testRunUpdated(run));
+    } catch (error) {
+      this.logger.error(`Could not announce runs queued for noise analysis: ${messageOf(error)}`);
+    }
   }
 
   private async dinov2Stage(
