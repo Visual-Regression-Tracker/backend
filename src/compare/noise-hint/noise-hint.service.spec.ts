@@ -837,7 +837,53 @@ describe('NoiseHintService.enqueue', () => {
       expect(stored(h, 'a')).toMatchObject({ version: 1, verdict: 'noise' });
     });
 
-    it('does not mark an id again that is ineligible, and keeps its place if it was queued', async () => {
+    it('still analyses an id that a second request marked while the first one refused it as "queue full"', async () => {
+      const h = build();
+      const ids = Array.from({ length: 257 }, (_, i) => `run-${i}`);
+      [...ids, 'a'].forEach((id) => h.add(id));
+      const gate = blocked(h);
+      await h.service.enqueue([ids[0]]);
+      await h.service.enqueue(ids.slice(1));
+      const lookup = deferred<StoredRun[]>();
+      h.prisma.testRun.findMany.mockReturnValueOnce(lookup.promise);
+
+      const first = h.service.enqueue(['a']);
+      const second = await h.service.enqueue(['a']);
+      lookup.resolve([h.store.get('a') as StoredRun]);
+
+      expect(second).toEqual({ queued: 1, skipped: [] });
+      expect(await first).toEqual({ queued: 0, skipped: [{ id: 'a', reason: 'queue full' }] });
+      gate.resolve(noiseOutput());
+      await analysed(h, 258);
+      expect(stored(h, 'a')).toMatchObject({ version: 1 });
+    });
+
+    it('keeps an id known that a later request reserved while a failing request that skipped it was still running', async () => {
+      const h = build();
+      const others = Array.from({ length: 256 }, (_, i) => `run-${i}`);
+      [...others, 'busy', 'a', 'b'].forEach((id) => h.add(id));
+      h.add('a', { status: TestStatus.approved });
+      const gate = blocked(h);
+      await h.service.enqueue(['busy']);
+      await h.service.enqueue(others.slice(0, 254));
+      const write = deferred<{ count: number }>();
+      h.prisma.testRun.updateMany.mockReturnValueOnce(write.promise);
+
+      const failing = h.service.enqueue(['a', 'b']);
+      await settled(() => h.prisma.testRun.updateMany.mock.calls.length === 3);
+      h.add('a');
+      await h.service.enqueue(['a']);
+      write.reject(new Error('db gone'));
+      await expect(failing).rejects.toThrow('db gone');
+      await h.service.enqueue([others[254]]);
+      const again = await h.service.enqueue(['a']);
+
+      expect(again).toEqual({ queued: 1, skipped: [] });
+      gate.resolve(noiseOutput());
+      await analysed(h, 257);
+    });
+
+    it('does not mark an ineligible id again while its analysis is in flight', async () => {
       const h = build();
       h.add('a');
       const gate = blocked(h);
@@ -847,6 +893,7 @@ describe('NoiseHintService.enqueue', () => {
       const again = await h.service.enqueue(['a']);
 
       expect(again).toEqual({ queued: 0, skipped: [{ id: 'a', reason: 'not unresolved' }] });
+      expect(markerWrites(h)).toHaveLength(1);
       gate.resolve(noiseOutput());
       await settled(() => h.pool.run.mock.calls.length === 1);
       await new Promise((resolve) => setImmediate(resolve));
@@ -960,6 +1007,21 @@ describe('NoiseHintService.enqueue', () => {
       expect(h.pool.run).toHaveBeenCalledTimes(1);
       expect(stored(h, 'c')).toMatchObject({ version: 1 });
       expect(stored(h, 'a')).toMatchObject({ pending: true });
+    });
+
+    it('clears the marker of a pending run that lost its project', async () => {
+      const h = build();
+      h.add('a');
+      h.prisma.testRun.findUnique.mockImplementationOnce(({ where }: { where: { id: string } }) => {
+        const run = { ...(h.store.get(where.id) as StoredRun), project: null };
+        return Promise.resolve(run);
+      });
+
+      await h.service.enqueue(['a']);
+      await analysed(h, 1);
+
+      expect(stored(h, 'a')).toBeNull();
+      expect(h.pool.run).not.toHaveBeenCalled();
     });
 
     it('analyses with the current config of the project', async () => {
@@ -1121,7 +1183,7 @@ describe('NoiseHintService.enqueue', () => {
       expect(stored(h, 'b')).toMatchObject({ version: 1 });
     });
 
-    it('keeps a result that was stored before the failure and resets only a pending marker', async () => {
+    it('keeps a result that was stored before the failure', async () => {
       const h = build();
       h.add('a');
       jest.spyOn(Logger.prototype, 'error').mockImplementation();

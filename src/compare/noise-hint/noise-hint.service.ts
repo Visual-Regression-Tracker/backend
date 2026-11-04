@@ -101,13 +101,14 @@ export class NoiseHintService implements OnApplicationShutdown {
       return unknown('image too large');
     }
 
+    const dinov2Usable = config.dinov2.enabled && this.dinov2Service.isConfigured();
     const output = await this.diffWorkerPool.run({
       kind: 'blur-amplitude',
       baseline,
       image,
       ignoreAreas: parseIgnoreAreas(run.ignoreAreas).concat(parseIgnoreAreas(run.tempIgnoreAreas)),
       thresholds: thresholds.blur,
-      wantGate: config.dinov2.enabled && this.dinov2Service.isConfigured(),
+      wantGate: dinov2Usable,
     });
     const { measure } = output;
     if (!measure) {
@@ -129,7 +130,7 @@ export class NoiseHintService implements OnApplicationShutdown {
     let dinov2: Dinov2Stage;
     if (!isNoise) {
       dinov2 = { skipped: 'blur sees a change' };
-    } else if (!config.dinov2.enabled || !this.dinov2Service.isConfigured()) {
+    } else if (!dinov2Usable) {
       dinov2 = { skipped: 'off' };
     } else if (!output.gate) {
       throw new Error('Blur job returned no patch gate for a pair it takes for noise');
@@ -162,19 +163,19 @@ export class NoiseHintService implements OnApplicationShutdown {
     const fresh = unique.filter((id) => !this.known.has(id));
     fresh.forEach((id) => this.known.add(id));
     const freshIds = new Set(fresh);
+    const released = new Set<string>();
+    const release = (id: string) => {
+      released.add(id);
+      if (this.requeue.delete(id)) {
+        this.waiting.push(id);
+      } else {
+        this.known.delete(id);
+      }
+    };
 
     const skipped: NoiseEnqueueResult['skipped'] = [];
     const accepted: string[] = [];
     let reservations = 0;
-    const parsed = new Map<string, NoiseAnalysisConfig>();
-    const configOf = (json: string): NoiseAnalysisConfig => {
-      let config = parsed.get(json);
-      if (!config) {
-        config = parseNoiseAnalysisConfig(json);
-        parsed.set(json, config);
-      }
-      return config;
-    };
     try {
       const runs = new Map<string, RunWithProject>(
         (
@@ -186,7 +187,10 @@ export class NoiseHintService implements OnApplicationShutdown {
       );
       for (const id of unique) {
         const run = runs.get(id);
-        const reason = this.skipReason(run, run?.project ? configOf(run.project.noiseAnalysisConfig) : undefined);
+        const reason = this.skipReason(
+          run,
+          run?.project ? parseNoiseAnalysisConfig(run.project.noiseAnalysisConfig) : undefined
+        );
         if (reason) {
           skipped.push({ id, reason });
         } else if (!freshIds.has(id)) {
@@ -199,7 +203,7 @@ export class NoiseHintService implements OnApplicationShutdown {
           reservations += 1;
         }
       }
-      skipped.forEach(({ id }) => freshIds.has(id) && this.known.delete(id));
+      skipped.forEach(({ id }) => freshIds.has(id) && release(id));
 
       if (accepted.length > 0) {
         const pending: NoiseAnalysisPending = { pending: true, requestedAt: new Date().toISOString() };
@@ -212,7 +216,7 @@ export class NoiseHintService implements OnApplicationShutdown {
         }
       }
     } catch (error) {
-      fresh.forEach((id) => (this.requeue.delete(id) ? this.waiting.push(id) : this.known.delete(id)));
+      fresh.filter((id) => !released.has(id)).forEach(release);
       this.reserved -= reservations;
       if (this.waiting.length > 0) {
         void this.drain();
@@ -222,7 +226,7 @@ export class NoiseHintService implements OnApplicationShutdown {
 
     this.reserved -= reservations;
     accepted.forEach((id) => this.place(id, freshIds.has(id)));
-    if (accepted.length > 0) {
+    if (this.waiting.length > 0) {
       void this.drain();
     }
     return { queued: accepted.length, skipped };
@@ -335,12 +339,12 @@ export class NoiseHintService implements OnApplicationShutdown {
     try {
       const run = await this.prismaService.testRun.findUnique({ where: { id }, include: { project: true } });
       requestedAt = run ? pendingSince(run.noiseAnalysis) : undefined;
-      if (!run?.project || !requestedAt) {
+      if (!run || !requestedAt) {
         return;
       }
-      const config = parseNoiseAnalysisConfig(run.project.noiseAnalysisConfig);
+      const config = run.project ? parseNoiseAnalysisConfig(run.project.noiseAnalysisConfig) : undefined;
       const marker = markedAt(requestedAt);
-      if (this.skipReason(run, config)) {
+      if (!config || this.skipReason(run, config)) {
         await this.replaceMarker(id, Prisma.DbNull, marker);
         return;
       }
