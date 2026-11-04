@@ -7,11 +7,11 @@ import {
   PIPES_METADATA,
   ROUTE_ARGS_METADATA,
 } from '@nestjs/common/constants';
-import { BadRequestException, NotFoundException, ParseArrayPipe } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ParseArrayPipe, ParseEnumPipe } from '@nestjs/common';
 import { PNG } from 'pngjs';
 import { Prisma, Role, User } from '@prisma/client';
 import { TestRunsController, multipartLimits, parseIds, parseUuidIds } from './test-runs.controller';
-import { TestRunsService } from './test-runs.service';
+import { RevertDecision, TestRunsService } from './test-runs.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
@@ -129,7 +129,7 @@ describe('TestRuns Controller', () => {
   });
 
   it.each(['reject', 'delete'] as const)('%s goes through every id one by one', async (method) => {
-    const { controller, mock } = await stub(method);
+    const { controller, mock } = await stub(method, generateTestRun());
 
     const result = await controller[method](['1', '2']);
 
@@ -138,7 +138,7 @@ describe('TestRuns Controller', () => {
   });
 
   it.each(['reject', 'delete'] as const)('%s reports an id the database no longer has and goes on', async (method) => {
-    const { controller, mock } = await stub(method);
+    const { controller, mock } = await stub(method, generateTestRun());
     mock.mockRejectedValueOnce(
       new Prisma.PrismaClientKnownRequestError('Record not found', { code: 'P2025', clientVersion: 'x' })
     );
@@ -149,20 +149,37 @@ describe('TestRuns Controller', () => {
   });
 
   it.each(['approveTestRun', 'reject', 'delete'] as const)(
-    '%s fails the request on an error that is not about the id',
+    '%s stops on an unexpected error and still reports the ids it already applied',
     async (method) => {
-      const controller = await initController({
-        approve: jest.fn().mockRejectedValue(new Error('database is down')),
-        reject: jest.fn().mockRejectedValue(new Error('database is down')),
-        delete: jest.fn().mockRejectedValue(new Error('database is down')),
+      const fails = () =>
+        jest.fn().mockResolvedValueOnce(generateTestRun()).mockRejectedValueOnce(new Error('database is down'));
+      const services = { approve: fails(), reject: fails(), delete: fails() };
+      const controller = await initController(services);
+
+      const ids = ['1', '2', '3'];
+      const result = await (method === 'approveTestRun'
+        ? controller.approveTestRun(user, ids, false)
+        : controller[method](ids));
+
+      expect(result).toEqual({
+        succeeded: ['1'],
+        failed: [
+          { id: '2', message: 'Internal error' },
+          { id: '3', message: 'Internal error' },
+        ],
       });
-
-      const call =
-        method === 'approveTestRun' ? controller.approveTestRun(user, ['1'], false) : controller[method](['1']);
-
-      await expect(call).rejects.toThrow('database is down');
+      expect(Object.values(services).flatMap((mock) => mock.mock.calls)).toHaveLength(2);
     }
   );
+
+  it('delete reports an id that is already gone as not found', async () => {
+    const { controller, mock } = await stub('delete');
+    mock.mockResolvedValueOnce(undefined).mockResolvedValueOnce(generateTestRun());
+
+    const result = await controller.delete(['1', '2']);
+
+    expect(result).toEqual({ succeeded: ['2'], failed: [{ id: '1', message: 'Test run not found: 1' }] });
+  });
 
   it.each(['approveTestRun', 'reject', 'delete'] as const)('%s answers 200', (method) => {
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, TestRunsController.prototype[method])).toBe(200);
@@ -171,10 +188,10 @@ describe('TestRuns Controller', () => {
   it('revert passes the ids to the service as one request and answers 204', async () => {
     const { controller, mock } = await stub('revert');
 
-    const result = await controller.revert(['1', '2']);
+    const result = await controller.revert(['1', '2'], RevertDecision.approve);
 
     expect(mock).toHaveBeenCalledTimes(1);
-    expect(mock).toHaveBeenCalledWith(['1', '2']);
+    expect(mock).toHaveBeenCalledWith(['1', '2'], RevertDecision.approve);
     expect(result).toBeUndefined();
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, TestRunsController.prototype.revert)).toBe(204);
     expect(Reflect.getMetadata(PATH_METADATA, TestRunsController.prototype.revert)).toBe('revert');
@@ -278,13 +295,27 @@ describe('TestRuns Controller', () => {
     );
   });
 
-  it('revert validates the ids as uuids', () => {
+  it.each(['approveTestRun', 'reject', 'delete', 'revert'] as const)('%s validates the ids as uuids', (method) => {
+    const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, TestRunsController, method) as Record<
+      string,
+      { data?: string; pipes: unknown[] }
+    >;
+    const body = Object.values(args).find((arg) => arg.pipes.some((pipe) => pipe instanceof ParseArrayPipe));
+
+    expect(body?.pipes).toHaveLength(2);
+  });
+
+  it('revert takes the decision to undo as an optional query value', async () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, TestRunsController, 'revert') as Record<
       string,
-      { pipes: unknown[] }
+      { data?: string; pipes: unknown[] }
     >;
+    const decision = Object.values(args).find((arg) => arg.data === 'decision');
 
-    expect(Object.values(args).flatMap((arg) => arg.pipes)).toHaveLength(2);
+    expect(decision?.pipes).toEqual([expect.any(ParseEnumPipe)]);
+    const pipe = decision!.pipes[0] as ParseEnumPipe;
+    await expect(pipe.transform(undefined, { type: 'query' })).resolves.toBeUndefined();
+    await expect(pipe.transform('merge', { type: 'query' })).rejects.toThrow(BadRequestException);
   });
 
   describe('multipartLimits', () => {

@@ -1,21 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { getSeedPgOptions, negotiatePreferredSsl } from './pg-options';
+import { getSeedPgOptions } from './pg-options';
 
-const { config, schema, preferSsl } = getSeedPgOptions(process.env.DATABASE_URL);
+const { config, schema } = getSeedPgOptions(process.env.DATABASE_URL);
 
 const prisma = new PrismaClient({
-  // the adapter reads this object only on first connect, so prepareConnection can still settle TLS
   adapter: new PrismaPg(config, schema ? { schema } : undefined),
   // 'query' would print every statement, including the ones that carry password hashes and API keys
   log: ['warn', 'error'],
 });
-
-/** Settles sslmode=prefer; call before the first query. */
-export async function prepareConnection(): Promise<void> {
-  if (preferSsl) {
-    await negotiatePreferredSsl(config);
-  }
-}
 
 export default prisma;

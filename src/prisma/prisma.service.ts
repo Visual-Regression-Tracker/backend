@@ -4,15 +4,13 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { readFileSync } from 'fs';
 import { availableParallelism } from 'os';
 import { isAbsolute, resolve } from 'path';
-import { Client, ClientConfig, PoolConfig } from 'pg';
+import { Client, PoolConfig } from 'pg';
 
 const UNSUPPORTED_PRISMA_PARAMS = ['pgbouncer', 'statement_cache_size', 'socket_timeout', 'sslidentity', 'sslpassword'];
 
 // Translated into pg's `ssl`: pg reads sslcert as a client certificate and require as verify-full
 const PRISMA_SSL_PARAMS = ['sslmode', 'sslaccept', 'sslcert'];
 const PG_ONLY_SSL_PARAMS = ['sslrootcert', 'sslkey', 'uselibpqcompat'];
-
-const SSL_NOT_SUPPORTED = 'The server does not support SSL connections';
 
 const readCpuinfo = (): string => {
   try {
@@ -22,7 +20,7 @@ const readCpuinfo = (): string => {
   }
 };
 
-// Prisma 6 sized its pool from physical cores; hyper-threads would double connections
+// physical cores, not hyper-threads, which would double the connections
 export function physicalCpuCount(cpuinfo: string = readCpuinfo()): number {
   const cores = new Set<string>();
   for (const block of cpuinfo.split(/\n\s*\n/)) {
@@ -39,7 +37,6 @@ export function getPgOptions(databaseUrl: string | undefined): {
   pool: PoolConfig;
   schema?: string;
   unsupportedParams: string[];
-  preferSsl: boolean;
 } {
   let url: URL | undefined;
   try {
@@ -59,17 +56,18 @@ export function getPgOptions(databaseUrl: string | undefined): {
     connectionString: databaseUrl,
     max: connectionLimit > 0 ? connectionLimit : physicalCpuCount() * 2 + 1,
     connectionTimeoutMillis: connectTimeout && poolTimeout ? Math.max(connectTimeout, poolTimeout) : undefined,
-    // Prisma 6's value; pg's 10s default reconnects over and over between ingestion bursts
+    // pg's 10s default reconnects over and over between ingestion bursts
     idleTimeoutMillis: 300_000,
   };
 
-  const sslmode = params.get('sslmode') ?? 'prefer';
+  const sslmode = params.get('sslmode');
   const prismaTls =
     url !== undefined &&
+    sslmode !== null &&
     ['prefer', 'require', 'disable'].includes(sslmode) &&
     !PG_ONLY_SSL_PARAMS.some((name) => params.has(name));
   if (url && prismaTls) {
-    // Prisma 6: no certificate check unless sslaccept=strict
+    // no certificate check unless sslaccept=strict
     const sslcert = params.get('sslcert');
     const ssl =
       params.get('sslaccept') === 'strict'
@@ -84,40 +82,20 @@ export function getPgOptions(databaseUrl: string | undefined): {
     pool,
     schema: params.get('schema') ?? undefined,
     unsupportedParams: UNSUPPORTED_PRISMA_PARAMS.filter((name) => params.has(name)),
-    preferSsl: prismaTls && sslmode === 'prefer',
   };
-}
-
-export async function negotiatePreferredSsl(config: ClientConfig, logger?: Logger): Promise<void> {
-  const client = new Client(config);
-  try {
-    await client.connect();
-  } catch (error) {
-    if (error instanceof Error && error.message === SSL_NOT_SUPPORTED) {
-      config.ssl = false;
-      logger?.log('Database server has no TLS, connecting without it (sslmode=prefer)');
-    } else {
-      // The pool never revisits this choice, so guessing TLS here would break every later query
-      throw error;
-    }
-  } finally {
-    await client.end().catch((): undefined => undefined);
-  }
 }
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(PrismaService.name);
   private readonly pgConfig: PoolConfig;
-  private readonly preferSsl: boolean;
 
   constructor() {
-    const { pool, schema, unsupportedParams, preferSsl } = getPgOptions(process.env.DATABASE_URL);
+    const { pool, schema, unsupportedParams } = getPgOptions(process.env.DATABASE_URL);
     super({
       adapter: new PrismaPg(pool, schema ? { schema } : undefined),
     });
     this.pgConfig = pool;
-    this.preferSsl = preferSsl;
     if (unsupportedParams.length) {
       this.logger.warn(
         `DATABASE_URL parameters ignored since Prisma 7: ${unsupportedParams.join(', ')}. ` +
@@ -127,9 +105,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnAppli
   }
 
   async onModuleInit() {
-    if (this.preferSsl) {
-      await negotiatePreferredSsl(this.pgConfig, this.logger);
-    }
     await this.$connect();
   }
 

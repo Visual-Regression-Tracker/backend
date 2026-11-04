@@ -71,7 +71,7 @@ Run typecheck, lint, format check and the unit tests before calling work done.
   Ollama for VLM (`OLLAMA_BASE_URL`), DINOv2 for the rendering-noise filter
   `ignoreRenderingNoise` (`DINOV2_URL`, `dinov2/` in this repo, compose profile
   `dinov2`). Do not load models into the API process or its workers.
-- `dinov2/` is Python: `python -m unittest test_patches` there; the image
+- `dinov2/` is Python: `python -m unittest test_patches test_guard` there; the image
   pins the model revision the backend's threshold was calibrated on.
 
 ## Known quirks — do not "fix" in passing

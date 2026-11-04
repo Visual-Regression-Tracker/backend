@@ -218,8 +218,8 @@ jobs:
         working-directory: dinov2
         run: |
           python3 -m venv .venv
-          .venv/bin/pip install numpy==2.5.4
-          .venv/bin/python -m unittest test_patches
+          .venv/bin/pip install numpy==2.5.4 pillow==13.0.0
+          .venv/bin/python -m unittest test_patches test_guard
 
   # branch protection requires a check named "build"
   build:
