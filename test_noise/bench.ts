@@ -36,29 +36,26 @@ const staticService = {
   },
 } as unknown as StaticService;
 
-const dinov2Service = {
-  isConfigured: () => true,
-  patchDistances: async (gate) => {
-    const unrecorded = gate.cells.filter((cell) => !(cell in recorded.cells));
-    if (unrecorded.length) {
-      throw new Error(`no recorded DINOv2 distance for patches ${unrecorded.join(', ')}: re-export the fixtures`);
-    }
-    if (gate.width !== recorded.width || gate.height !== recorded.height) {
-      throw new Error(`gate is ${gate.width}x${gate.height} patches, recorded ${recorded.width}x${recorded.height}`);
-    }
-    const distances = new Array<number>(recorded.width * recorded.height).fill(0);
-    for (const [cell, distance] of Object.entries(recorded.cells)) {
-      distances[Number(cell)] = distance;
-    }
-    return { distances, width: recorded.width, height: recorded.height };
-  },
-} as Pick<Dinov2Service, 'isConfigured' | 'patchDistances'>;
+const patchDistances: Dinov2Service['patchDistances'] = async (gate) => {
+  const unrecorded = gate.cells.filter((cell) => !(cell in recorded.cells));
+  if (unrecorded.length) {
+    throw new Error(`no recorded DINOv2 distance for patches ${unrecorded.join(', ')}: re-export the fixtures`);
+  }
+  if (gate.width !== recorded.width || gate.height !== recorded.height) {
+    throw new Error(`gate is ${gate.width}x${gate.height} patches, recorded ${recorded.width}x${recorded.height}`);
+  }
+  const distances = new Array<number>(recorded.width * recorded.height).fill(0);
+  for (const [cell, distance] of Object.entries(recorded.cells)) {
+    distances[Number(cell)] = distance;
+  }
+  return { distances, width: recorded.width, height: recorded.height };
+};
 
 const service = new NoiseHintService(
   {} as PrismaService,
   staticService,
   pool,
-  dinov2Service as Dinov2Service,
+  { isConfigured: () => true, patchDistances } as Dinov2Service,
   {} as EventsGateway
 );
 
