@@ -14,6 +14,7 @@ import { HttpExceptionFilter } from './http-exception.filter';
 import { CompareModule } from './compare/compare.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TerminusModule } from '@nestjs/terminus';
+import { StatisticsModule } from './statistics/statistics.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -33,6 +34,7 @@ import { HealthController } from './health/health.controller';
     TestVariationsModule,
     TerminusModule,
     CompareModule,
+    StatisticsModule,
   ],
   providers: [
     AppService,
