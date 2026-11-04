@@ -23,7 +23,7 @@ time; at runtime it needs only onnxruntime, numpy and pillow (~350 MB model,
 CPU). Only the 224 px tiles holding a change are encoded (about 9 of a
 1280x720 page's 24, measured), at ~0.3–0.5 s per tile with the default
 `DINOV2_THREADS=4` — onnxruntime's own default of one thread per core ran up to
-7x slower in a container. It runs only for runs the blur would pass.
+7x slower in a container. It runs only for runs the blur stage called noise.
 
 ## API
 
