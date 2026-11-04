@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { Build, Project, TestStatus } from '@prisma/client';
+import { Build, Prisma, Project, TestStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { BuildsService } from '../src/builds/builds.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -9,6 +9,7 @@ import { UsersService } from '../src/users/users.service';
 import {
   approveRuns,
   BLUE,
+  CHANGED,
   createE2eApp,
   haveProject,
   imageExists,
@@ -84,6 +85,7 @@ describe('TestRuns review API (e2e)', () => {
     ['reject', 'post', '/test-runs/reject', (id: string) => [id]],
     ['revert', 'post', '/test-runs/revert?decision=approve', (id: string) => [id]],
     ['delete', 'post', '/test-runs/delete', (id: string) => [id]],
+    ['noise-analysis', 'post', '/test-runs/noise-analysis', (id: string) => ({ ids: [id] })],
     ['update', 'patch', '/test-runs/update/:id', () => ({ comment: 'x' })],
   ] as const)('403 for a guest on %s', async (_name, method, url, body) => {
     const run = await postRun(await newBuild(), WHITE);
@@ -182,6 +184,22 @@ describe('TestRuns review API (e2e)', () => {
       expect(res.body.projectId).toBe(project.id);
     });
 
+    it('keeps the regions of the noise analysis that the list leaves out', async () => {
+      const build = await newBuild();
+      const run = await postRun(build, WHITE);
+      const regions = [{ x: 1, y: 2, width: 3, height: 4, weight: 0.5 }];
+      const stage = { verdict: 'noise', score: 0.1, signals: {}, regions };
+      const noiseAnalysis = { version: 1, verdict: 'noise', score: 0.1, reason: null, blur: stage, dinov2: stage };
+      await prisma.testRun.update({ where: { id: run.id }, data: { noiseAnalysis } });
+
+      const details = await requestWithAuth(app, 'get', `/test-runs/${run.id}`, user.token).expect(200);
+      const list = await requestWithAuth(app, 'get', `/test-runs?buildId=${build.id}`, user.token).expect(200);
+
+      expect(details.body.noiseAnalysis).toEqual(noiseAnalysis);
+      expect(list.body[0].noiseAnalysis.blur).toEqual({ verdict: 'noise', score: 0.1, signals: {} });
+      expect(list.body[0].noiseAnalysis.dinov2).toEqual({ verdict: 'noise', score: 0.1, signals: {} });
+    });
+
     it('404 for an unknown id', async () => {
       const id = randomUUID();
 
@@ -192,6 +210,55 @@ describe('TestRuns review API (e2e)', () => {
 
     it('400 for an id that is not a uuid', async () => {
       await requestWithAuth(app, 'get', `/test-runs/123`, user.token).expect(400);
+    });
+  });
+
+  describe('POST /test-runs/noise-analysis', () => {
+    const post = (body: unknown) =>
+      requestWithAuth(app, 'post', '/test-runs/noise-analysis', user.token).send(body as object);
+
+    it('queues the unresolved runs and skips those of a project with the analysis off', async () => {
+      const off = await haveProject(projectsService, 'Noise off E2E', {
+        autoApproveFeature: false,
+        maxBuildAllowed: 100,
+        noiseAnalysisConfig: JSON.stringify({ blur: { enabled: false } }),
+      });
+      try {
+        const onRun = await runAgainstBaseline(await newBuild(), WHITE, CHANGED);
+        const offBaseline = await buildsService.findOrCreate({ projectId: off.id, branchName: off.mainBranchName });
+        await approve([(await postRun(offBaseline, WHITE)).id]);
+        const offBuild = await buildsService.findOrCreate({ projectId: off.id, branchName: off.mainBranchName });
+        const offRun = await postRun(offBuild, CHANGED);
+
+        const res = await post({ ids: [onRun.id, offRun.id] }).expect(200);
+
+        expect(res.body).toEqual({ queued: 1, skipped: [{ id: offRun.id, reason: 'analysis off' }] });
+        expect((await runOf(offRun.id)).noiseAnalysis).toBeNull();
+        await waitFor(async () => {
+          const stored = (await runOf(onRun.id)).noiseAnalysis as Prisma.JsonObject | null;
+          return stored !== null && stored.pending !== true;
+        });
+        expect((await runOf(onRun.id)).status).toBe(TestStatus.unresolved);
+      } finally {
+        await projectsService.remove(off.id);
+      }
+    });
+
+    it('skips a run that is not unresolved', async () => {
+      const run = await postRun(await newBuild(), WHITE);
+
+      const res = await post({ ids: [run.id] }).expect(200);
+
+      expect(res.body).toEqual({ queued: 0, skipped: [{ id: run.id, reason: 'not unresolved' }] });
+    });
+
+    it.each([
+      ['an empty list', { ids: [] }],
+      ['an id that is not a uuid', { ids: ['nope'] }],
+      ['a bare array', [randomUUID()]],
+      ['no ids', {}],
+    ])('400 for %s', async (_name, body) => {
+      await post(body).expect(400);
     });
   });
 

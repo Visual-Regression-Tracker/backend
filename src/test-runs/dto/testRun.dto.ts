@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { TestRun, TestStatus } from '@prisma/client';
+import { Prisma, TestRun, TestStatus } from '@prisma/client';
+import { TestRunNoiseAnalysis } from '../../compare/noise-hint/noise-analysis.types';
+import { TestRunNoiseAnalysisSummary, withoutRegions } from '../../compare/noise-hint/without-regions';
 
 export class TestRunDto {
   @ApiProperty()
@@ -50,6 +52,8 @@ export class TestRunDto {
   merge: boolean;
   @ApiPropertyOptional()
   vlmDescription?: string | null;
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  noiseAnalysis: TestRunNoiseAnalysisSummary | Prisma.JsonValue;
 
   constructor(testRun: TestRun) {
     this.id = testRun.id;
@@ -76,5 +80,6 @@ export class TestRunDto {
     this.baselineBranchName = testRun.baselineBranchName;
     this.merge = testRun.merge;
     this.vlmDescription = testRun.vlmDescription;
+    this.noiseAnalysis = withoutRegions(testRun.noiseAnalysis as TestRunNoiseAnalysis | null);
   }
 }

@@ -7,6 +7,7 @@ import { CreateTestRequestBase64Dto } from '../test-runs/dto/create-test-request
 import { CreateTestRequestMultipartDto } from '../test-runs/dto/create-test-request-multipart.dto';
 import { CreateTestRequestDto } from '../test-runs/dto/create-test-request.dto';
 import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
+import { NoiseAnalysisRequestDto } from '../test-runs/dto/noise-analysis-request.dto';
 import { UpdateIgnoreAreasDto } from '../test-runs/dto/update-ignore-area.dto';
 import { UpdateTestRunDto } from '../test-runs/dto/update-test.dto';
 import { MergeParams } from '../test-variations/types';
@@ -33,6 +34,7 @@ const validated = (dto: DtoClass): Set<string> =>
 describe.each([
   IgnoreAreaDto,
   UpdateIgnoreAreasDto,
+  NoiseAnalysisRequestDto,
   UpdateTestRunDto,
   BaselineDataDto,
   CreateTestRequestDto,

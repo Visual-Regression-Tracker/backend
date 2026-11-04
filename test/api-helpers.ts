@@ -158,6 +158,7 @@ export const TEST_RUN_DTO_KEYS = [
   'imageThumbnailName',
   'merge',
   'name',
+  'noiseAnalysis',
   'os',
   'status',
   'tempIgnoreAreas',
