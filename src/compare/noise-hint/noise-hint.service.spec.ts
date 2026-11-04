@@ -76,20 +76,41 @@ const storedRun = (id: string, patch: Partial<StoredRun> = {}): StoredRun => ({
   ...patch,
 });
 
+interface Where {
+  id: string | { in: string[] };
+  status?: TestStatus;
+  noiseAnalysis?: { path: string[]; equals: string };
+}
+
+const asJson = (value: unknown) => (value === Prisma.DbNull ? null : value);
+
 const build = () => {
   const store = new Map<string, StoredRun>();
+  const matching = (where: Where): StoredRun[] =>
+    (typeof where.id === 'string' ? [where.id] : where.id.in)
+      .flatMap((id) => (store.has(id) ? [store.get(id) as StoredRun] : []))
+      .filter((run) => !where.status || run.status === where.status)
+      .filter(
+        (run) =>
+          !where.noiseAnalysis ||
+          (run.noiseAnalysis as { requestedAt?: string } | null)?.requestedAt === where.noiseAnalysis.equals
+      );
   const prisma = {
     testRun: {
-      findMany: jest.fn(({ where }: { where: { id: { in: string[] } } }) =>
-        Promise.resolve(where.id.in.flatMap((id) => (store.has(id) ? [store.get(id)] : [])))
-      ),
+      findMany: jest.fn(({ where }: { where: Where }) => Promise.resolve(matching(where))),
       findUnique: jest.fn(({ where }: { where: { id: string } }): Promise<unknown> =>
-        Promise.resolve(store.get(where.id) ? { ...store.get(where.id), noiseAnalysis: PENDING } : null)
+        Promise.resolve(store.get(where.id) ?? null)
       ),
-      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-      update: jest.fn(({ where, data }: { where: { id: string }; data: Partial<TestRun> }) =>
-        Promise.resolve({ ...store.get(where.id), ...data })
-      ),
+      updateMany: jest.fn(({ where, data }: { where: Where; data: { noiseAnalysis: unknown } }) => {
+        const runs = matching(where);
+        runs.forEach((run) => store.set(run.id, { ...run, noiseAnalysis: asJson(data.noiseAnalysis) as never }));
+        return Promise.resolve({ count: runs.length });
+      }),
+      update: jest.fn(({ where, data }: { where: { id: string }; data: { noiseAnalysis: unknown } }) => {
+        const run = { ...(store.get(where.id) as StoredRun), noiseAnalysis: asJson(data.noiseAnalysis) as never };
+        store.set(where.id, run);
+        return Promise.resolve(run);
+      }),
     },
   };
   const staticService = {
@@ -413,6 +434,12 @@ describe('NoiseHintService.enqueue', () => {
   const analysed = async (h: ReturnType<typeof build>, count: number) =>
     settled(() => h.events.testRunUpdated.mock.calls.length >= count);
 
+  const stored = (h: ReturnType<typeof build>, id: string) =>
+    h.store.get(id)?.noiseAnalysis as unknown as NoiseAnalysisResult | { pending: true; requestedAt: string } | null;
+
+  const markerWrites = (h: ReturnType<typeof build>) =>
+    h.prisma.testRun.updateMany.mock.calls.filter(([{ where }]) => typeof where.id !== 'string');
+
   it('marks eligible runs pending with one updateMany and analyses them one by one', async () => {
     const h = build();
     h.add('a');
@@ -421,17 +448,17 @@ describe('NoiseHintService.enqueue', () => {
     const answer = await h.service.enqueue(['a', 'b']);
 
     expect(answer).toEqual({ queued: 2, skipped: [] });
-    expect(h.prisma.testRun.updateMany).toHaveBeenCalledTimes(1);
-    expect(h.prisma.testRun.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['a', 'b'] } },
-      data: { noiseAnalysis: { pending: true, requestedAt: expect.any(String) } },
-    });
+    expect(markerWrites(h)).toEqual([
+      [
+        {
+          where: { id: { in: ['a', 'b'] }, status: TestStatus.unresolved },
+          data: { noiseAnalysis: { pending: true, requestedAt: expect.any(String) } },
+        },
+      ],
+    ]);
     await analysed(h, 2);
-    expect(h.prisma.testRun.update).toHaveBeenCalledTimes(2);
-    expect(h.prisma.testRun.update).toHaveBeenCalledWith({
-      where: { id: 'a' },
-      data: { noiseAnalysis: expect.objectContaining({ version: 1, verdict: 'noise' }) },
-    });
+    expect(stored(h, 'a')).toMatchObject({ version: 1, verdict: 'noise' });
+    expect(stored(h, 'b')).toMatchObject({ version: 1, verdict: 'noise' });
     expect(h.events.testRunUpdated).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }));
   });
 
@@ -474,9 +501,7 @@ describe('NoiseHintService.enqueue', () => {
         { id: 'decided', reason: 'not unresolved' },
       ],
     });
-    expect(h.prisma.testRun.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: { in: ['on'] } } })
-    );
+    expect(markerWrites(h)[0][0].where).toEqual({ id: { in: ['on'] }, status: TestStatus.unresolved });
   });
 
   it('counts an id repeated in one request once', async () => {
@@ -486,6 +511,76 @@ describe('NoiseHintService.enqueue', () => {
     const answer = await h.service.enqueue(['a', 'a']);
 
     expect(answer.queued).toBe(1);
+  });
+
+  it('accepts an id once when two requests overlap', async () => {
+    const h = build();
+    h.add('a');
+
+    const [first, second] = await Promise.all([h.service.enqueue(['a']), h.service.enqueue(['a'])]);
+
+    expect(first.queued + second.queued).toBe(1);
+    expect(markerWrites(h)).toHaveLength(1);
+    await analysed(h, 1);
+    await settled(() => h.pool.run.mock.calls.length === 1);
+    expect(h.pool.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let overlapping requests exceed 256 waiting', async () => {
+    const h = build();
+    const ids = Array.from({ length: 400 }, (_, i) => `run-${i}`);
+    ids.forEach((id) => h.add(id));
+    const gate = deferred<BlurAmplitudeJobOutput>();
+    h.pool.run.mockReturnValueOnce(gate.promise);
+    await h.service.enqueue([ids[0]]);
+
+    const [first, second] = await Promise.all([
+      h.service.enqueue(ids.slice(1, 201)),
+      h.service.enqueue(ids.slice(201)),
+    ]);
+
+    expect(first.queued + second.queued).toBe(256);
+    expect(first.skipped.length + second.skipped.length).toBe(143);
+    expect([...first.skipped, ...second.skipped].every(({ reason }) => reason === 'queue full')).toBe(true);
+    gate.resolve(noiseOutput());
+    await analysed(h, 257);
+  });
+
+  it('frees the ids of a request whose database write failed', async () => {
+    const h = build();
+    h.add('a');
+    h.add('b');
+    h.prisma.testRun.updateMany.mockRejectedValueOnce(new Error('db gone'));
+
+    await expect(h.service.enqueue(['a', 'b'])).rejects.toThrow('db gone');
+    const again = await h.service.enqueue(['a', 'b']);
+
+    expect(again.queued).toBe(2);
+    await analysed(h, 2);
+  });
+
+  it('frees the ids of a request whose lookup failed', async () => {
+    const h = build();
+    h.add('a');
+    h.prisma.testRun.findMany.mockRejectedValueOnce(new Error('db gone'));
+
+    await expect(h.service.enqueue(['a'])).rejects.toThrow('db gone');
+    const again = await h.service.enqueue(['a']);
+
+    expect(again.queued).toBe(1);
+    await analysed(h, 1);
+  });
+
+  it('frees an id that turned out ineligible so a later request can take it', async () => {
+    const h = build();
+    h.add('a', { status: TestStatus.approved });
+    await h.service.enqueue(['a']);
+    h.add('a');
+
+    const again = await h.service.enqueue(['a']);
+
+    expect(again.queued).toBe(1);
+    await analysed(h, 1);
   });
 
   describe('with a busy worker', () => {
@@ -506,7 +601,7 @@ describe('NoiseHintService.enqueue', () => {
       const again = await h.service.enqueue(['a', 'b']);
 
       expect(again).toEqual({ queued: 0, skipped: [] });
-      expect(h.prisma.testRun.updateMany).toHaveBeenCalledTimes(2);
+      expect(markerWrites(h)).toHaveLength(2);
       gate.resolve(noiseOutput());
       await analysed(h, 2);
       expect(h.pool.run).toHaveBeenCalledTimes(2);
@@ -536,9 +631,9 @@ describe('NoiseHintService.enqueue', () => {
 
       expect(answer.queued).toBe(256);
       expect(answer.skipped).toEqual([{ id: 'run-257', reason: 'queue full' }]);
-      expect(h.prisma.testRun.updateMany).toHaveBeenLastCalledWith({
-        where: { id: { in: ids.slice(1, 257) } },
-        data: expect.anything(),
+      expect(markerWrites(h).at(-1)?.[0].where).toEqual({
+        id: { in: ids.slice(1, 257) },
+        status: TestStatus.unresolved,
       });
       gate.resolve(noiseOutput());
       await analysed(h, 257);
@@ -557,42 +652,51 @@ describe('NoiseHintService.enqueue', () => {
       await settled(() => h.pool.run.mock.calls.length === 1);
 
       expect(h.pool.run).toHaveBeenCalledTimes(1);
-      expect(h.prisma.testRun.update).toHaveBeenCalledTimes(1);
-      expect(h.prisma.testRun.update).not.toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'b' } }));
+      expect(stored(h, 'a')).toMatchObject({ version: 1 });
+      expect(stored(h, 'b')).toMatchObject({ pending: true });
     });
   });
 
   describe('processing a run', () => {
-    it('skips a run that was decided after it was queued, writing nothing', async () => {
+    const decideBeforeProcessing = (h: ReturnType<typeof build>, id: string, patch: Partial<StoredRun>) =>
+      h.prisma.testRun.findUnique.mockImplementationOnce(({ where }: { where: { id: string } }) => {
+        const run = { ...(h.store.get(where.id) as StoredRun), ...patch };
+        h.store.set(where.id, run);
+        return Promise.resolve(run);
+      });
+
+    it('clears the marker of a run that was decided after it was queued, without analysing it', async () => {
       const h = build();
       h.add('a');
       h.add('b');
-      h.prisma.testRun.findUnique.mockImplementationOnce(() =>
-        Promise.resolve({ ...storedRun('a'), status: TestStatus.approved, noiseAnalysis: PENDING })
-      );
+      decideBeforeProcessing(h, 'a', { status: TestStatus.approved });
 
       await h.service.enqueue(['a', 'b']);
-      await analysed(h, 1);
+      await analysed(h, 2);
 
-      expect(h.prisma.testRun.update).toHaveBeenCalledTimes(1);
-      expect(h.prisma.testRun.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'b' } }));
+      expect(stored(h, 'a')).toBeNull();
+      expect(stored(h, 'b')).toMatchObject({ version: 1 });
+      expect(h.pool.run).toHaveBeenCalledTimes(1);
+      expect(h.events.testRunUpdated).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }));
     });
 
     it.each([
       ['a diff recalculated since', null],
       ['a finished analysis', { version: 1, verdict: 'noise' }],
       ['a list value', [PENDING]],
-    ])('skips a run whose field holds %s', async (_name, noiseAnalysis) => {
+      ['a pending marker without a date', { pending: true }],
+    ])('writes nothing to a run whose field holds %s', async (_name, noiseAnalysis) => {
       const h = build();
       h.add('a');
       h.add('b');
-      h.prisma.testRun.findUnique.mockImplementationOnce(() => Promise.resolve({ ...storedRun('a'), noiseAnalysis }));
+      decideBeforeProcessing(h, 'a', { noiseAnalysis: noiseAnalysis });
 
       await h.service.enqueue(['a', 'b']);
       await analysed(h, 1);
 
-      expect(h.prisma.testRun.update).toHaveBeenCalledTimes(1);
-      expect(h.prisma.testRun.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'b' } }));
+      expect(stored(h, 'a')).toEqual(noiseAnalysis);
+      expect(stored(h, 'b')).toMatchObject({ version: 1 });
+      expect(h.pool.run).toHaveBeenCalledTimes(1);
     });
 
     it('skips a run that disappeared or lost its project', async () => {
@@ -607,8 +711,9 @@ describe('NoiseHintService.enqueue', () => {
       await h.service.enqueue(['a', 'b', 'c']);
       await analysed(h, 1);
 
-      expect(h.prisma.testRun.update).toHaveBeenCalledTimes(1);
-      expect(h.prisma.testRun.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'c' } }));
+      expect(h.pool.run).toHaveBeenCalledTimes(1);
+      expect(stored(h, 'c')).toMatchObject({ version: 1 });
+      expect(stored(h, 'a')).toMatchObject({ pending: true });
     });
 
     it('analyses with the current config of the project', async () => {
@@ -623,9 +728,84 @@ describe('NoiseHintService.enqueue', () => {
       await h.service.enqueue(['a']);
       await analysed(h, 1);
 
-      const stored = h.prisma.testRun.update.mock.calls[0][0].data.noiseAnalysis as unknown as NoiseAnalysisResult;
-      expect(stored.config.blur.amplitudeThreshold).toBe(50);
-      expect(stored.dinov2).toEqual({ skipped: 'off' });
+      const result = stored(h, 'a') as NoiseAnalysisResult;
+      expect(result.config.blur.amplitudeThreshold).toBe(50);
+      expect(result.dinov2).toEqual({ skipped: 'off' });
+    });
+
+    describe('when the run changes during the analysis', () => {
+      const changeDuringAnalysis = async (h: ReturnType<typeof build>, patch: Partial<StoredRun>) => {
+        const gate = deferred<BlurAmplitudeJobOutput>();
+        h.pool.run.mockReturnValueOnce(gate.promise);
+        await h.service.enqueue(['a']);
+        await settled(() => h.pool.run.mock.calls.length === 1);
+        h.store.set('a', { ...(h.store.get('a') as StoredRun), ...patch });
+        gate.resolve(noiseOutput());
+        await settled(() => h.prisma.testRun.updateMany.mock.calls.length >= 2);
+        await new Promise((resolve) => setImmediate(resolve));
+      };
+
+      it('does not write the stale result over a recalculated diff', async () => {
+        const h = build();
+        h.add('a');
+
+        await changeDuringAnalysis(h, { noiseAnalysis: null });
+
+        expect(stored(h, 'a')).toBeNull();
+        expect(h.events.testRunUpdated).not.toHaveBeenCalled();
+      });
+
+      it('does not write the stale result over a newer request', async () => {
+        const h = build();
+        h.add('a');
+        const newer = { pending: true, requestedAt: '2099-01-01T00:00:00.000Z' };
+
+        await changeDuringAnalysis(h, { noiseAnalysis: newer });
+
+        expect(stored(h, 'a')).toEqual(newer);
+        expect(h.events.testRunUpdated).not.toHaveBeenCalled();
+      });
+
+      it('clears the marker instead of writing a result when the run was decided meanwhile', async () => {
+        const h = build();
+        h.add('a');
+
+        await changeDuringAnalysis(h, { status: TestStatus.approved });
+        await analysed(h, 1);
+
+        expect(stored(h, 'a')).toBeNull();
+        expect(h.events.testRunUpdated).toHaveBeenCalledTimes(1);
+      });
+
+      it('guards the result write with the status and the marker it read', async () => {
+        const h = build();
+        h.add('a');
+
+        await changeDuringAnalysis(h, {});
+        await analysed(h, 1);
+
+        expect(h.prisma.testRun.updateMany).toHaveBeenLastCalledWith({
+          where: {
+            id: 'a',
+            status: TestStatus.unresolved,
+            noiseAnalysis: { path: ['requestedAt'], equals: expect.any(String) },
+          },
+          data: { noiseAnalysis: expect.objectContaining({ version: 1 }) },
+        });
+      });
+    });
+
+    it('skips the event when the run vanished right after the write', async () => {
+      const h = build();
+      h.add('a');
+      h.prisma.testRun.findUnique
+        .mockImplementationOnce(({ where }: { where: { id: string } }) => Promise.resolve(h.store.get(where.id)))
+        .mockResolvedValueOnce(null);
+
+      await h.service.enqueue(['a']);
+      await settled(() => h.prisma.testRun.findUnique.mock.calls.length === 2);
+
+      expect(h.events.testRunUpdated).not.toHaveBeenCalled();
     });
 
     it('resets the field to null, logs once and carries on when an analysis fails', async () => {
@@ -638,17 +818,12 @@ describe('NoiseHintService.enqueue', () => {
       await h.service.enqueue(['a', 'b']);
       await analysed(h, 2);
 
-      expect(h.prisma.testRun.update).toHaveBeenNthCalledWith(1, {
+      expect(h.prisma.testRun.update).toHaveBeenCalledWith({
         where: { id: 'a' },
         data: { noiseAnalysis: Prisma.DbNull },
       });
-      expect(h.prisma.testRun.update).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          where: { id: 'b' },
-          data: { noiseAnalysis: expect.objectContaining({ version: 1 }) },
-        })
-      );
+      expect(stored(h, 'a')).toBeNull();
+      expect(stored(h, 'b')).toMatchObject({ version: 1 });
       expect(error).toHaveBeenCalledTimes(1);
       expect(error).toHaveBeenCalledWith(expect.stringContaining('worker crashed'));
       error.mockRestore();
@@ -666,7 +841,7 @@ describe('NoiseHintService.enqueue', () => {
       await analysed(h, 1);
 
       expect(error).toHaveBeenCalledWith(expect.stringContaining('db gone'));
-      expect(h.prisma.testRun.update).toHaveBeenCalledTimes(2);
+      expect(stored(h, 'b')).toMatchObject({ version: 1 });
       error.mockRestore();
     });
   });

@@ -39,14 +39,19 @@ const thresholdsOf = (config: NoiseAnalysisConfig): NoiseAnalysisThresholds => (
   dinov2: { distanceThreshold: config.dinov2.distanceThreshold },
 });
 
-const isPending = (value: Prisma.JsonValue): boolean =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) && value.pending === true;
+const pendingSince = (value: Prisma.JsonValue): string | null =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) && value.pending === true
+    ? typeof value.requestedAt === 'string'
+      ? value.requestedAt
+      : null
+    : null;
 
 @Injectable()
 export class NoiseHintService implements OnApplicationShutdown {
   private readonly logger: Logger = new Logger(NoiseHintService.name);
   private waiting: string[] = [];
   private known = new Set<string>();
+  private reserved = 0;
   private draining = false;
 
   constructor(
@@ -135,42 +140,49 @@ export class NoiseHintService implements OnApplicationShutdown {
   }
 
   async enqueue(ids: string[]): Promise<NoiseEnqueueResult> {
-    const requested = [...new Set(ids)];
-    const runs = new Map<string, RunWithProject>(
-      (
-        await this.prismaService.testRun.findMany({
-          where: { id: { in: requested } },
-          include: { project: true },
-        })
-      ).map((run) => [run.id, run])
-    );
+    const fresh = [...new Set(ids)].filter((id) => !this.known.has(id));
+    fresh.forEach((id) => this.known.add(id));
 
     const skipped: NoiseEnqueueResult['skipped'] = [];
     const accepted: string[] = [];
-    for (const id of requested) {
-      if (this.known.has(id)) {
-        continue;
+    try {
+      const runs = new Map<string, RunWithProject>(
+        (
+          await this.prismaService.testRun.findMany({
+            where: { id: { in: fresh } },
+            include: { project: true },
+          })
+        ).map((run) => [run.id, run])
+      );
+      for (const id of fresh) {
+        const reason = this.skipReason(runs.get(id));
+        if (reason) {
+          skipped.push({ id, reason });
+        } else if (this.waiting.length + this.reserved >= MAX_WAITING) {
+          skipped.push({ id, reason: 'queue full' });
+        } else {
+          accepted.push(id);
+          this.reserved += 1;
+        }
       }
-      const reason = this.skipReason(runs.get(id));
-      if (reason) {
-        skipped.push({ id, reason });
-      } else if (this.waiting.length + accepted.length >= MAX_WAITING) {
-        skipped.push({ id, reason: 'queue full' });
-      } else {
-        accepted.push(id);
+      skipped.forEach(({ id }) => this.known.delete(id));
+
+      if (accepted.length > 0) {
+        const pending: NoiseAnalysisPending = { pending: true, requestedAt: new Date().toISOString() };
+        await this.prismaService.testRun.updateMany({
+          where: { id: { in: accepted }, status: TestStatus.unresolved },
+          data: { noiseAnalysis: pending as unknown as Prisma.InputJsonObject },
+        });
       }
+    } catch (error) {
+      fresh.forEach((id) => this.known.delete(id));
+      this.reserved -= accepted.length;
+      throw error;
     }
 
+    this.reserved -= accepted.length;
     if (accepted.length > 0) {
-      const pending: NoiseAnalysisPending = { pending: true, requestedAt: new Date().toISOString() };
-      await this.prismaService.testRun.updateMany({
-        where: { id: { in: accepted } },
-        data: { noiseAnalysis: pending as unknown as Prisma.InputJsonObject },
-      });
-      for (const id of accepted) {
-        this.known.add(id);
-        this.waiting.push(id);
-      }
+      this.waiting.push(...accepted);
       void this.drain();
     }
     return { queued: accepted.length, skipped };
@@ -242,15 +254,21 @@ export class NoiseHintService implements OnApplicationShutdown {
   private async process(id: string): Promise<void> {
     try {
       const run = await this.prismaService.testRun.findUnique({ where: { id }, include: { project: true } });
-      if (!run?.project || run.status !== TestStatus.unresolved || !isPending(run.noiseAnalysis)) {
+      const requestedAt = run && pendingSince(run.noiseAnalysis);
+      if (!run?.project || !requestedAt) {
+        return;
+      }
+      if (run.status !== TestStatus.unresolved) {
+        await this.replaceMarker(id, requestedAt, Prisma.DbNull);
         return;
       }
       const result = await this.analyse(run, parseNoiseAnalysisConfig(run.project.noiseAnalysisConfig));
-      const updated = await this.prismaService.testRun.update({
-        where: { id },
-        data: { noiseAnalysis: result as unknown as Prisma.InputJsonObject },
+      const stored = await this.replaceMarker(id, requestedAt, result as unknown as Prisma.InputJsonObject, {
+        status: TestStatus.unresolved,
       });
-      this.eventsGateway.testRunUpdated(updated);
+      if (!stored) {
+        await this.replaceMarker(id, requestedAt, Prisma.DbNull);
+      }
     } catch (error) {
       this.logger.error(`Noise analysis of test run ${id} failed: ${messageOf(error)}`);
       await this.prismaService.testRun
@@ -258,5 +276,25 @@ export class NoiseHintService implements OnApplicationShutdown {
         .then((updated) => this.eventsGateway.testRunUpdated(updated))
         .catch((resetError) => this.logger.error(`Could not reset test run ${id}: ${messageOf(resetError)}`));
     }
+  }
+
+  private async replaceMarker(
+    id: string,
+    requestedAt: string,
+    value: Prisma.InputJsonValue | typeof Prisma.DbNull,
+    where: Prisma.TestRunWhereInput = {}
+  ): Promise<boolean> {
+    const { count } = await this.prismaService.testRun.updateMany({
+      where: { ...where, id, noiseAnalysis: { path: ['requestedAt'], equals: requestedAt } },
+      data: { noiseAnalysis: value },
+    });
+    if (count === 0) {
+      return false;
+    }
+    const updated = await this.prismaService.testRun.findUnique({ where: { id } });
+    if (updated) {
+      this.eventsGateway.testRunUpdated(updated);
+    }
+    return true;
   }
 }
