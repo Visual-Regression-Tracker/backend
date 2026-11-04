@@ -49,12 +49,12 @@ export class NoiseSummaryService {
       JSON.stringify([group.browser, group.os, group.device]);
     const noiseByEnvironment = new Map(noiseGroups.map((group) => [environmentKey(group), group._count._all]));
 
-    const byEnvironment = unresolvedGroups.map(({ browser, os, device, _count }) => ({
-      browser,
-      os,
-      device,
-      unresolved: _count._all,
-      noiseLike: noiseByEnvironment.get(environmentKey({ browser, os, device })) ?? 0,
+    const byEnvironment = unresolvedGroups.map((group) => ({
+      browser: group.browser,
+      os: group.os,
+      device: group.device,
+      unresolved: group._count._all,
+      noiseLike: noiseByEnvironment.get(environmentKey(group)) ?? 0,
     }));
 
     return {

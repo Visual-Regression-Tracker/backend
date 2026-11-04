@@ -7,7 +7,7 @@ import {
   NoiseAnalysisPending,
   NoiseAnalysisResult,
   NoiseRegion,
-  TestRunNoiseAnalysis,
+  readNoiseAnalysis,
 } from './noise-analysis.types';
 
 export interface NoiseAnalysisSummary extends Omit<NoiseAnalysisResult, 'blur' | 'dinov2'> {
@@ -25,8 +25,9 @@ const dropRegions = <T extends { regions: NoiseRegion[] }>(stage: T): Omit<T, 'r
 const dropDinov2Regions = (stage: Dinov2Stage | null): NoiseAnalysisSummary['dinov2'] =>
   stage !== null && 'regions' in stage ? dropRegions(stage) : stage;
 
-export function withoutRegions(analysis: TestRunNoiseAnalysis | null): TestRunNoiseAnalysisSummary | null {
-  if (typeof analysis !== 'object' || analysis === null || Array.isArray(analysis)) {
+export function withoutRegions(json: unknown): TestRunNoiseAnalysisSummary | null {
+  const analysis = readNoiseAnalysis(json);
+  if (!analysis) {
     return null;
   }
   if ('pending' in analysis) {

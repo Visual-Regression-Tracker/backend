@@ -1,3 +1,5 @@
+import { isJsonObject } from '../../utils';
+
 export type NoiseVerdict = 'noise' | 'change' | 'unknown';
 
 export type NoiseUnknownReason = 'sizes differ' | 'no diff' | 'image too large';
@@ -56,3 +58,13 @@ export interface NoiseAnalysisPending {
 }
 
 export type TestRunNoiseAnalysis = NoiseAnalysisResult | NoiseAnalysisPending;
+
+export function readNoiseAnalysis(json: unknown): TestRunNoiseAnalysis | null {
+  if (!isJsonObject(json)) {
+    return null;
+  }
+  if (json.pending === true) {
+    return typeof json.requestedAt === 'string' ? { pending: true, requestedAt: json.requestedAt } : null;
+  }
+  return json as unknown as NoiseAnalysisResult;
+}
