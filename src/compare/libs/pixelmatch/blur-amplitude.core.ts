@@ -209,10 +209,43 @@ export function measureBlurredDifference(baseline: RawImage, image: RawImage): B
   return measureInBox(baseline, image, changedBox(baseline, image));
 }
 
+export const SOLID_PARAMS = { minChange: SOLID_MIN_CHANGE, keep: SOLID_KEEP } as const;
+
+export function solidMask(
+  baseline: RawImage,
+  image: RawImage
+): { measure: BlurredDifference; mask: Uint8Array } | null {
+  const { width, height } = baseline;
+  if (image.width !== width || image.height !== height) {
+    throw new Error(`Cannot blur-compare ${width}x${height} with ${image.width}x${image.height}`);
+  }
+  const box = changedBox(baseline, image);
+  const measured = measureWithSolid(baseline, image, box);
+  if (!measured) {
+    return null;
+  }
+  const mask = new Uint8Array(width * height);
+  if (box) {
+    const boxWidth = box.maxX - box.minX + 1;
+    for (let by = 0; by < measured.solid.length / boxWidth; by++) {
+      mask.set(measured.solid.subarray(by * boxWidth, (by + 1) * boxWidth), (by + box.minY) * width + box.minX);
+    }
+  }
+  return { measure: measured.measure, mask };
+}
+
 function measureInBox(baseline: RawImage, image: RawImage, box: Box | null): BlurredDifference | null {
+  return measureWithSolid(baseline, image, box)?.measure ?? null;
+}
+
+function measureWithSolid(
+  baseline: RawImage,
+  image: RawImage,
+  box: Box | null
+): { measure: BlurredDifference; solid: Uint8Array } | null {
   const { width, height } = baseline;
   if (!box) {
-    return { amplitude: 0, solidPixels: 0, solidShare: 0 };
+    return { measure: { amplitude: 0, solidPixels: 0, solidShare: 0 }, solid: new Uint8Array(0) };
   }
   const { minX, minY, maxX, maxY } = box;
   const boxWidth = maxX - minX + 1;
@@ -280,5 +313,5 @@ function measureInBox(baseline: RawImage, image: RawImage, box: Box | null): Blu
 
   let solidPixels = 0;
   for (let i = 0; i < solid.length; i++) solidPixels += solid[i];
-  return { amplitude, solidPixels, solidShare: solidPixels / (width * height) };
+  return { measure: { amplitude, solidPixels, solidShare: solidPixels / (width * height) }, solid };
 }
