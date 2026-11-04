@@ -1,0 +1,32 @@
+{
+  "name": "vrt-noise-bench",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "demo:setup": "node --env-file-if-exists=.env.local scripts/setup-projects.mjs",
+    "demo:verify-bugs": "node scripts/demo.mjs verify",
+    "demo:baseline": "node scripts/demo.mjs baseline",
+    "demo:own": "node scripts/demo.mjs own",
+    "demo:calibrate": "node scripts/demo.mjs calibrate",
+    "demo:noise": "node scripts/demo.mjs noise",
+    "demo:change": "node scripts/demo.mjs change",
+    "demo:all": "node scripts/demo.mjs all",
+    "demo:report": "node scripts/report.mjs",
+    "bench:export": "node scripts/export-fixtures.mjs"
+  },
+  "dependencies": {
+    "@visual-regression-tracker/sdk-js": "^5.8.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^24.0.0",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}
