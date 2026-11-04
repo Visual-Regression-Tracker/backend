@@ -232,10 +232,10 @@ describe('Builds (e2e)', () => {
     });
 
     it('counts a build with only unknown verdicts as analysed, with share 0', async () => {
-      await haveHistory([2, 2, 2, 0]);
+      await haveHistory([2, 2, 0, 0]);
       const build = await haveBuildWithRuns([{ noiseAnalysis: verdict('unknown') }]);
 
-      expect((await getSummary(build.id).expect(200)).body.projectTypical).toBeCloseTo(1);
+      expect((await getSummary(build.id).expect(200)).body.projectTypical).toBeCloseTo(0);
     });
 
     it('404 for an unknown build', async () => {
