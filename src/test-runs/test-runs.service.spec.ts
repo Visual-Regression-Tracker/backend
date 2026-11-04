@@ -379,9 +379,16 @@ describe('TestRunsService', () => {
           changeSignature: null,
           imageThumbnailName: null,
           diffThumbnailName: null,
+          noiseAnalysis: Prisma.DbNull,
         },
       });
       expect(m.events.testRunUpdated).toHaveBeenCalled();
+    });
+
+    it('drops a stored noise analysis because it belongs to the previous diff', async () => {
+      const m = await saveDiff(unresolvedDiff);
+
+      expect(updatedData(m).noiseAnalysis).toBe(Prisma.DbNull);
     });
 
     it('clears the analysis of a previous comparison when this one has none', async () => {
@@ -396,6 +403,7 @@ describe('TestRunsService', () => {
         changeSignature: null,
         imageThumbnailName: null,
         diffThumbnailName: null,
+        noiseAnalysis: Prisma.DbNull,
       });
     });
   });

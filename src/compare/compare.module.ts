@@ -11,6 +11,7 @@ import { StaticModule } from '../static/static.module';
 import { DiffWorkerPool } from './diff-worker-pool';
 import { Dinov2Service } from './libs/dinov2/dinov2.service';
 import { Dinov2Controller } from './libs/dinov2/dinov2.controller';
+import { NoiseHintService } from './noise-hint/noise-hint.service';
 
 @Module({
   controllers: [OllamaController, Dinov2Controller],
@@ -18,6 +19,7 @@ import { Dinov2Controller } from './libs/dinov2/dinov2.controller';
     CompareService,
     DiffWorkerPool,
     Dinov2Service,
+    NoiseHintService,
     PixelmatchService,
     LookSameService,
     OdiffService,
@@ -26,6 +28,6 @@ import { Dinov2Controller } from './libs/dinov2/dinov2.controller';
     GeminiService,
   ],
   imports: [StaticModule],
-  exports: [CompareService],
+  exports: [CompareService, NoiseHintService],
 })
 export class CompareModule {}
