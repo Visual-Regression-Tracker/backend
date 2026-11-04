@@ -79,8 +79,17 @@ lines in `.env` (section `# optional`) show the same variables.
 | `DIFF_QUEUE_LIMIT` | `256` | Diff jobs allowed to wait for a worker. When the queue is full the API answers `503` with `Retry-After: 5`. |
 | `DIFF_WORKER_MAX_HEAP_MB` | `512` | Heap limit of each diff worker, in MB. |
 | `OLLAMA_BASE_URL` | none | Ollama server for VLM comparisons; required when the Ollama provider is used. |
-| `DINOV2_URL` | none | DINOv2 service for the `ignoreRenderingNoise` filter. Unset, the filter is off. |
-| `DINOV2_TIMEOUT_MS` | `60000` | Timeout for one DINOv2 request, in milliseconds. |
+| `DINOV2_URL` | none | DINOv2 service for the second stage of the rendering-noise check. Unset, only the blur stage runs. |
+| `DINOV2_TIMEOUT_MS` | `60000` | Timeout for one DINOv2 request, in milliseconds. A failed or timed-out request leaves the verdict to the blur stage. |
+
+**Rendering-noise check.** A post-analysis that starts only on request: a reviewer runs it on one run from the diff dialog, or on all unresolved runs of a build from the list. It never changes a run's status or approves anything. It marks each unresolved run "likely noise" or "likely change" and sorts real changes first. The check has two stages, each with its own verdict:
+
+- **Blur** runs whenever the project enables it. It measures the peak difference after a blur with σ = 1 px (`amplitudeThreshold`, default `80`) and the share of solid changed pixels (`solidShareMax`, default `0.01`). Above either threshold, the stage says "change".
+- **DINOv2** takes a second look at the patches that the blur stage called noise. The stage says "change" when the strongest marked patch is above `distanceThreshold` (default `0.15`).
+
+Both stages are on by default and are set per project in the "Post-analysis" section (`noiseAnalysisConfig`). Projects that use the VLM comparator are excluded. `DINOV2_URL` enables the second stage; without it the blur stage works alone. Runs are analysed one at a time from a queue in the API process. `POST /test-runs/noise-analysis` queues a list of run ids, and `GET /builds/:id/noise-summary` returns the counts shown in the build banner. The `ignoreRenderingNoise` key in `imageComparisonConfig` (rc1–rc3) is ignored.
+
+On our benchmark of 168 real screenshot pairs it labels about 1 in 4 small text changes noise with blur alone (28 of 120 bugs) and 1 in 7 with DINOv2 (18 of 120); no noise pair is labelled a change. The lists live in `test_noise/bugs-labelled-noise.ts`; `npm run test:noise` keeps them honest.
 
 ### Auth
 
@@ -141,7 +150,7 @@ A fresh named volume needs nothing: Docker copies the image's `/imageUploads`, w
 ## Optional services
 
 - **Redis** runs several API instances behind one socket.io fan-out. Set `REDIS_URL`; see [Scaling to multiple instances](#scaling-to-multiple-instances-real-time-updates).
-- **DINOv2** serves the `ignoreRenderingNoise` rendering-noise filter (see `dinov2/README.md`). Start it with `docker compose --profile dinov2 up -d`. The service listens on port 8000 inside the compose network only, so the API container uses `DINOV2_URL=http://dinov2:8000`.
+- **DINOv2** is the second stage of the rendering-noise check (see `dinov2/README.md`); the blur stage works without it. Start it with `docker compose --profile dinov2 up -d`. The service listens on port 8000 inside the compose network only, so the API container uses `DINOV2_URL=http://dinov2:8000`.
 - **Ollama** runs the VLM comparison locally. Set `OLLAMA_BASE_URL`; from the API container, which is started by compose, the host is `http://host.docker.internal:11434`.
 - **Gemini** runs the VLM comparison in the cloud. Its API key is set in the project's VLM settings, not in the environment.
 

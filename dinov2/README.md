@@ -1,18 +1,16 @@
 # DINOv2 service
 
-The second half of the rendering-noise filter. When an image-comparison config
-has `ignoreRenderingNoise` on, a failing comparison the blur would pass as
-anti-aliasing is sent here first: DINOv2 compares the two
-screenshots' *content* patch by patch, which catches what is faint in pixels
-but clear in meaning — a missing light icon, a removed input border.
+The second stage of the rendering-noise check. When a project has the DINOv2 stage on and
+`DINOV2_URL` is set, a run that the blur stage called noise is sent here for a second look:
+DINOv2 compares the two screenshots' _content_ patch by patch, which catches what is faint in
+pixels but clear in meaning — a missing light icon, a removed input border.
 
-The service only measures. The backend (`src/compare/libs/dinov2`) decides:
-it marks the patches where pixelmatch sees a non-anti-aliasing change, asks
-for the distances of the tiles holding them, and fails the run when any
-marked patch changed by more than `DINOV2_THRESHOLD` (0.15, checked
-against the noise pairs of `test_noise`). If the service
-cannot be reached, the run goes to review: the check never lets a change
-through it could not look at.
+The service only measures. The backend (`src/compare/libs/dinov2`) takes the patches the blur
+stage marked, asks for the distances of the tiles holding them, and labels the run "likely change"
+when the strongest marked patch is above the project's `distanceThreshold` (0.15 by default,
+checked against the noise pairs of `test_noise`). Otherwise the run stays "likely noise". Nothing
+fails a run, and no status changes. If the service cannot be reached, the hint falls back to the
+blur stage's verdict and says so.
 
 ## Run
 
