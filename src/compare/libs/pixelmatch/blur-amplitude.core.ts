@@ -1,5 +1,5 @@
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { RawImage, readPair } from '../../utils';
+import { RawImage, readPair, UnmeasuredReason } from '../../utils';
 import { NoiseAnalysisThresholds, NoiseRegion } from '../../noise-hint/noise-analysis.types';
 import { DINOV2_PATCH, gateOfDecoded, PatchGate } from './patch-gate.core';
 
@@ -17,8 +17,6 @@ export interface BlurAmplitudeJobInput {
   thresholds: NoiseAnalysisThresholds['blur'];
   wantGate: boolean;
 }
-
-export type UnmeasuredReason = 'sizes differ' | 'image too large' | 'unreadable';
 
 export interface BlurAmplitudeJobOutput {
   measure: BlurredDifference | null;

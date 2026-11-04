@@ -10,8 +10,6 @@ export const DEFAULT_NOISE_ANALYSIS_CONFIG: NoiseAnalysisConfig = {
   dinov2: { enabled: true, distanceThreshold: 0.15 },
 };
 
-type Section = Record<string, unknown>;
-
 const finitePositive = (value: unknown, fallback: number): number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 
@@ -20,7 +18,7 @@ const finiteNonNegative = (value: unknown, fallback: number): number =>
 
 const flag = (value: unknown, fallback: boolean): boolean => (typeof value === 'boolean' ? value : fallback);
 
-const section = (value: unknown): Section => (isJsonObject(value) ? value : {});
+const section = (value: unknown): Record<string, unknown> => (isJsonObject(value) ? value : {});
 
 export function parseNoiseAnalysisConfig(json: string): NoiseAnalysisConfig {
   let raw: unknown;

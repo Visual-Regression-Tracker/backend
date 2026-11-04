@@ -1,7 +1,7 @@
 import { PNG } from 'pngjs';
 import Pixelmatch from 'pixelmatch';
 import { IgnoreAreaDto } from '../../../test-runs/dto/ignore-area.dto';
-import { downscale, RawImage, readSameSizePair } from '../../utils';
+import { downscale, RawImage, readPair } from '../../utils';
 
 export interface SignatureJobInput {
   kind: 'signature';
@@ -25,8 +25,8 @@ const SIGNATURE_MAX_DIMENSION = 500;
 export const SIGNATURE_SIMILARITY_THRESHOLD = 0.9;
 
 export function computeChangeSignature(input: SignatureJobInput): SignatureJobOutput {
-  const pair = readSameSizePair(input.baseline, input.image, input.ignoreAreas);
-  return { signature: pair && signatureOfDecoded(pair.baseline, pair.image, input) };
+  const pair = readPair(input.baseline, input.image, input.ignoreAreas);
+  return { signature: 'unmeasured' in pair ? null : signatureOfDecoded(pair.baseline, pair.image, input) };
 }
 
 export function signatureOfDecoded(

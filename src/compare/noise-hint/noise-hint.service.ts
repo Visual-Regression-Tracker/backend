@@ -9,6 +9,7 @@ import { messageOf } from '../../utils/errors';
 import { DiffWorkerPool } from '../diff-worker-pool';
 import { Dinov2Service, strongestPatchDistance } from '../libs/dinov2/dinov2.service';
 import { looksLikeNoise, MAX_MEASURED_PIXELS } from '../libs/pixelmatch/blur-amplitude.core';
+import { UnmeasuredReason } from '../utils';
 import { DINOV2_PATCH, PatchGate } from '../libs/pixelmatch/patch-gate.core';
 import { NoiseAnalysisConfig, parseNoiseAnalysisConfig } from './noise-analysis.config';
 import {
@@ -34,6 +35,12 @@ export interface NoiseEnqueueResult {
 }
 
 type RunWithProject = Prisma.TestRunGetPayload<{ include: { project: true } }>;
+
+const PUBLIC_REASON: Record<UnmeasuredReason, NoiseUnknownReason> = {
+  'sizes differ': 'sizes differ',
+  'image too large': 'image too large',
+  unreadable: 'image too large',
+};
 
 const thresholdsOf = (config: NoiseAnalysisConfig): NoiseAnalysisThresholds => ({
   blur: { amplitudeThreshold: config.blur.amplitudeThreshold, solidShareMax: config.blur.solidShareMax },
@@ -112,7 +119,7 @@ export class NoiseHintService implements OnApplicationShutdown {
     });
     const { measure } = output;
     if (!measure) {
-      return unknown(output.unmeasured === 'sizes differ' ? 'sizes differ' : 'image too large');
+      return unknown(output.unmeasured ? PUBLIC_REASON[output.unmeasured] : 'image too large');
     }
 
     const isNoise = looksLikeNoise(measure, thresholds.blur);
