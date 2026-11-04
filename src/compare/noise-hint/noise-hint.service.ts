@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { ImageComparison, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StaticService } from '../../static/static.service';
@@ -59,7 +59,7 @@ const markedAt = (requestedAt: string): Prisma.TestRunWhereInput => ({
 const ANY_PENDING: Prisma.TestRunWhereInput = { noiseAnalysis: { path: ['pending'], equals: true } };
 
 @Injectable()
-export class NoiseHintService implements OnApplicationShutdown {
+export class NoiseHintService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger: Logger = new Logger(NoiseHintService.name);
   private waiting: string[] = [];
   private known = new Set<string>();
@@ -227,6 +227,20 @@ export class NoiseHintService implements OnApplicationShutdown {
       void this.drain();
     }
     return { queued: accepted.length, skipped };
+  }
+
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      const { count } = await this.prismaService.testRun.updateMany({
+        where: ANY_PENDING,
+        data: { noiseAnalysis: Prisma.DbNull },
+      });
+      if (count > 0) {
+        this.logger.log(`Dropped ${count} noise analyses left pending by the previous run`);
+      }
+    } catch (error) {
+      this.logger.error(`Could not drop pending noise analyses: ${messageOf(error)}`);
+    }
   }
 
   onApplicationShutdown(): void {

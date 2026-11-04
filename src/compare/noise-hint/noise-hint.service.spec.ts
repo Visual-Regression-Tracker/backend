@@ -1216,3 +1216,52 @@ describe('NoiseHintService.enqueue', () => {
     });
   });
 });
+
+describe('NoiseHintService.onApplicationBootstrap', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('clears every pending marker with one updateMany', async () => {
+    const h = build();
+    h.prisma.testRun.updateMany.mockResolvedValue({ count: 0 });
+
+    await h.service.onApplicationBootstrap();
+
+    expect(h.prisma.testRun.updateMany).toHaveBeenCalledTimes(1);
+    expect(h.prisma.testRun.updateMany).toHaveBeenCalledWith({
+      where: { noiseAnalysis: { path: ['pending'], equals: true } },
+      data: { noiseAnalysis: Prisma.DbNull },
+    });
+    expect(h.events.testRunUpdated).not.toHaveBeenCalled();
+  });
+
+  it('logs how many pending analyses it dropped', async () => {
+    const h = build();
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    h.prisma.testRun.updateMany.mockResolvedValue({ count: 3 });
+
+    await h.service.onApplicationBootstrap();
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('3'));
+  });
+
+  it('stays silent when nothing was pending', async () => {
+    const h = build();
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    h.prisma.testRun.updateMany.mockResolvedValue({ count: 0 });
+
+    await h.service.onApplicationBootstrap();
+
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('logs an error instead of throwing when the database fails', async () => {
+    const h = build();
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    h.prisma.testRun.updateMany.mockRejectedValue(new Error('db down'));
+
+    await expect(h.service.onApplicationBootstrap()).resolves.toBeUndefined();
+
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('db down'));
+  });
+});
