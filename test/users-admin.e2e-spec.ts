@@ -107,6 +107,7 @@ describe('Users admin and RBAC (e2e)', () => {
             firstName: 'fName',
             lastName: 'lName',
             role: 'guest',
+            createdAt: expect.any(String),
           },
         ])
       );
