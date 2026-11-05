@@ -197,6 +197,7 @@ describe('UsersService with DbUserService implementation', () => {
 
     expect(prismaUserCreateMock).toHaveBeenCalled();
     expect(result).toEqual(toUserSummary(user));
+    expect(result.createdAt).toEqual(user.createdAt);
     expect(result).not.toHaveProperty('apiKey');
   });
 

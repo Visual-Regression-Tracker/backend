@@ -284,13 +284,14 @@ describe('Users Controller', () => {
 
   describe('admin handlers', () => {
     it('lists every user as a summary without the password and the api key', async () => {
-      const other = { ...user, id: '2', email: 'other@example.com' };
+      const other = { ...user, id: '2', email: 'other@example.com', createdAt: new Date(0) };
       prismaService.user.findMany.mockResolvedValue([user, other]);
 
       const result = await controller.userList();
 
       expect(prismaService.user.findMany).toHaveBeenCalledWith();
       expect(result).toEqual([toUserSummary(user), toUserSummary(other)]);
+      expect(result.map((summary) => summary.createdAt)).toEqual([user.createdAt, other.createdAt]);
       for (const summary of result) {
         expect(summary).not.toHaveProperty('password');
         expect(summary).not.toHaveProperty('apiKey');
