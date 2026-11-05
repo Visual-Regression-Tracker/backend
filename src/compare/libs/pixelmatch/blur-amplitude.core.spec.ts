@@ -9,6 +9,8 @@ import {
   looksLikeNoise,
   MAX_MEASURED_PIXELS,
   measureBlurredDifference,
+  SOLID_PARAMS,
+  solidMask,
 } from './blur-amplitude.core';
 import { DEFAULT_NOISE_ANALYSIS_CONFIG } from '../../noise-hint/noise-analysis.config';
 import { DINOV2_PATCH, gateOfDecoded } from './patch-gate.core';
@@ -383,5 +385,38 @@ describe('computeBlurAmplitude', () => {
 
       expect(structuredClone(output)).toEqual(output);
     });
+  });
+});
+
+describe('solidMask', () => {
+  it('pins the solid constants', () => {
+    expect(SOLID_PARAMS).toEqual({ minChange: 6, keep: 0.9 });
+  });
+
+  it('reports the same measure as measureBlurredDifference', () => {
+    for (const changed of [pixel(10, 10), column(10), box(), box([200, 200, 200, 255]), image()]) {
+      expect(solidMask(blank, changed)?.measure).toEqual(measureBlurredDifference(blank, changed));
+    }
+  });
+
+  it('marks exactly the solid pixels in full-image coordinates', () => {
+    const result = solidMask(blank, box([200, 200, 200, 255]));
+
+    expect(result?.mask.length).toBe(SIZE * SIZE);
+    expect(result?.mask.reduce((sum, v) => sum + v, 0)).toBe(result?.measure.solidPixels);
+    expect(result?.mask[10 * SIZE + 10]).toBe(1);
+    expect(result?.mask[0]).toBe(0);
+  });
+
+  it('is empty for identical images and null beyond the size limit', () => {
+    expect(solidMask(blank, image())?.mask.every((v) => v === 0)).toBe(true);
+
+    const width = 4000;
+    const height = Math.ceil(MAX_MEASURED_PIXELS / width) + 1;
+    const a: RawImage = { data: Buffer.alloc(width * height * 4, 255), width, height };
+    const b: RawImage = { data: Buffer.from(a.data), width, height };
+    b.data[0] = 0;
+    b.data[b.data.length - 4] = 0;
+    expect(solidMask(a, b)).toBeNull();
   });
 });

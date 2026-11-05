@@ -1,0 +1,8 @@
+{
+  "width": 1280,
+  "height": 800,
+  "solidPixels": 24,
+  "encoding": "bit-packed row-major, LSB first, bit i = pixel y*width+x",
+  "SOLID_MIN_CHANGE": 6,
+  "SOLID_KEEP": 0.9
+}
