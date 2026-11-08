@@ -59,10 +59,15 @@ const service = new NoiseHintService(
   {} as EventsGateway
 );
 
+const CALIBRATED = {
+  blur: { ...DEFAULT_NOISE_ANALYSIS_CONFIG.blur, enabled: true },
+  dinov2: { ...DEFAULT_NOISE_ANALYSIS_CONFIG.dinov2, enabled: true },
+};
+
 export async function analyse(c: NoiseCase): Promise<NoiseAnalysisResult> {
   recorded = c.dinov2;
   const run = generateTestRun({ baselineName: c.baseline, imageName: c.image, diffName: 'diff.png' });
-  return service.analyse(run, DEFAULT_NOISE_ANALYSIS_CONFIG);
+  return service.analyse(run, CALIBRATED);
 }
 
 export const closeBench = () => pool.onApplicationShutdown();

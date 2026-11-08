@@ -45,6 +45,7 @@ describe('TestRuns review API (e2e)', () => {
     project = await haveProject(projectsService, 'TestRuns review E2E', {
       autoApproveFeature: false,
       maxBuildAllowed: 100,
+      noiseAnalysisConfig: JSON.stringify({ blur: { enabled: true }, dinov2: { enabled: true } }),
     });
   });
 
