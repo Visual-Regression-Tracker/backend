@@ -204,7 +204,7 @@ jobs:
       - name: Databases of earlier releases upgrade
         working-directory: prisma
         run: |
-          git fetch --no-tags --depth=1 origin tag api-v5.7.0 tag api-v6.0.0-rc4 tag api-v6.0.0-rc7
+          git fetch --no-tags --depth=1 origin tag api-v5.7.0 tag api-v6.0.0-rc1 tag api-v6.0.0-rc4 tag api-v6.0.0-rc7
           ./test/upgrade-from-releases.sh
 
   test-dinov2:
