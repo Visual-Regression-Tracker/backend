@@ -53,6 +53,9 @@ Run typecheck, lint, format check and the unit tests before calling work done.
   per project. Comparator-agnostic behaviour belongs in `CompareService`.
 - API input is validated by DTOs (`class-validator`, global `ValidationPipe`).
   Fields older clients do not send must be `@IsOptional()`, or saving breaks for them.
+- A user-visible change (API, config, env vars, behaviour) also updates the user
+  docs in the umbrella repo (Visual-Regression-Tracker/Visual-Regression-Tracker,
+  `docs/wiki/`, published to the GitHub Wiki on merge to master).
 - Format only the files you changed (`npx prettier --write <files>`), not whole
   directories: prettier also rewrites untouched files, markdown included.
 - Comments: by default, none. Write one only for a non-obvious _why_ that a
