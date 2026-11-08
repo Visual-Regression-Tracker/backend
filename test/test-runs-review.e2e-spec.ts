@@ -245,6 +245,26 @@ describe('TestRuns review API (e2e)', () => {
       }
     });
 
+    it('skips the runs of a project created without a noise config', async () => {
+      const fresh = await haveProject(projectsService, 'Noise default E2E', {
+        autoApproveFeature: false,
+        maxBuildAllowed: 100,
+        noiseAnalysisConfig: undefined,
+      });
+      try {
+        const baseline = await buildsService.findOrCreate({ projectId: fresh.id, branchName: fresh.mainBranchName });
+        await approve([(await postRun(baseline, WHITE)).id]);
+        const build = await buildsService.findOrCreate({ projectId: fresh.id, branchName: fresh.mainBranchName });
+        const run = await postRun(build, CHANGED);
+
+        const res = await post({ ids: [run.id] }).expect(200);
+
+        expect(res.body).toEqual({ queued: 0, skipped: [{ id: run.id, reason: 'analysis off' }] });
+      } finally {
+        await projectsService.remove(fresh.id);
+      }
+    });
+
     it('skips a run that is not unresolved', async () => {
       const run = await postRun(await newBuild(), WHITE);
 
