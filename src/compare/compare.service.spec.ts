@@ -6,7 +6,7 @@ import { CompareService } from './compare.service';
 import { DiffWorkerPool } from './diff-worker-pool';
 import { LookSameService } from './libs/looks-same/looks-same.service';
 import { OdiffService } from './libs/odiff/odiff.service';
-import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
+import { DEFAULT_CONFIG, PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
 import { VlmService } from './libs/vlm/vlm.service';
 import { OllamaService } from './libs/vlm/providers/ollama/ollama.service';
 import { GeminiService } from './libs/vlm/providers/gemini/gemini.service';
@@ -221,6 +221,18 @@ describe('CompareService with mocked collaborators', () => {
       await diffProject(service);
 
       expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getSignatureConfig', () => {
+    it.each([
+      ['{ "threshold": 0.3, "ignoreAntialiasing": false }', { threshold: 0.3, includeAA: false }],
+      ['{ "threshold": 0.3 }', { threshold: 0.3, includeAA: DEFAULT_CONFIG.ignoreAntialiasing }],
+      [null, { threshold: DEFAULT_CONFIG.threshold, includeAA: DEFAULT_CONFIG.ignoreAntialiasing }],
+    ])('reads %s as the pixelmatch settings the signature is stamped with', async (imageComparisonConfig, expected) => {
+      const { service } = await setup();
+
+      expect(service.getSignatureConfig({ imageComparisonConfig } as Project)).toEqual(expected);
     });
   });
 

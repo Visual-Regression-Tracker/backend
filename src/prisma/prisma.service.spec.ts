@@ -126,6 +126,17 @@ describe('getPgOptions', () => {
     expect(getPgOptions(`${url}?pool_timeout=-1&connect_timeout=soon`).pool.connectionTimeoutMillis).toBe(10000);
   });
 
+  it('warns, without echoing the value, when DATABASE_URL is not a URL', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    getPgOptions('not-a-url-secret');
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('DATABASE_URL');
+    expect(warn.mock.calls[0][0]).not.toContain('secret');
+    warn.mockRestore();
+  });
+
   it('passes the schema parameter on to the adapter', () => {
     expect(getPgOptions(`${url}?schema=vrt`).schema).toBe('vrt');
   });

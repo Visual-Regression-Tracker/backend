@@ -301,8 +301,7 @@ export class OidcUsersService implements Users {
   }
 }
 
-// openid-client 6 rejects an advertised issuer that differs from the configured one, except when given the
-// discovery url; 5 trusted the advertised one, as split-horizon setups (API reaches the IdP by another host) need
+// the discovery url makes openid-client trust the advertised issuer, which split-horizon setups need
 function discoveryUrl(issuerUrl: string): URL {
   const url = new URL(issuerUrl);
   if (!url.pathname.includes('/.well-known/')) {
@@ -318,7 +317,7 @@ function skipTlsVerificationFor(origin: string): oidc.CustomFetch {
     fetch(url, { ...(options as RequestInit), ...(new URL(url).origin === origin && { dispatcher }) });
 }
 
-// openid-client 5's encoding: 6's ClientSecretBasic also escapes -_.!~*'(), which IdPs that do not decode reject
+// escapes only what form encoding requires: some IdPs reject the extra -_.!~*'() escapes
 function clientSecretBasic(clientId: string, clientSecret: string): oidc.ClientAuth {
   const encode = (value: string) => encodeURIComponent(value).replace(/%20/g, '+');
   const credentials = Buffer.from(`${encode(clientId)}:${encode(clientSecret)}`).toString('base64');

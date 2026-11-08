@@ -32,7 +32,10 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { Role, TestRun, User } from '@prisma/client';
-import { MatchingVariations, RevertDecision, TestRunsService, testRunNotFound } from './test-runs.service';
+import { TestRunsService } from './test-runs.service';
+import { RevertDecision } from './test-run-revert.service';
+import { MatchingVariations } from './test-run-matching.service';
+import { testRunNotFound } from './test-runs.shared';
 import { TestRunResultDto } from './dto/testRunResult.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { TestRunDto } from './dto/testRun.dto';
