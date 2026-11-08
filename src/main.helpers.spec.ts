@@ -167,8 +167,8 @@ describe('parseLogLevels', () => {
     logger = { warn: jest.fn() };
   });
 
-  it.each([undefined, '', '  ,, '])('keeps Nest default (every level) for %p', (value) => {
-    expect(parseLogLevels(value, logger)).toBeUndefined();
+  it.each([undefined, '', '  ,, '])('defaults to log, error, warn and fatal for %p', (value) => {
+    expect(parseLogLevels(value, logger)).toEqual(['log', 'error', 'warn', 'fatal']);
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -181,8 +181,8 @@ describe('parseLogLevels', () => {
     expect(logger.warn).toHaveBeenCalledWith('LOG_LEVEL: unknown levels ignored: loud');
   });
 
-  it('keeps Nest default when no level is known', () => {
-    expect(parseLogLevels('loud', logger)).toBeUndefined();
+  it('falls back to the default levels when no level is known', () => {
+    expect(parseLogLevels('loud', logger)).toEqual(['log', 'error', 'warn', 'fatal']);
     expect(logger.warn).toHaveBeenCalled();
   });
 });
