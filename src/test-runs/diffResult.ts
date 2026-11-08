@@ -6,6 +6,8 @@ export interface StampedSignature {
   signature: number[];
 }
 
+export type SignatureConfig = Pick<StampedSignature, 'threshold' | 'includeAA'>;
+
 export interface DiffResult {
   status: TestStatus | undefined;
   diffName: string | null;

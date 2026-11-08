@@ -6,6 +6,8 @@ import { availableParallelism } from 'os';
 import { isAbsolute, resolve } from 'path';
 import { Client, PoolConfig } from 'pg';
 
+const logger = new Logger('PrismaService');
+
 const UNSUPPORTED_PRISMA_PARAMS = ['pgbouncer', 'statement_cache_size', 'socket_timeout', 'sslidentity', 'sslpassword'];
 
 // Translated into pg's `ssl`: pg reads sslcert as a client certificate and require as verify-full
@@ -41,7 +43,9 @@ export function getPgOptions(databaseUrl: string | undefined): {
   let url: URL | undefined;
   try {
     url = new URL(databaseUrl as string);
-  } catch {}
+  } catch {
+    if (databaseUrl) logger.warn('DATABASE_URL is not a valid URL; connection settings fall back to defaults');
+  }
   const params = url?.searchParams ?? new URLSearchParams();
 
   const seconds = (name: string, fallback: number) => {

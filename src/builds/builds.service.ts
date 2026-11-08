@@ -10,7 +10,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { isPrismaError } from '../prisma/prisma-errors';
 import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
-import { TestRunAlreadyDecidedException, TestRunsService } from '../test-runs/test-runs.service';
+import { TestRunsService } from '../test-runs/test-runs.service';
+import { TestRunAlreadyDecidedException } from '../test-runs/test-runs.shared';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { getBuildsStats } from './build-stats';
