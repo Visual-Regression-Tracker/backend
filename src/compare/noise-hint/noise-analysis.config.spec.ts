@@ -5,8 +5,8 @@ import { DEFAULT_NOISE_ANALYSIS_CONFIG, parseNoiseAnalysisConfig } from './noise
 describe('parseNoiseAnalysisConfig', () => {
   it('pins the values the benchmark was calibrated on', () => {
     expect(DEFAULT_NOISE_ANALYSIS_CONFIG).toEqual({
-      blur: { enabled: true, amplitudeThreshold: 80, solidShareMax: 0.01 },
-      dinov2: { enabled: true, distanceThreshold: 0.15 },
+      blur: { enabled: false, amplitudeThreshold: 80, solidShareMax: 0.01 },
+      dinov2: { enabled: false, distanceThreshold: 0.15 },
     });
   });
 
@@ -32,10 +32,10 @@ describe('parseNoiseAnalysisConfig', () => {
   });
 
   it('takes the given values and fills the missing ones from the defaults', () => {
-    const parsed = parseNoiseAnalysisConfig('{"blur":{"amplitudeThreshold":120},"dinov2":{"enabled":false}}');
+    const parsed = parseNoiseAnalysisConfig('{"blur":{"amplitudeThreshold":120},"dinov2":{"distanceThreshold":0.15}}');
 
     expect(parsed).toEqual({
-      blur: { enabled: true, amplitudeThreshold: 120, solidShareMax: 0.01 },
+      blur: { enabled: false, amplitudeThreshold: 120, solidShareMax: 0.01 },
       dinov2: { enabled: false, distanceThreshold: 0.15 },
     });
   });
@@ -46,8 +46,8 @@ describe('parseNoiseAnalysisConfig', () => {
     );
 
     expect(parsed).toEqual({
-      blur: { enabled: true, amplitudeThreshold: 90, solidShareMax: 0.01 },
-      dinov2: { enabled: true, distanceThreshold: 0.2 },
+      blur: { enabled: false, amplitudeThreshold: 90, solidShareMax: 0.01 },
+      dinov2: { enabled: false, distanceThreshold: 0.2 },
     });
   });
 
@@ -67,6 +67,13 @@ describe('parseNoiseAnalysisConfig', () => {
     ['array dinov2', '{"dinov2":[]}'],
   ])('uses the default for %s', (_name, json) => {
     expect(parseNoiseAnalysisConfig(json)).toEqual(DEFAULT_NOISE_ANALYSIS_CONFIG);
+  });
+
+  it('keeps an explicit enabled:true when other fields are missing', () => {
+    const parsed = parseNoiseAnalysisConfig('{"blur":{"enabled":true}}');
+
+    expect(parsed.blur).toEqual({ enabled: true, amplitudeThreshold: 80, solidShareMax: 0.01 });
+    expect(parsed.dinov2.enabled).toBe(false);
   });
 
   it('keeps zero for solidShareMax', () => {

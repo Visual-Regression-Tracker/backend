@@ -38,7 +38,7 @@ model Project {
   autoApproveFeature    Boolean         @default(true)
   imageComparison       ImageComparison @default(pixelmatch)
   imageComparisonConfig String          @default("{ \"threshold\": 0.1, \"ignoreAntialiasing\": true, \"allowDiffDimensions\": false }")
-  noiseAnalysisConfig   String          @default("{\"blur\":{\"enabled\":true,\"amplitudeThreshold\":80,\"solidShareMax\":0.01},\"dinov2\":{\"enabled\":true,\"distanceThreshold\":0.15}}")
+  noiseAnalysisConfig   String          @default("{\"blur\":{\"enabled\":false,\"amplitudeThreshold\":80,\"solidShareMax\":0.01},\"dinov2\":{\"enabled\":false,\"distanceThreshold\":0.15}}")
   bulkApproveVariations Boolean         @default(false)
   bulkApproveGroupBy    String          @default("customTags")
   builds                Build[]

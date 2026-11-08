@@ -18,7 +18,7 @@ const mockDefaultProject = {
   bulkApproveVariations: false,
   bulkApproveGroupBy: 'customTags',
   noiseAnalysisConfig:
-    '{"blur":{"enabled":true,"amplitudeThreshold":80,"solidShareMax":0.01},"dinov2":{"enabled":true,"distanceThreshold":0.15}}',
+    '{"blur":{"enabled":false,"amplitudeThreshold":80,"solidShareMax":0.01},"dinov2":{"enabled":false,"distanceThreshold":0.15}}',
 } as const;
 
 const mockDefaultUser = {

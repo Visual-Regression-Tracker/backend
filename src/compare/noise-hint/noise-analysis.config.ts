@@ -6,8 +6,8 @@ export interface NoiseAnalysisConfig {
 }
 
 export const DEFAULT_NOISE_ANALYSIS_CONFIG: NoiseAnalysisConfig = {
-  blur: { enabled: true, amplitudeThreshold: 80, solidShareMax: 0.01 },
-  dinov2: { enabled: true, distanceThreshold: 0.15 },
+  blur: { enabled: false, amplitudeThreshold: 80, solidShareMax: 0.01 },
+  dinov2: { enabled: false, distanceThreshold: 0.15 },
 };
 
 const finitePositive = (value: unknown, fallback: number): number =>
