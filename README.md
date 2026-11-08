@@ -56,7 +56,7 @@ lines in `.env` (section `# optional`) show the same variables.
 | `SERVER_TIMEOUT` | Node.js default | HTTP `server.timeout`, in milliseconds. |
 | `SERVER_HEADERS_TIMEOUT` | Node.js default | HTTP `headersTimeout`, in milliseconds. |
 | `SERVER_KEEP_ALIVE_TIMEOUT` | Node.js default | HTTP `keepAliveTimeout`, in milliseconds. |
-| `LOG_LEVEL` | all levels | Comma-separated Nest log levels to keep, e.g. `log,warn,error,fatal`. |
+| `LOG_LEVEL` | `log,error,warn,fatal` | Comma-separated Nest log levels to keep, e.g. `log,warn,error,fatal`. |
 | `HTTPS_KEY_PATH` | `./secrets/ssl.key` | TLS private key. HTTPS is used only when both files exist; otherwise the API serves HTTP. A file that exists but cannot be read stops startup. |
 | `HTTPS_CERT_PATH` | `./secrets/ssl.cert` | TLS certificate. |
 

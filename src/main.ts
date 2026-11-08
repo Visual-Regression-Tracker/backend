@@ -20,7 +20,7 @@ async function bootstrap() {
     cors: true,
     httpsOptions: getHttpsOptions(),
     abortOnError: false,
-    ...(logger && { logger }),
+    logger,
   });
   app.useGlobalPipes(new GlobalValidationPipe());
   app.enableShutdownHooks();

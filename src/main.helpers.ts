@@ -5,6 +5,7 @@ import { resolve } from 'path';
 
 export const DEFAULT_HTTPS_KEY_PATH = './secrets/ssl.key';
 export const DEFAULT_HTTPS_CERT_PATH = './secrets/ssl.cert';
+const DEFAULT_LOG_LEVELS: readonly LogLevel[] = ['log', 'error', 'warn', 'fatal'];
 const LOG_LEVELS: readonly LogLevel[] = ['log', 'error', 'warn', 'debug', 'verbose', 'fatal'];
 
 export class StartupCheckError extends Error {}
@@ -63,7 +64,7 @@ function accessError(path: string, access: 'readable' | 'writable', error: unkno
 export function parseLogLevels(
   value: string | undefined,
   logger: Pick<Logger, 'warn'> = new Logger('Bootstrap')
-): LogLevel[] | undefined {
+): LogLevel[] {
   const requested = (value ?? '')
     .split(',')
     .map((level) => level.trim().toLowerCase())
@@ -73,5 +74,5 @@ export function parseLogLevels(
   if (unknown.length) {
     logger.warn(`LOG_LEVEL: unknown levels ignored: ${unknown.join(', ')}`);
   }
-  return levels.length ? levels : undefined;
+  return levels.length ? levels : [...DEFAULT_LOG_LEVELS];
 }
