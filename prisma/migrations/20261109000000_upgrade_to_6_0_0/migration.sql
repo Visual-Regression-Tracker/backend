@@ -25,10 +25,10 @@ CREATE INDEX IF NOT EXISTS "_UserFavoriteProjects_B_index" ON "_UserFavoriteProj
 
 -- AddForeignKey
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '_UserFavoriteProjects_A_fkey') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = '"_UserFavoriteProjects"'::regclass AND conname = '_UserFavoriteProjects_A_fkey') THEN
     ALTER TABLE "_UserFavoriteProjects" ADD CONSTRAINT "_UserFavoriteProjects_A_fkey" FOREIGN KEY ("A") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '_UserFavoriteProjects_B_fkey') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = '"_UserFavoriteProjects"'::regclass AND conname = '_UserFavoriteProjects_B_fkey') THEN
     ALTER TABLE "_UserFavoriteProjects" ADD CONSTRAINT "_UserFavoriteProjects_B_fkey" FOREIGN KEY ("B") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
 END $$;
