@@ -11,7 +11,8 @@ import { BadRequestException, NotFoundException, ParseArrayPipe, ParseEnumPipe }
 import { PNG } from 'pngjs';
 import { Prisma, Role, User } from '@prisma/client';
 import { TestRunsController, multipartLimits, parseIds, parseUuidIds } from './test-runs.controller';
-import { RevertDecision, TestRunsService } from './test-runs.service';
+import { TestRunsService } from './test-runs.service';
+import { RevertDecision } from './test-run-revert.service';
 import { TestVariationsService } from '../test-variations/test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';

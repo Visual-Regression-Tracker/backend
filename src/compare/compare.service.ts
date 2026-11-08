@@ -1,10 +1,11 @@
 import { ImageComparison, Project } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
-import { PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
+import { DEFAULT_CONFIG, PixelmatchService } from './libs/pixelmatch/pixelmatch.service';
 import { ImageComparator } from './libs/image-comparator.interface';
 import { ImageCompareInput } from './libs/ImageCompareInput';
 import { PrismaService } from '../prisma/prisma.service';
-import { DiffResult } from '../test-runs/diffResult';
+import { DiffResult, SignatureConfig } from '../test-runs/diffResult';
+import { parseConfig } from './utils';
 import { LookSameService } from './libs/looks-same/looks-same.service';
 import { OdiffService } from './libs/odiff/odiff.service';
 import { VlmService } from './libs/vlm/vlm.service';
@@ -49,6 +50,11 @@ export class CompareService {
       this.warnedAboutRemovedFlag = true;
       this.logger.warn('The ignoreRenderingNoise project setting was removed in 6.0; comparisons run without it.');
     }
+  }
+
+  getSignatureConfig(project: Project): SignatureConfig {
+    const { threshold, ignoreAntialiasing } = parseConfig(project.imageComparisonConfig, DEFAULT_CONFIG, this.logger);
+    return { threshold, includeAA: ignoreAntialiasing };
   }
 
   async getChangeSignature(input: Omit<SignatureJobInput, 'kind'>): Promise<SignatureJobOutput> {

@@ -5,26 +5,28 @@ import { StaticService } from '../static/static.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPrismaError } from '../prisma/prisma-errors';
 import { Prisma, Project, TestRun, TestStatus, TestVariation } from '@prisma/client';
-import { DiffResult, StampedSignature } from './diffResult';
+import { DiffResult } from './diffResult';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { TestRunResultDto } from '../test-runs/dto/testRunResult.dto';
 import { BaselineRef, TestVariationsService } from '../test-variations/test-variations.service';
 import { TestRunDto } from './dto/testRun.dto';
 import { getTestVariationUniqueData, parseIgnoreAreas, testRunImageNames, variationKey } from '../utils';
-import { BoundedCache } from '../utils/bounded-cache';
-import { mapWithConcurrency } from '../utils/map-with-concurrency';
+import { messageOf } from '../utils/errors';
 import { CompareService } from '../compare/compare.service';
 import { UpdateTestRunDto } from './dto/update-test.dto';
-import { parseConfig } from '../compare/utils';
-import { DEFAULT_CONFIG } from '../compare/libs/pixelmatch/pixelmatch.service';
-import { PixelmatchConfig } from '../compare/libs/pixelmatch/pixelmatch.types';
-import { signaturesMatch, SIGNATURE_LENGTH } from '../compare/libs/pixelmatch/signature.core';
 import type { WrapperType } from '../shared/wrapper-type';
+import { RevertDecision, TestRunRevertService } from './test-run-revert.service';
+import { MatchingVariations, TestRunMatchingService } from './test-run-matching.service';
+import {
+  getAllIgnoreAreas,
+  NO_TEST_VARIATION,
+  TestRunAlreadyDecidedException,
+  testRunNotFound,
+} from './test-runs.shared';
 
 @Injectable()
 export class TestRunsService {
   private readonly logger: Logger = new Logger(TestRunsService.name);
-  private readonly signatureCache = new BoundedCache<Promise<number[] | null>>(SIGNATURE_CACHE_SIZE);
 
   constructor(
     @Inject(forwardRef(() => TestVariationsService))
@@ -32,7 +34,9 @@ export class TestRunsService {
     private prismaService: PrismaService,
     private staticService: StaticService,
     private compareService: CompareService,
-    private eventsGateway: EventsGateway
+    private eventsGateway: EventsGateway,
+    private revertService: TestRunRevertService,
+    private matchingService: TestRunMatchingService
   ) {}
 
   async findMany(buildId: string): Promise<TestRunDto[]> {
@@ -253,260 +257,12 @@ export class TestRunsService {
     return current;
   }
 
-  async revert(ids: string[], decision?: RevertDecision): Promise<void> {
-    const uniqueIds = [...new Set(ids)];
-    if (uniqueIds.length === 0) {
-      throw new ConflictException('Nothing to revert');
-    }
-    const found = await this.prismaService.testRun.findMany({ where: { id: { in: uniqueIds } } });
-    const byId = new Map(found.map((run) => [run.id, run]));
-    const missing = uniqueIds.filter((id) => !byId.has(id));
-    if (missing.length) {
-      throw testRunNotFound(missing.join(', '));
-    }
-    const runs = uniqueIds.map((id) => byId.get(id)!);
-    assertRevertable(runs, decision);
-
-    const freedBaselines = await this.prismaService.$transaction(async (tx) => {
-      const approved = runs.filter((run) => run.status === TestStatus.approved);
-      for (const run of runs.filter((run) => run.status === TestStatus.failed)) {
-        await this.restoreStatus(run, {}, tx);
-      }
-      const freed: { name: string; baselineName: string }[] = [];
-      for (const run of await this.latestApprovalFirst(approved, tx)) {
-        freed.push({ name: run.name, baselineName: await this.revertApproval(run, tx) });
-      }
-      return freed;
-    });
-
-    for (const { name, baselineName } of freedBaselines) {
-      if (!(await this.isBaselineReferenced(name, baselineName))) {
-        await this.staticService.deleteImage(baselineName);
-      }
-    }
-    const reverted = await this.prismaService.testRun.findMany({ where: { id: { in: uniqueIds } } });
-    const revertedById = new Map(reverted.map((run) => [run.id, run]));
-    for (const id of uniqueIds) {
-      this.eventsGateway.testRunUpdated(revertedById.get(id)!);
-    }
-  }
-
-  private async latestApprovalFirst(runs: TestRun[], tx: Prisma.TransactionClient): Promise<TestRun[]> {
-    const baselines = await tx.baseline.findMany({
-      where: { testRunId: { in: runs.map((run) => run.id) } },
-      select: { testRunId: true, createdAt: true },
-    });
-    const approvedAt = new Map(baselines.map((baseline) => [baseline.testRunId, baseline.createdAt.getTime()]));
-    return [...runs].sort((a, b) => (approvedAt.get(b.id) ?? 0) - (approvedAt.get(a.id) ?? 0));
-  }
-
-  private async restoreStatus(
-    run: TestRun,
-    extra: { testVariationId?: string },
-    tx: Prisma.TransactionClient
-  ): Promise<void> {
-    const { count } = await tx.testRun.updateMany({
-      where: { id: run.id, status: run.status },
-      data: {
-        status: run.statusBeforeDecision ?? (run.baselineName ? TestStatus.unresolved : TestStatus.new),
-        statusBeforeDecision: null,
-        ...extra,
-      },
-    });
-    if (count === 0) {
-      throw new ConflictException(`Test run ${run.id} changed while reverting, try again`);
-    }
-  }
-
-  private async revertApproval(run: TestRun, tx: Prisma.TransactionClient): Promise<string> {
-    const baseline = await tx.baseline.findUnique({ where: { testRunId: run.id } });
-    if (!baseline) {
-      throw new ConflictException(`Test run ${run.id} has no baseline to revert`);
-    }
-    const latest = await latestBaseline(tx, baseline.testVariationId);
-    const variation = await tx.testVariation.findUnique({ where: { id: baseline.testVariationId } });
-    if (latest?.id !== baseline.id || variation?.baselineName !== baseline.baselineName) {
-      throw new ConflictException(`Test run ${run.id}: a later approval changed this baseline`);
-    }
-    await tx.baseline.delete({ where: { id: baseline.id } });
-    const previous = await latestBaseline(tx, variation.id);
-    const restoreVariation = () =>
-      tx.testVariation.update({
-        where: { id: variation.id },
-        data: {
-          baselineName: previous?.baselineName ?? null,
-          // null: the approval did not overwrite this variation's ignore areas and comment
-          ...(baseline.ignoreAreasBeforeApproval !== null && {
-            ignoreAreas: baseline.ignoreAreasBeforeApproval,
-            comment: baseline.commentBeforeApproval,
-          }),
-        },
-      });
-
-    const wasFeatureBranchApproval =
-      variation.branchName === run.branchName && run.baselineBranchName !== run.branchName;
-    if (!wasFeatureBranchApproval) {
-      await restoreVariation();
-      await this.restoreStatus(run, {}, tx);
-      return baseline.baselineName;
-    }
-
-    const mainVariation = await this.testVariationService.findUnique(
-      variationKey(variation.projectId, run.baselineBranchName!, run),
-      tx
-    );
-    if (!mainVariation) {
-      throw new ConflictException(NO_TEST_VARIATION);
-    }
-    await this.restoreStatus(run, { testVariationId: mainVariation.id }, tx);
-    const [baselines, testRuns] = await Promise.all([
-      tx.baseline.count({ where: { testVariationId: variation.id } }),
-      tx.testRun.count({ where: { testVariationId: variation.id } }),
-    ]);
-    if (baselines === 0 && testRuns === 0) {
-      await tx.testVariation.delete({ where: { id: variation.id } });
-    } else {
-      await restoreVariation();
-    }
-    return baseline.baselineName;
-  }
-
-  private async isBaselineReferenced(name: string, baselineName: string): Promise<boolean> {
-    const [runs, variations, baselines] = await Promise.all([
-      this.prismaService.testRun.count({ where: { name, baselineName } }),
-      this.prismaService.testVariation.count({ where: { baselineName } }),
-      this.prismaService.baseline.count({ where: { baselineName } }),
-    ]);
-    return runs + variations + baselines > 0;
-  }
-
-  private async findMatchingSiblings(
-    id: string
-  ): Promise<{ testRun: TestRun; matching: TestRun[]; skipped: SkippedSibling[] }> {
-    const testRun = await this.findOneOrThrow(id);
-
-    const project = testRun.projectId
-      ? await this.prismaService.project.findUnique({ where: { id: testRun.projectId } })
-      : null;
-    if (!project?.bulkApproveVariations) {
-      return { testRun, matching: [], skipped: [] };
-    }
-
-    const config: PixelmatchConfig = parseConfig(project.imageComparisonConfig, DEFAULT_CONFIG, this.logger);
-
-    const groupBy = resolveGroupByAxis(project.bulkApproveGroupBy);
-    const fixedAxes: Record<string, string | null> = {};
-    for (const axis of GROUP_BY_AXES) {
-      if (axis !== groupBy) {
-        fixedAxes[axis] = testRun[axis] ?? null;
-      }
-    }
-
-    const siblings = await this.prismaService.testRun.findMany({
-      where: {
-        id: { not: testRun.id },
-        buildId: testRun.buildId,
-        branchName: testRun.branchName,
-        name: testRun.name,
-        ...fixedAxes,
-        status: { in: [TestStatus.unresolved, TestStatus.new] },
-      },
-    });
-
-    const candidates = siblings.filter(
-      (sibling) => !!sibling.diffPercent && magnitudesSimilar(testRun.diffPercent, sibling.diffPercent)
-    );
-    const [referenceSignature, ...candidateSignatures] = await mapWithConcurrency(
-      [testRun, ...candidates],
-      SIGNATURE_CONCURRENCY,
-      (run) => this.getChangeSignature(run, config)
-    );
-
-    if (!referenceSignature) {
-      return {
-        testRun,
-        matching: [],
-        skipped: siblings.map((run) => ({ run, reason: 'no reference diff' })),
-      };
-    }
-
-    const signatures = new Map(candidates.map((sibling, index) => [sibling.id, candidateSignatures[index]] as const));
-    const matching: TestRun[] = [];
-    const skipped: SkippedSibling[] = [];
-    for (const sibling of siblings) {
-      const signature = signatures.get(sibling.id);
-      let reason: string | null = null;
-      if (!sibling.diffPercent || signature === null) {
-        reason = 'no diff to match';
-      } else if (signature === undefined) {
-        reason = 'different change size';
-      } else if (!signaturesMatch(referenceSignature, signature)) {
-        reason = 'different change pattern';
-      }
-      if (reason) {
-        skipped.push({ run: sibling, reason });
-      } else {
-        matching.push(sibling);
-      }
-    }
-
-    return { testRun, matching, skipped };
+  revert(ids: string[], decision?: RevertDecision): Promise<void> {
+    return this.revertService.revert(ids, decision);
   }
 
   async getMatchingVariations(id: string): Promise<MatchingVariations> {
-    const { testRun, matching, skipped } = await this.findMatchingSiblings(id);
-    const variations = [testRun, ...matching].map((run) => new TestRunDto(run));
-    const skippedDto = skipped.map((item) => ({ ...new TestRunDto(item.run), reason: item.reason }));
-    return { variations, skipped: skippedDto };
-  }
-
-  private async getChangeSignature(testRun: TestRun, config: PixelmatchConfig): Promise<number[] | null> {
-    const stored = parseStoredSignature(testRun.changeSignature, config, this.logger);
-    if (stored) {
-      return stored;
-    }
-    if (!testRun.baselineName) {
-      return null;
-    }
-    const ignoreAreas = this.getAllIgnoreAreas(testRun);
-    const key = [
-      testRun.baselineName,
-      testRun.imageName,
-      config.threshold,
-      config.ignoreAntialiasing,
-      JSON.stringify(ignoreAreas),
-    ].join('|');
-    const cached = this.signatureCache.get(key);
-    if (cached) {
-      return cached;
-    }
-
-    const pending = this.computeChangeSignature(testRun, ignoreAreas, config);
-    this.signatureCache.set(key, pending);
-    pending.catch(() => this.signatureCache.delete(key));
-    return pending;
-  }
-
-  private async computeChangeSignature(
-    testRun: TestRun,
-    ignoreAreas: IgnoreAreaDto[],
-    config: PixelmatchConfig
-  ): Promise<number[] | null> {
-    const [baseline, image] = await Promise.all([
-      this.staticService.getImageBuffer(testRun.baselineName),
-      this.staticService.getImageBuffer(testRun.imageName),
-    ]);
-    if (!baseline || !image) {
-      return null;
-    }
-    const { signature } = await this.compareService.getChangeSignature({
-      baseline,
-      image,
-      ignoreAreas,
-      threshold: config.threshold,
-      includeAA: config.ignoreAntialiasing,
-    });
-    return signature;
+    return this.matchingService.getMatchingVariations(await this.findOneOrThrow(id));
   }
 
   async saveDiffResult(id: string, diffResult: DiffResult): Promise<TestRun> {
@@ -539,7 +295,7 @@ export class TestRunsService {
         image: testRun.imageName,
         imageBuffer,
         baseline: testRun.baselineName,
-        ignoreAreas: this.getAllIgnoreAreas(testRun),
+        ignoreAreas: getAllIgnoreAreas(testRun),
         diffTollerancePercent: testRun.diffTollerancePercent,
         saveDiffAsFile: true,
       },
@@ -673,10 +429,6 @@ export class TestRunsService {
     return { projectId: testVariation.projectId, ownVariationId };
   }
 
-  private getAllIgnoreAreas(testRun: TestRun): IgnoreAreaDto[] {
-    return parseIgnoreAreas(testRun.ignoreAreas).concat(parseIgnoreAreas(testRun.tempIgnoreAreas));
-  }
-
   private async tryAutoApproveByPastBaselines({
     testRun,
     testVariation,
@@ -736,11 +488,14 @@ export class TestRunsService {
     if (!imageBuffer) {
       try {
         imageBuffer = (await this.staticService.getImageBuffer(testRun.imageName)) ?? undefined;
-      } catch {
+      } catch (error) {
+        this.logger.warn(
+          `Auto-approve continues without the uploaded image of test run ${testRun.id}: ${messageOf(error)}`
+        );
         imageBuffer = undefined;
       }
     }
-    const ignoreAreas = this.getAllIgnoreAreas(testRun);
+    const ignoreAreas = getAllIgnoreAreas(testRun);
     for (const baseline of candidates) {
       if (await this.shouldAutoApprove({ project, baseline, testRun, imageBuffer, ignoreAreas })) {
         try {
@@ -796,96 +551,7 @@ interface AutoApproveProps {
   imageBuffer?: Buffer;
 }
 
-export interface MatchingVariations {
-  variations: TestRunDto[];
-  skipped: Array<TestRunDto & { reason: string }>;
-}
-
-interface SkippedSibling {
-  run: TestRun;
-  reason: string;
-}
-
-type TestRunWithVariation = TestRun & { testVariation: TestVariation | null };
-
-export const testRunNotFound = (id: string) => new NotFoundException(`Test run not found: ${id}`);
-
-export class TestRunAlreadyDecidedException extends ConflictException {}
-
-export enum RevertDecision {
-  approve = 'approve',
-  reject = 'reject',
-}
-
-const DECIDED_STATUS = { approve: TestStatus.approved, reject: TestStatus.failed } as const;
-
-const assertRevertable = (runs: TestRun[], decision?: RevertDecision) => {
-  if (decision) {
-    const expected = DECIDED_STATUS[decision];
-    const changed = runs.find((run) => run.status !== expected);
-    if (changed) {
-      throw new ConflictException(`Test run ${changed.id} is ${changed.status}, not ${expected}`);
-    }
-    return;
-  }
-  const undecided = runs.find((run) => run.status !== TestStatus.approved && run.status !== TestStatus.failed);
-  if (undecided) {
-    throw new ConflictException(
-      `Test run ${undecided.id} is ${undecided.status}: only approved or rejected runs can be reverted`
-    );
-  }
-};
-
 const changedMeanwhile = (id: string) =>
   new TestRunAlreadyDecidedException(`Test run ${id} was changed by someone else meanwhile`);
 
-const latestBaseline = (tx: Prisma.TransactionClient, testVariationId: string) =>
-  tx.baseline.findFirst({ where: { testVariationId }, orderBy: { createdAt: 'desc' } });
-
-const NO_TEST_VARIATION = 'No test variation found. Re-create test run';
-
-const GROUP_BY_AXES = ['customTags', 'os', 'device', 'browser', 'viewport'] as const;
-
-function resolveGroupByAxis(value: string | null | undefined): string {
-  return value && (GROUP_BY_AXES as readonly string[]).includes(value) ? value : 'customTags';
-}
-
-export const SIGNATURE_CONCURRENCY = 8;
-
-const SIGNATURE_CACHE_SIZE = 2000;
-
-function parseStoredSignature(
-  stored: string | null | undefined,
-  config: PixelmatchConfig,
-  logger: Logger
-): number[] | null {
-  if (!stored) {
-    return null;
-  }
-  try {
-    const parsed: StampedSignature = JSON.parse(stored);
-    const wellFormed =
-      Array.isArray(parsed?.signature) &&
-      parsed.signature.length === SIGNATURE_LENGTH &&
-      parsed.signature.every((value) => typeof value === 'number' && Number.isFinite(value));
-    if (!wellFormed) {
-      return null;
-    }
-    const sameConfig = parsed.threshold === config.threshold && parsed.includeAA === config.ignoreAntialiasing;
-    return sameConfig ? parsed.signature : null;
-  } catch (error) {
-    logger.warn(`Ignoring unreadable stored change signature: ${error}`);
-    return null;
-  }
-}
-
-const MATCH_MAGNITUDE_RATIO = 2;
-
-function magnitudesSimilar(a: number | null, b: number | null): boolean {
-  const min = Math.min(a ?? 0, b ?? 0);
-  const max = Math.max(a ?? 0, b ?? 0);
-  if (min <= 0) {
-    return max <= 0;
-  }
-  return max / min <= MATCH_MAGNITUDE_RATIO;
-}
+type TestRunWithVariation = TestRun & { testVariation: TestVariation | null };
