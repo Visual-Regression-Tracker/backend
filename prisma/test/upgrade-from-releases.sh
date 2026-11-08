@@ -26,7 +26,7 @@ upgrade() {
   cp schema.prisma prisma.config.ts "$WORK"
   DATABASE_URL=$url npx prisma migrate deploy --config "$WORK/prisma.config.ts"
   $PSQL "$url" -qc "INSERT INTO \"Project\" (id, name, \"updatedAt\") VALUES ('default', 'default', now())"
-  if [ "$2" != v5 ]; then
+  if [ "$2" != v5 ] && [ "$2" != rc1 ]; then
     $PSQL "$url" -qc "INSERT INTO \"Project\" (id, name, \"updatedAt\", \"noiseAnalysisConfig\") VALUES ('custom', 'custom', now(), '$CUSTOM')"
   fi
   DATABASE_URL=$url npx prisma migrate deploy
@@ -35,6 +35,9 @@ upgrade() {
 
 upgrade api-v5.7.0 v5
 expect "$SERVER_URL/vrt_upgrade_v5" default "$OFF" "5.x project"
+
+upgrade api-v6.0.0-rc1 rc1
+expect "$SERVER_URL/vrt_upgrade_rc1" default "$OFF" "rc1 project"
 
 upgrade api-v6.0.0-rc4 rc4
 expect "$SERVER_URL/vrt_upgrade_rc4" default "$RC4_ON" "rc4 project"
