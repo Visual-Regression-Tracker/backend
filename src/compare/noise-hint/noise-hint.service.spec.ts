@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { ImageComparison, Prisma, TestRun, TestStatus } from '@prisma/client';
-import { generateTestRun, TEST_PROJECT } from '../../_data_';
+import { generateTestRun, TEST_PROJECT as DEFAULT_PROJECT } from '../../_data_';
 import { DiffWorkerPool } from '../diff-worker-pool';
 import { Dinov2Service } from '../libs/dinov2/dinov2.service';
 import { BlurAmplitudeJobOutput, MAX_MEASURED_PIXELS } from '../libs/pixelmatch/blur-amplitude.core';
@@ -26,8 +26,15 @@ const headerOnlyPng = (width: number, height: number): Buffer => {
   return header;
 };
 
+const ALL_ON: NoiseAnalysisConfig = {
+  blur: { ...DEFAULT_NOISE_ANALYSIS_CONFIG.blur, enabled: true },
+  dinov2: { ...DEFAULT_NOISE_ANALYSIS_CONFIG.dinov2, enabled: true },
+};
+
+const TEST_PROJECT = { ...DEFAULT_PROJECT, noiseAnalysisConfig: JSON.stringify(ALL_ON) };
+
 const config = (patch: Partial<NoiseAnalysisConfig> = {}): NoiseAnalysisConfig => ({
-  ...DEFAULT_NOISE_ANALYSIS_CONFIG,
+  ...ALL_ON,
   ...patch,
 });
 
@@ -1034,7 +1041,7 @@ describe('NoiseHintService.enqueue', () => {
       h.add('a', {
         project: {
           ...TEST_PROJECT,
-          noiseAnalysisConfig: '{"dinov2":{"enabled":false},"blur":{"amplitudeThreshold":50}}',
+          noiseAnalysisConfig: '{"dinov2":{"enabled":false},"blur":{"enabled":true,"amplitudeThreshold":50}}',
         },
       });
 

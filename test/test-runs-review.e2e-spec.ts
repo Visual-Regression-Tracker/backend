@@ -45,6 +45,7 @@ describe('TestRuns review API (e2e)', () => {
     project = await haveProject(projectsService, 'TestRuns review E2E', {
       autoApproveFeature: false,
       maxBuildAllowed: 100,
+      noiseAnalysisConfig: JSON.stringify({ blur: { enabled: true }, dinov2: { enabled: true } }),
     });
   });
 
@@ -241,6 +242,26 @@ describe('TestRuns review API (e2e)', () => {
         expect((await runOf(onRun.id)).status).toBe(TestStatus.unresolved);
       } finally {
         await projectsService.remove(off.id);
+      }
+    });
+
+    it('skips the runs of a project created without a noise config', async () => {
+      const fresh = await haveProject(projectsService, 'Noise default E2E', {
+        autoApproveFeature: false,
+        maxBuildAllowed: 100,
+        noiseAnalysisConfig: undefined,
+      });
+      try {
+        const baseline = await buildsService.findOrCreate({ projectId: fresh.id, branchName: fresh.mainBranchName });
+        await approve([(await postRun(baseline, WHITE)).id]);
+        const build = await buildsService.findOrCreate({ projectId: fresh.id, branchName: fresh.mainBranchName });
+        const run = await postRun(build, CHANGED);
+
+        const res = await post({ ids: [run.id] }).expect(200);
+
+        expect(res.body).toEqual({ queued: 0, skipped: [{ id: run.id, reason: 'analysis off' }] });
+      } finally {
+        await projectsService.remove(fresh.id);
       }
     });
 
