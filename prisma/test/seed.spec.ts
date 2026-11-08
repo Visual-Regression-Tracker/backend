@@ -68,7 +68,7 @@ describe('seed', () => {
 
   const noAdmin = (existing: object | null = null) => {
     prismaMock.user.findFirst.mockResolvedValue(null);
-    prismaMock.user.findUnique.mockResolvedValue(existing);
+    prismaMock.user.findUnique.mockResolvedValue(existing as never);
   };
 
   const loggedText = () => JSON.stringify([...log.mock.calls, ...warn.mock.calls]);
@@ -94,7 +94,7 @@ describe('seed', () => {
 
   describe('createDefaultUser', () => {
     test('active admin exists: nothing is created or changed', async () => {
-      prismaMock.user.findFirst.mockResolvedValue({ id: 'admin' });
+      prismaMock.user.findFirst.mockResolvedValue({ id: 'admin' } as never);
 
       await createDefaultUser();
 
@@ -109,7 +109,7 @@ describe('seed', () => {
         id: 'admin',
         apiKey: 'EXISTINGKEY',
         password: 'hash',
-      });
+      } as never);
 
       await createDefaultUser();
 
