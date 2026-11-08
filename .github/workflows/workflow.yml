@@ -201,6 +201,12 @@ jobs:
           npx prisma migrate deploy
           npx prisma migrate diff --from-config-datasource --to-schema schema.prisma --exit-code
 
+      - name: 6.0.0 migration re-runs on a release-candidate schema
+        working-directory: prisma
+        run: |
+          npx prisma db execute --file migrations/20261109000000_upgrade_to_6_0_0/migration.sql
+          npx prisma migrate diff --from-config-datasource --to-schema schema.prisma --exit-code
+
   test-dinov2:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
