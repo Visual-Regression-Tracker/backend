@@ -96,7 +96,6 @@ On our benchmark of 168 real screenshot pairs it labels about 1 in 4 of the benc
 | Variable | Default | What it does |
 |---|---|---|
 | `REGISTRATION_ENABLED` | `true` | `false` (also `0`, `no`, `off`) disables self-registration. |
-| `WS_AUTH_REQUIRED` | `true` | Refuses socket.io connections without a valid JWT in `auth.token`. `false` lets a connection without a token in with a warning, for clients older than UI 6.0; a sent token is still checked. |
 | `LDAP_ENABLED` | `false` | Enables LDAP login. When OIDC is enabled too, OIDC is used. |
 | `LDAP_URL` | none | LDAP server URL, e.g. `ldaps://ldap.example.com:636/`. Required when LDAP is enabled. |
 | `LDAP_BIND_USER` | none | DN of the service account used for the user search. Required when LDAP is enabled. |
@@ -125,7 +124,6 @@ On our benchmark of 168 real screenshot pairs it labels about 1 in 4 of the benc
 | Variable | Default | What it does |
 |---|---|---|
 | `REDIS_URL` | unset, in-memory adapter | Redis for socket.io fan-out between instances (see Scaling to multiple instances). |
-| `WS_BROADCAST` | `false` | Sends build events only to clients that sent `join` with the `projectId`, and test run events only to those that joined the `buildId`. `true` sends every socket.io event to every client, for clients older than UI 6.0. |
 
 ### Seed
 

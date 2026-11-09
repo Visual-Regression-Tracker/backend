@@ -1,7 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Build, TestStatus } from '@prisma/client';
-import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { EventsGateway } from './events.gateway';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -12,7 +11,7 @@ import { generateTestRun, TEST_BUILD } from '../../_data_';
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
-const initGateway = async (env: Record<string, string> = { WS_BROADCAST: 'true' }) => {
+const initGateway = async () => {
   const buildFindManyMock = jest.fn().mockResolvedValue([]);
   const testRunGroupByMock = jest.fn().mockResolvedValue([]);
   const authMiddleware = jest.fn();
@@ -27,27 +26,27 @@ const initGateway = async (env: Record<string, string> = { WS_BROADCAST: 'true' 
         },
       },
       { provide: SocketAuthService, useValue: { middleware: () => authMiddleware } },
-      { provide: ConfigService, useValue: { get: (key: string) => env[key] } },
     ],
   }).compile();
 
   const gateway = module.get<EventsGateway>(EventsGateway);
-  const emitMock = jest.fn();
   const roomEmitMock = jest.fn();
-  const toMock = jest.fn((room: string) => ({
-    emit: (event: string, payload: unknown) => roomEmitMock(room, event, payload),
-  }));
-  gateway.server = { emit: emitMock, to: toMock } as unknown as Server;
-  return { gateway, emitMock, roomEmitMock, toMock, buildFindManyMock, testRunGroupByMock, authMiddleware };
+  gateway.server = {
+    to: (room: string) => ({ emit: (event: string, payload: unknown) => roomEmitMock(room, event, payload) }),
+  } as unknown as Server;
+  return { gateway, roomEmitMock, buildFindManyMock, testRunGroupByMock, authMiddleware };
 };
 
-const emitsOf = (emitMock: jest.Mock, event: string) =>
-  emitMock.mock.calls.filter(([name]) => name === event).map(([, payload]) => payload);
+const emitsOf = (roomEmitMock: jest.Mock, event: string, room?: string) =>
+  roomEmitMock.mock.calls
+    .filter(([emittedRoom, name]) => name === event && (room === undefined || emittedRoom === room))
+    .map(([, , payload]) => payload);
 
 describe('EventsGateway', () => {
   const testRunA = generateTestRun({ id: 'testRunA', buildId: 'buildX' });
   const testRunB = generateTestRun({ id: 'testRunB', buildId: 'buildX' });
   const testRunC = generateTestRun({ id: 'testRunC', buildId: 'buildY' });
+  const testRunD = generateTestRun({ id: 'testRunD', buildId: 'buildX' });
 
   beforeEach(() => {
     jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
@@ -62,13 +61,12 @@ describe('EventsGateway', () => {
     ['buildCreated', 'build_created'],
     ['buildDeleted', 'build_deleted'],
   ] as const)('%s emits %s straight away with the build it is given', async (method, event) => {
-    const { gateway, emitMock } = await initGateway();
+    const { gateway, roomEmitMock } = await initGateway();
     const build = new BuildDto(TEST_BUILD);
 
     gateway[method](build);
 
-    expect(emitMock).toHaveBeenCalledTimes(1);
-    expect(emitMock).toHaveBeenCalledWith(event, build);
+    expect(roomEmitMock.mock.calls).toEqual([[`project:${TEST_BUILD.projectId}`, event, build]]);
   });
 
   describe.each([
@@ -77,58 +75,58 @@ describe('EventsGateway', () => {
     ['testRunDeleted', 'testRun_deleted'],
   ] as const)('%s', (method, event) => {
     it('emits the first test run on the leading edge', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
 
       gateway[method](testRunA);
 
-      expect(emitsOf(emitMock, event)).toEqual([[new TestRunDto(testRunA)]]);
+      expect(emitsOf(roomEmitMock, event, 'build:buildX')).toEqual([[new TestRunDto(testRunA)]]);
     });
 
     it('does not emit again after the wait when only one test run came in', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
 
       gateway[method](testRunA);
       jest.advanceTimersByTime(5000);
 
-      expect(emitsOf(emitMock, event)).toEqual([[new TestRunDto(testRunA)]]);
+      expect(emitsOf(roomEmitMock, event)).toEqual([[new TestRunDto(testRunA)]]);
     });
 
     it('batches the test runs that follow the leading edge into one emit 1500ms after the last call', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
 
       gateway[method](testRunA);
       gateway[method](testRunB);
       jest.advanceTimersByTime(1000);
-      gateway[method](testRunC);
+      gateway[method](testRunD);
       jest.advanceTimersByTime(1499);
 
-      expect(emitsOf(emitMock, event)).toEqual([[new TestRunDto(testRunA)]]);
+      expect(emitsOf(roomEmitMock, event)).toEqual([[new TestRunDto(testRunA)]]);
 
       jest.advanceTimersByTime(1);
 
-      expect(emitsOf(emitMock, event)).toEqual([
+      expect(emitsOf(roomEmitMock, event)).toEqual([
         [new TestRunDto(testRunA)],
-        [new TestRunDto(testRunB), new TestRunDto(testRunC)],
+        [new TestRunDto(testRunB), new TestRunDto(testRunD)],
       ]);
     });
 
     it('flushes a steady stream of test runs at the 3000ms max wait', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
 
       gateway[method](testRunA);
       jest.advanceTimersByTime(1000);
       gateway[method](testRunB);
       jest.advanceTimersByTime(1000);
-      gateway[method](testRunC);
+      gateway[method](testRunD);
       jest.advanceTimersByTime(999);
 
-      expect(emitsOf(emitMock, event)).toEqual([[new TestRunDto(testRunA)]]);
+      expect(emitsOf(roomEmitMock, event)).toEqual([[new TestRunDto(testRunA)]]);
 
       jest.advanceTimersByTime(1);
 
-      expect(emitsOf(emitMock, event)).toEqual([
+      expect(emitsOf(roomEmitMock, event)).toEqual([
         [new TestRunDto(testRunA)],
-        [new TestRunDto(testRunB), new TestRunDto(testRunC)],
+        [new TestRunDto(testRunB), new TestRunDto(testRunD)],
       ]);
     });
 
@@ -143,7 +141,7 @@ describe('EventsGateway', () => {
 
   describe('testRunDeleted', () => {
     it('drops the deleted test run from the created and updated queues', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
 
       gateway.testRunCreated(testRunA);
       gateway.testRunCreated(testRunB);
@@ -154,13 +152,16 @@ describe('EventsGateway', () => {
 
       jest.advanceTimersByTime(1500);
 
-      expect(emitsOf(emitMock, 'testRun_created')).toEqual([[new TestRunDto(testRunA)], [new TestRunDto(testRunC)]]);
-      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([[new TestRunDto(testRunA)]]);
-      expect(emitsOf(emitMock, 'testRun_deleted')).toEqual([[new TestRunDto(testRunB)]]);
+      expect(emitsOf(roomEmitMock, 'testRun_created')).toEqual([
+        [new TestRunDto(testRunA)],
+        [new TestRunDto(testRunC)],
+      ]);
+      expect(emitsOf(roomEmitMock, 'testRun_updated')).toEqual([[new TestRunDto(testRunA)]]);
+      expect(emitsOf(roomEmitMock, 'testRun_deleted')).toEqual([[new TestRunDto(testRunB)]]);
     });
 
     it('keeps the other queued updates when one updated test run is deleted', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
 
       gateway.testRunUpdated(testRunA);
       gateway.testRunUpdated(testRunB);
@@ -169,11 +170,14 @@ describe('EventsGateway', () => {
 
       jest.advanceTimersByTime(1500);
 
-      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([[new TestRunDto(testRunA)], [new TestRunDto(testRunC)]]);
+      expect(emitsOf(roomEmitMock, 'testRun_updated')).toEqual([
+        [new TestRunDto(testRunA)],
+        [new TestRunDto(testRunC)],
+      ]);
     });
 
     it('emits nothing once every queued entry was deleted', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
 
       gateway.testRunUpdated(testRunA);
       gateway.testRunUpdated(testRunB);
@@ -181,7 +185,7 @@ describe('EventsGateway', () => {
 
       jest.advanceTimersByTime(1500);
 
-      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([[new TestRunDto(testRunA)]]);
+      expect(emitsOf(roomEmitMock, 'testRun_updated')).toEqual([[new TestRunDto(testRunA)]]);
     });
   });
 
@@ -191,12 +195,12 @@ describe('EventsGateway', () => {
       ['testRunUpdated', 'testRun_updated'],
       ['testRunDeleted', 'testRun_deleted'],
     ] as const)('%s emits TestRunDto, not the database row', async (method, event) => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
       const row = generateTestRun({ id: 'row', changeSignature: '[0.5]', pixelMisMatchCount: 7 });
 
       gateway[method](row);
 
-      const [[payload]] = emitsOf(emitMock, event);
+      const [[payload]] = emitsOf(roomEmitMock, event);
       expect(payload).toBeInstanceOf(TestRunDto);
       expect(payload).toStrictEqual(new TestRunDto(row));
       expect(payload).not.toHaveProperty('changeSignature');
@@ -206,7 +210,7 @@ describe('EventsGateway', () => {
 
   describe('ordering and de-duplication', () => {
     it('sends an update of a run still queued as created with both the created and the updated event', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
       const diffed = { ...testRunB, status: TestStatus.unresolved, diffName: 'diff.png' };
       const approved = { ...diffed, status: TestStatus.approved };
 
@@ -216,65 +220,71 @@ describe('EventsGateway', () => {
       gateway.testRunUpdated(approved);
       jest.advanceTimersByTime(1500);
 
-      expect(emitsOf(emitMock, 'testRun_created')).toEqual([[new TestRunDto(testRunA)], [new TestRunDto(approved)]]);
-      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([[new TestRunDto(diffed)], [new TestRunDto(approved)]]);
+      expect(emitsOf(roomEmitMock, 'testRun_created')).toEqual([
+        [new TestRunDto(testRunA)],
+        [new TestRunDto(approved)],
+      ]);
+      expect(emitsOf(roomEmitMock, 'testRun_updated')).toEqual([[new TestRunDto(diffed)], [new TestRunDto(approved)]]);
     });
 
     it('sends an update of a run already announced as created as an update', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
       const diffed = { ...testRunA, status: TestStatus.unresolved };
 
       gateway.testRunCreated(testRunA);
       gateway.testRunUpdated(diffed);
 
-      expect(emitsOf(emitMock, 'testRun_created')).toEqual([[new TestRunDto(testRunA)]]);
-      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([[new TestRunDto(diffed)]]);
+      expect(emitsOf(roomEmitMock, 'testRun_created')).toEqual([[new TestRunDto(testRunA)]]);
+      expect(emitsOf(roomEmitMock, 'testRun_updated')).toEqual([[new TestRunDto(diffed)]]);
     });
 
     it('keeps only the latest queued update of a run, in the order the runs first came in', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
       const first = { ...testRunB, status: TestStatus.unresolved };
       const latest = { ...testRunB, status: TestStatus.approved };
 
       gateway.testRunUpdated(testRunA);
       gateway.testRunUpdated(first);
-      gateway.testRunUpdated(testRunC);
+      gateway.testRunUpdated(testRunD);
       gateway.testRunUpdated(latest);
       jest.advanceTimersByTime(1500);
 
-      expect(emitsOf(emitMock, 'testRun_updated')).toEqual([
+      expect(emitsOf(roomEmitMock, 'testRun_updated')).toEqual([
         [new TestRunDto(testRunA)],
-        [new TestRunDto(latest), new TestRunDto(testRunC)],
+        [new TestRunDto(latest), new TestRunDto(testRunD)],
       ]);
     });
 
     it('announces a deleted run once even when it is deleted twice in a batch', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
 
       gateway.testRunDeleted(testRunA);
       gateway.testRunDeleted(testRunB);
       gateway.testRunDeleted(testRunB);
       jest.advanceTimersByTime(1500);
 
-      expect(emitsOf(emitMock, 'testRun_deleted')).toEqual([[new TestRunDto(testRunA)], [new TestRunDto(testRunB)]]);
+      expect(emitsOf(roomEmitMock, 'testRun_deleted')).toEqual([
+        [new TestRunDto(testRunA)],
+        [new TestRunDto(testRunB)],
+      ]);
     });
   });
 
   describe('onApplicationShutdown', () => {
     it('drops the batches still waiting for their debounce', async () => {
-      const { gateway, emitMock, buildFindManyMock } = await initGateway();
+      const { gateway, roomEmitMock, buildFindManyMock } = await initGateway();
 
       gateway.testRunCreated(testRunA);
       gateway.testRunCreated(testRunB);
       await flushPromises();
-      emitMock.mockClear();
+      roomEmitMock.mockClear();
       buildFindManyMock.mockClear();
 
       gateway.onApplicationShutdown();
       jest.advanceTimersByTime(3000);
       await flushPromises();
 
-      expect(emitMock).not.toHaveBeenCalled();
+      expect(roomEmitMock).not.toHaveBeenCalled();
       expect(buildFindManyMock).not.toHaveBeenCalled();
     });
   });
@@ -282,7 +292,7 @@ describe('EventsGateway', () => {
   describe('build_updated', () => {
     it('emits the build with stats aggregated by the database on the leading edge', async () => {
       const build: Build = { ...TEST_BUILD, id: 'buildX' };
-      const { gateway, emitMock, buildFindManyMock, testRunGroupByMock } = await initGateway();
+      const { gateway, roomEmitMock, buildFindManyMock, testRunGroupByMock } = await initGateway();
       buildFindManyMock.mockResolvedValue([build]);
       testRunGroupByMock.mockResolvedValueOnce([
         { buildId: 'buildX', status: TestStatus.ok, merge: false, _count: { _all: 3 } },
@@ -298,7 +308,7 @@ describe('EventsGateway', () => {
         where: { buildId: { in: ['buildX'] } },
         _count: { _all: true },
       });
-      const payloads = emitsOf(emitMock, 'build_updated');
+      const payloads = emitsOf(roomEmitMock, 'build_updated');
       expect(payloads).toHaveLength(1);
       expect(payloads[0]).toEqual([
         new BuildDto(build, { passedCount: 3, unresolvedCount: 0, failedCount: 1, merge: true }),
@@ -307,7 +317,7 @@ describe('EventsGateway', () => {
     });
 
     it('logs a failed read instead of leaving the rejection unhandled', async () => {
-      const { gateway, emitMock, buildFindManyMock } = await initGateway();
+      const { gateway, roomEmitMock, buildFindManyMock } = await initGateway();
       buildFindManyMock.mockRejectedValue(new Error('Connection terminated'));
       const logError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       const unhandled = jest.fn();
@@ -320,7 +330,7 @@ describe('EventsGateway', () => {
 
       expect(logError).toHaveBeenCalledWith('Cannot emit build_updated: Error: Connection terminated');
       expect(unhandled).not.toHaveBeenCalled();
-      expect(emitsOf(emitMock, 'build_updated')).toEqual([]);
+      expect(emitsOf(roomEmitMock, 'build_updated')).toEqual([]);
       logError.mockRestore();
     });
 
@@ -348,13 +358,13 @@ describe('EventsGateway', () => {
     it('emits the builds in the order Prisma returns them, without stats for builds it did not ask about', async () => {
       const known: Build = { ...TEST_BUILD, id: 'buildX' };
       const unknown: Build = { ...TEST_BUILD, id: 'other' };
-      const { gateway, emitMock, buildFindManyMock } = await initGateway();
+      const { gateway, roomEmitMock, buildFindManyMock } = await initGateway();
       buildFindManyMock.mockResolvedValue([unknown, known]);
 
       gateway.buildUpdated('buildX');
       await flushPromises();
 
-      expect(emitsOf(emitMock, 'build_updated')).toEqual([
+      expect(emitsOf(roomEmitMock, 'build_updated')).toEqual([
         [
           new BuildDto(unknown),
           new BuildDto(known, { passedCount: 0, unresolvedCount: 0, failedCount: 0, merge: false }),
@@ -363,12 +373,12 @@ describe('EventsGateway', () => {
     });
 
     it('emits nothing when no queued build exists any more', async () => {
-      const { gateway, emitMock } = await initGateway();
+      const { gateway, roomEmitMock } = await initGateway();
 
       gateway.buildUpdated('gone');
       await flushPromises();
 
-      expect(emitsOf(emitMock, 'build_updated')).toEqual([]);
+      expect(emitsOf(roomEmitMock, 'build_updated')).toEqual([]);
     });
   });
 
@@ -445,65 +455,44 @@ describe('EventsGateway', () => {
       expect(socket.join).toHaveBeenCalledWith(rooms);
     });
 
-    it('sends every event to all clients and to no room with WS_BROADCAST=true', async () => {
-      const { gateway, emitMock, toMock } = await initGateway({ WS_BROADCAST: 'true' });
+    it.each([
+      ['buildCreated', 'build_created'],
+      ['buildDeleted', 'build_deleted'],
+    ] as const)('%s sends %s to the project room only', async (method, event) => {
+      const { gateway, roomEmitMock } = await initGateway();
+      const build = new BuildDto(TEST_BUILD);
 
-      gateway.buildCreated(new BuildDto(TEST_BUILD));
-      gateway.testRunCreated(testRunA);
-
-      expect(emitMock).toHaveBeenCalledTimes(2);
-      expect(toMock).not.toHaveBeenCalled();
+      gateway[method](build);
+      expect(roomEmitMock.mock.calls).toEqual([[`project:${TEST_BUILD.projectId}`, event, build]]);
     });
 
-    describe.each([
-      ['unset', {}],
-      ['false', { WS_BROADCAST: 'false' }],
-    ])('with WS_BROADCAST %s', (_title, env) => {
-      it.each([
-        ['buildCreated', 'build_created'],
-        ['buildDeleted', 'build_deleted'],
-      ] as const)('%s sends %s to the project room only', async (method, event) => {
-        const { gateway, emitMock, roomEmitMock } = await initGateway(env);
-        const build = new BuildDto(TEST_BUILD);
+    it('sends a batch of test runs to the room of each build, with the runs of that build', async () => {
+      const { gateway, roomEmitMock } = await initGateway();
 
-        gateway[method](build);
+      gateway.testRunUpdated(testRunA);
+      gateway.testRunUpdated(testRunB);
+      gateway.testRunUpdated(testRunC);
+      jest.advanceTimersByTime(1500);
+      expect(roomEmitMock.mock.calls.filter(([, event]) => event === 'testRun_updated')).toEqual([
+        ['build:buildX', 'testRun_updated', [new TestRunDto(testRunA)]],
+        ['build:buildX', 'testRun_updated', [new TestRunDto(testRunB)]],
+        ['build:buildY', 'testRun_updated', [new TestRunDto(testRunC)]],
+      ]);
+    });
 
-        expect(emitMock).not.toHaveBeenCalled();
-        expect(roomEmitMock.mock.calls).toEqual([[`project:${TEST_BUILD.projectId}`, event, build]]);
-      });
+    it('sends build_updated to the room of each project, with the builds of that project', async () => {
+      const one: Build = { ...TEST_BUILD, id: 'one', projectId: 'projectP' };
+      const two: Build = { ...TEST_BUILD, id: 'two', projectId: 'projectQ' };
+      const three: Build = { ...TEST_BUILD, id: 'three', projectId: 'projectP' };
+      const { gateway, roomEmitMock, buildFindManyMock } = await initGateway();
+      buildFindManyMock.mockResolvedValue([one, two, three]);
 
-      it('sends a batch of test runs to the room of each build, with the runs of that build', async () => {
-        const { gateway, emitMock, roomEmitMock } = await initGateway(env);
-
-        gateway.testRunUpdated(testRunA);
-        gateway.testRunUpdated(testRunB);
-        gateway.testRunUpdated(testRunC);
-        jest.advanceTimersByTime(1500);
-
-        expect(emitMock).not.toHaveBeenCalled();
-        expect(roomEmitMock.mock.calls.filter(([, event]) => event === 'testRun_updated')).toEqual([
-          ['build:buildX', 'testRun_updated', [new TestRunDto(testRunA)]],
-          ['build:buildX', 'testRun_updated', [new TestRunDto(testRunB)]],
-          ['build:buildY', 'testRun_updated', [new TestRunDto(testRunC)]],
-        ]);
-      });
-
-      it('sends build_updated to the room of each project, with the builds of that project', async () => {
-        const one: Build = { ...TEST_BUILD, id: 'one', projectId: 'projectP' };
-        const two: Build = { ...TEST_BUILD, id: 'two', projectId: 'projectQ' };
-        const three: Build = { ...TEST_BUILD, id: 'three', projectId: 'projectP' };
-        const { gateway, emitMock, roomEmitMock, buildFindManyMock } = await initGateway(env);
-        buildFindManyMock.mockResolvedValue([one, two, three]);
-
-        gateway.buildUpdated('one');
-        await flushPromises();
-
-        expect(emitMock).not.toHaveBeenCalled();
-        expect(roomEmitMock.mock.calls).toEqual([
-          ['project:projectP', 'build_updated', [new BuildDto(one), new BuildDto(three)]],
-          ['project:projectQ', 'build_updated', [new BuildDto(two)]],
-        ]);
-      });
+      gateway.buildUpdated('one');
+      await flushPromises();
+      expect(roomEmitMock.mock.calls).toEqual([
+        ['project:projectP', 'build_updated', [new BuildDto(one), new BuildDto(three)]],
+        ['project:projectQ', 'build_updated', [new BuildDto(two)]],
+      ]);
     });
   });
 });

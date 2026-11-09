@@ -1,5 +1,4 @@
 import { Logger, OnApplicationShutdown } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   ConnectedSocket,
   MessageBody,
@@ -18,7 +17,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Debounced, debounce } from './debounce';
 import { SocketAuthService } from '../../auth/socket-auth.service';
 import { buildRoom, projectRoom, userRoom } from './rooms';
-import { booleanFlag } from '../../utils/env';
 
 const DEBOUNCE_WAIT = 1500;
 const MAX_WAIT = 3000;
@@ -44,15 +42,11 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
   server!: Server;
 
   private readonly logger = new Logger(EventsGateway.name);
-  private readonly broadcast: boolean;
 
   constructor(
     private prismaService: PrismaService,
-    private socketAuthService: SocketAuthService,
-    configService: ConfigService
-  ) {
-    this.broadcast = booleanFlag(configService.get('WS_BROADCAST'), false);
-  }
+    private socketAuthService: SocketAuthService
+  ) {}
 
   afterInit(server: Server): void {
     server.use(this.socketAuthService.middleware());
@@ -142,14 +136,10 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
   }
 
   private emitToRoom(room: string, event: string, payload: unknown): void {
-    (this.broadcast ? this.server : this.server.to(room)).emit(event, payload);
+    this.server.to(room).emit(event, payload);
   }
 
   private emitToRooms<T>(event: string, items: T[], roomOf: (item: T) => string): void {
-    if (this.broadcast) {
-      this.server.emit(event, items);
-      return;
-    }
     Map.groupBy(items, roomOf).forEach((group, room) => this.emitToRoom(room, event, group));
   }
 
