@@ -2,7 +2,6 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { BuildsController } from './builds.controller';
 import { BuildsService } from './builds.service';
-import { NoiseSummaryService } from './noise-summary.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiGuard } from '../auth/guards/api.guard';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
@@ -23,7 +22,6 @@ describe('Builds Controller', () => {
     scheduleRetention: jest.fn(),
     findOrCreate: jest.fn(),
   };
-  const noiseSummaryService = { forBuild: jest.fn() };
   const projectsService = { findOne: jest.fn() };
   const buildDto = new BuildDto(TEST_BUILD);
   const retentionArgs = [TEST_PROJECT.id, TEST_PROJECT.maxBuildAllowed, TEST_BUILD.id];
@@ -34,7 +32,6 @@ describe('Builds Controller', () => {
       controllers: [BuildsController],
       providers: [
         { provide: BuildsService, useValue: buildsService },
-        { provide: NoiseSummaryService, useValue: noiseSummaryService },
         { provide: ProjectsService, useValue: projectsService },
         { provide: PrismaService, useValue: {} },
         { provide: ApiGuard, useValue: {} },
@@ -77,14 +74,6 @@ describe('Builds Controller', () => {
 
     await expect(controller.getDetails(TEST_BUILD.id)).resolves.toBe(buildDto);
     expect(buildsService.findOne).toHaveBeenCalledWith(TEST_BUILD.id);
-  });
-
-  it('delegates the noise summary of a build', async () => {
-    const summary = { unresolved: 0, analysed: 0, noiseLike: 0, byEnvironment: [] };
-    noiseSummaryService.forBuild.mockResolvedValue(summary);
-
-    await expect(controller.getNoiseSummary(TEST_BUILD.id)).resolves.toBe(summary);
-    expect(noiseSummaryService.forBuild).toHaveBeenCalledWith(TEST_BUILD.id);
   });
 
   it('removes a build', async () => {

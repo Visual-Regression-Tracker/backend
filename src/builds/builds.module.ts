@@ -7,7 +7,6 @@ import { SharedModule } from '../shared/shared.module';
 import { AuthModule } from '../auth/auth.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { StaticModule } from '../static/static.module';
-import { NoiseSummaryService } from './noise-summary.service';
 
 @Module({
   imports: [
@@ -18,7 +17,7 @@ import { NoiseSummaryService } from './noise-summary.service';
     forwardRef(() => ProjectsModule),
     StaticModule,
   ],
-  providers: [BuildsService, NoiseSummaryService],
+  providers: [BuildsService],
   controllers: [BuildsController],
   exports: [BuildsService],
 })

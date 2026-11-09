@@ -17,8 +17,6 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { BuildsService } from './builds.service';
-import { NoiseSummaryService } from './noise-summary.service';
-import { NoiseSummaryDto } from './dto/noise-summary.dto';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ApiBearerAuth, ApiTags, ApiSecurity, ApiOkResponse, ApiQuery } from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
@@ -39,7 +37,6 @@ import type { WrapperType } from '../shared/wrapper-type';
 export class BuildsController {
   constructor(
     private buildsService: BuildsService,
-    private noiseSummaryService: NoiseSummaryService,
     @Inject(forwardRef(() => ProjectsService))
     private projectService: WrapperType<ProjectsService>
   ) {}
@@ -73,14 +70,6 @@ export class BuildsController {
   @UseGuards(JwtAuthGuard)
   getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
     return this.buildsService.findOne(id);
-  }
-
-  @Get(':id/noise-summary')
-  @ApiOkResponse({ type: NoiseSummaryDto })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  getNoiseSummary(@Param('id', new ParseUUIDPipe()) id: string): Promise<NoiseSummaryDto> {
-    return this.noiseSummaryService.forBuild(id);
   }
 
   @Delete(':id')
