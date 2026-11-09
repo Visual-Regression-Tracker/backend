@@ -25,6 +25,7 @@ export class SocketAuthService {
   middleware(): SocketMiddleware {
     return (socket, next) => {
       const token: unknown = socket.handshake.auth?.token;
+      if (typeof token !== 'string') return next(new Error(SOCKET_UNAUTHORIZED));
       this.verify(token).then(
         (verified) => {
           if (!verified) return next(new Error(SOCKET_UNAUTHORIZED));
@@ -53,8 +54,7 @@ export class SocketAuthService {
     socket.conn.once('close', () => clearTimeout(timer));
   }
 
-  private async verify(token: unknown): Promise<{ user: User; exp?: number } | null> {
-    if (typeof token !== 'string') return null;
+  private async verify(token: string): Promise<{ user: User; exp?: number } | null> {
     let payload: JwtPayload;
     try {
       payload = await this.jwtService.verifyAsync<JwtPayload>(token);

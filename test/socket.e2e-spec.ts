@@ -6,7 +6,7 @@ import { io, Socket } from 'socket.io-client';
 import { BuildsService } from '../src/builds/builds.service';
 import { ProjectsService } from '../src/projects/projects.service';
 import { UsersService } from '../src/users/users.service';
-import { createE2eApp, haveProject, setEnv } from './api-helpers';
+import { createE2eApp, haveProject } from './api-helpers';
 import { haveUserLogged, LoggedUser } from './preconditions';
 
 const SETTLE_MS = 300;
@@ -16,11 +16,9 @@ describe('Socket.io (e2e)', () => {
   let usersService: UsersService;
   let url: string;
   let user: LoggedUser;
-  let restoreEnv: () => void;
   const sockets: Socket[] = [];
 
-  const start = async (env: Record<string, string>) => {
-    restoreEnv = setEnv(env);
+  const start = async () => {
     const created = await createE2eApp();
     app = created.app;
     usersService = created.get(UsersService);
@@ -33,7 +31,6 @@ describe('Socket.io (e2e)', () => {
     sockets.splice(0).forEach((socket) => socket.disconnect());
     await usersService.delete(user.id);
     await app.close();
-    restoreEnv();
   });
 
   const connect = (auth?: Record<string, unknown>): Promise<Socket> => {
@@ -54,7 +51,7 @@ describe('Socket.io (e2e)', () => {
   const expiredToken = () => app.get(JwtService).sign({ sub: user.id, email: user.email }, { expiresIn: -10 });
 
   describe('authentication', () => {
-    beforeEach(() => start({}));
+    beforeEach(() => start());
 
     it('refuses a socket without a token as unauthorized', async () => {
       await expect(refusalOf()).resolves.toBe('unauthorized');
@@ -71,7 +68,7 @@ describe('Socket.io (e2e)', () => {
   });
 
   describe('closing by the server', () => {
-    beforeEach(() => start({}));
+    beforeEach(() => start());
 
     const serverClosed = (socket: Socket): Promise<string> =>
       new Promise((resolve) => socket.once('disconnect', resolve));
@@ -115,7 +112,7 @@ describe('Socket.io (e2e)', () => {
     });
 
     it('only a socket that joined the project room gets its builds', async () => {
-      await start({});
+      await start();
       project = await haveProject(app.get(ProjectsService), 'Socket rooms');
       const member = await connect({ token: user.token });
       const outsider = await connect({ token: user.token });

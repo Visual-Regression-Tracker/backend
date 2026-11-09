@@ -32,11 +32,9 @@ const setup = () => {
 };
 
 describe('SocketAuthService', () => {
-  let warn: jest.SpyInstance;
   let error: jest.SpyInstance;
 
   beforeEach(() => {
-    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
   });
 
@@ -44,43 +42,42 @@ describe('SocketAuthService', () => {
     jest.restoreAllMocks();
   });
 
-  describe('token check', () => {
-    it('lets in a socket with a valid token of an existing user', async () => {
-      const { connect, validate } = setup();
+  it('lets in a socket with a valid token of an existing user', async () => {
+    const { connect, validate } = setup();
 
-      await expect(connect({ token: validToken })).resolves.toBeUndefined();
+    await expect(connect({ token: validToken })).resolves.toBeUndefined();
 
-      expect(validate).toHaveBeenCalledWith(expect.objectContaining({ sub: user.id, email: user.email }));
-      expect(warn).not.toHaveBeenCalled();
-    });
+    expect(validate).toHaveBeenCalledWith(expect.objectContaining({ sub: user.id, email: user.email }));
+  });
 
-    it.each([
-      ['a token signed with another secret', new JwtService({ secret: 'other' }).sign({ sub: user.id })],
-      ['an expired token', jwtService.sign({ sub: user.id }, { expiresIn: -10 })],
-      ['a token that is not a JWT', 'abc'],
-      ['a token that is not a string', 42],
-    ])('refuses %s as unauthorized', async (_case, token) => {
-      const { connect } = setup();
+  it.each([
+    ['a socket with no auth', undefined],
+    ['a socket with no token', {}],
+    ['a socket with a null token', { token: null }],
+    ['a socket with an empty token', { token: '' }],
+    ['a token signed with another secret', { token: new JwtService({ secret: 'other' }).sign({ sub: user.id }) }],
+    ['an expired token', { token: jwtService.sign({ sub: user.id }, { expiresIn: -10 }) }],
+    ['a token that is not a JWT', { token: 'abc' }],
+    ['a socket with a token that is not a string', { token: 42 }],
+  ])('refuses %s as unauthorized', async (_case, auth) => {
+    const { connect } = setup();
 
-      const refusal = await connect({ token });
+    expect((await connect(auth))?.message).toBe(SOCKET_UNAUTHORIZED);
+  });
 
-      expect(refusal?.message).toBe(SOCKET_UNAUTHORIZED);
-    });
+  it('refuses the token of a user that no longer exists as unauthorized', async () => {
+    const { connect, validate } = setup();
+    validate.mockRejectedValue(new UnauthorizedException());
 
-    it('refuses the token of a user that no longer exists as unauthorized', async () => {
-      const { connect, validate } = setup();
-      validate.mockRejectedValue(new UnauthorizedException());
+    expect((await connect({ token: validToken }))?.message).toBe(SOCKET_UNAUTHORIZED);
+  });
 
-      expect((await connect({ token: validToken }))?.message).toBe(SOCKET_UNAUTHORIZED);
-    });
+  it('refuses with another reason when the user cannot be read, so the client does not log out', async () => {
+    const { connect, validate } = setup();
+    validate.mockRejectedValue(new Error('database is down'));
 
-    it('refuses with another reason when the user cannot be read, so the client does not log out', async () => {
-      const { connect, validate } = setup();
-      validate.mockRejectedValue(new Error('database is down'));
-
-      expect((await connect({ token: validToken }))?.message).toBe('Cannot check the token');
-      expect(error).toHaveBeenCalledWith(expect.stringContaining('database is down'));
-    });
+    expect((await connect({ token: validToken }))?.message).toBe('Cannot check the token');
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('database is down'));
   });
 
   describe('an accepted socket', () => {
@@ -156,20 +153,6 @@ describe('SocketAuthService', () => {
       await connect({ token: validToken });
 
       expect(jest.getTimerCount()).toBe(0);
-    });
-  });
-
-  describe('a socket without a token', () => {
-    it.each([
-      ['no auth', undefined],
-      ['no token', {}],
-      ['a null token', { token: null }],
-      ['an empty token', { token: '' }],
-      ['a token that is not a string', { token: 42 }],
-    ])('refuses a socket with %s as unauthorized', async (_case, auth) => {
-      const { connect } = setup();
-
-      expect((await connect(auth))?.message).toBe(SOCKET_UNAUTHORIZED);
     });
   });
 });

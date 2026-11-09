@@ -31,11 +31,10 @@ const initGateway = async () => {
 
   const gateway = module.get<EventsGateway>(EventsGateway);
   const roomEmitMock = jest.fn();
-  const toMock = jest.fn((room: string) => ({
-    emit: (event: string, payload: unknown) => roomEmitMock(room, event, payload),
-  }));
-  gateway.server = { to: toMock } as unknown as Server;
-  return { gateway, roomEmitMock, toMock, buildFindManyMock, testRunGroupByMock, authMiddleware };
+  gateway.server = {
+    to: (room: string) => ({ emit: (event: string, payload: unknown) => roomEmitMock(room, event, payload) }),
+  } as unknown as Server;
+  return { gateway, roomEmitMock, buildFindManyMock, testRunGroupByMock, authMiddleware };
 };
 
 const emitsOf = (roomEmitMock: jest.Mock, event: string, room?: string) =>
