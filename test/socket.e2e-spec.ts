@@ -53,11 +53,11 @@ describe('Socket.io (e2e)', () => {
 
   const expiredToken = () => app.get(JwtService).sign({ sub: user.id, email: user.email }, { expiresIn: -10 });
 
-  describe('WS_AUTH_REQUIRED=false', () => {
-    beforeEach(() => start({ WS_AUTH_REQUIRED: 'false' }));
+  describe('authentication', () => {
+    beforeEach(() => start({}));
 
-    it('lets in a socket without a token', async () => {
-      await expect(refusalOf()).resolves.toBe('connected');
+    it('refuses a socket without a token as unauthorized', async () => {
+      await expect(refusalOf()).resolves.toBe('unauthorized');
     });
 
     it('lets in a socket with a valid token', async () => {
@@ -67,18 +67,6 @@ describe('Socket.io (e2e)', () => {
     it('refuses an invalid or expired token as unauthorized', async () => {
       await expect(refusalOf({ token: 'not-a-jwt' })).resolves.toBe('unauthorized');
       await expect(refusalOf({ token: expiredToken() })).resolves.toBe('unauthorized');
-    });
-  });
-
-  describe('WS_AUTH_REQUIRED unset', () => {
-    beforeEach(() => start({}));
-
-    it('refuses a socket without a token as unauthorized', async () => {
-      await expect(refusalOf()).resolves.toBe('unauthorized');
-    });
-
-    it('lets in a socket with a valid token', async () => {
-      await expect(refusalOf({ token: user.token })).resolves.toBe('connected');
     });
   });
 
@@ -126,7 +114,7 @@ describe('Socket.io (e2e)', () => {
       await app.get(ProjectsService).remove(project.id);
     });
 
-    it('by default only a socket that joined the project room gets its builds', async () => {
+    it('only a socket that joined the project room gets its builds', async () => {
       await start({});
       project = await haveProject(app.get(ProjectsService), 'Socket rooms');
       const member = await connect({ token: user.token });
@@ -145,22 +133,6 @@ describe('Socket.io (e2e)', () => {
       await settle();
       expect(toOutsider).toEqual([]);
       expect(toLeft).toEqual([]);
-    });
-
-    it('with WS_BROADCAST=true every socket gets every build, joined or not', async () => {
-      await start({ WS_BROADCAST: 'true', WS_AUTH_REQUIRED: 'false' });
-      project = await haveProject(app.get(ProjectsService), 'Socket broadcast');
-      const member = await connect();
-      const outsider = await connect();
-      await member.emitWithAck('join', { projectId: project.id });
-      const received = [nextOf(member, 'build_created'), nextOf(outsider, 'build_created')];
-
-      const build = await createBuild();
-
-      expect(await Promise.all(received)).toEqual([
-        expect.objectContaining({ id: build.id }),
-        expect.objectContaining({ id: build.id }),
-      ]);
     });
   });
 });

@@ -1,9 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import { Socket } from 'socket.io';
-import { booleanFlag } from '../utils/env';
 import { JwtPayload } from './jwt-payload.model';
 import { JwtStrategy } from './jwt.strategy';
 import { userRoom } from '../shared/events/rooms';
@@ -21,19 +19,12 @@ export class SocketAuthService {
 
   constructor(
     private jwtService: JwtService,
-    private jwtStrategy: JwtStrategy,
-    private configService: ConfigService
+    private jwtStrategy: JwtStrategy
   ) {}
 
   middleware(): SocketMiddleware {
-    const required = booleanFlag(this.configService.get('WS_AUTH_REQUIRED'), true);
     return (socket, next) => {
       const token: unknown = socket.handshake.auth?.token;
-      if (token === undefined || token === null || token === '') {
-        if (required) return next(new Error(SOCKET_UNAUTHORIZED));
-        this.logger.warn(`Socket ${socket.id} connected without a token, let in because WS_AUTH_REQUIRED=false`);
-        return next();
-      }
       this.verify(token).then(
         (verified) => {
           if (!verified) return next(new Error(SOCKET_UNAUTHORIZED));
