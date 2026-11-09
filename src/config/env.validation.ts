@@ -48,5 +48,12 @@ export function validateEnv(
   if (text(env.STATIC_SERVICE) === 's3' && !text(env.AWS_S3_BUCKET_NAME)) {
     logger.warn('STATIC_SERVICE=s3 but AWS_S3_BUCKET_NAME is not set: storing images will fail.');
   }
+  for (const name of ['WS_AUTH_REQUIRED', 'WS_BROADCAST']) {
+    if (text(env[name])) {
+      logger.warn(
+        `${name} is no longer read: live updates always need a login and go only to the viewers of a project or build.`
+      );
+    }
+  }
   return env;
 }

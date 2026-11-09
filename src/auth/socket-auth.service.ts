@@ -25,7 +25,7 @@ export class SocketAuthService {
   middleware(): SocketMiddleware {
     return (socket, next) => {
       const token: unknown = socket.handshake.auth?.token;
-      if (typeof token !== 'string') return next(new Error(SOCKET_UNAUTHORIZED));
+      if (typeof token !== 'string' || !token) return next(new Error(SOCKET_UNAUTHORIZED));
       this.verify(token).then(
         (verified) => {
           if (!verified) return next(new Error(SOCKET_UNAUTHORIZED));

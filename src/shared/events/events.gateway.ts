@@ -42,6 +42,7 @@ export class EventsGateway implements OnGatewayInit, OnApplicationShutdown {
   server!: Server;
 
   private readonly logger = new Logger(EventsGateway.name);
+
   constructor(
     private prismaService: PrismaService,
     private socketAuthService: SocketAuthService
