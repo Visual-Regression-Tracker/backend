@@ -1,8 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { BuildsService } from './builds.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { TestRunsService } from '../test-runs/test-runs.service';
-import { TestRunAlreadyDecidedException } from '../test-runs/test-runs.shared';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
 import { mocked, MockedObject } from 'jest-mock';
@@ -49,14 +47,12 @@ const setup = async () => {
     buildDeleted: jest.fn(),
     testRunDeleted: jest.fn(),
   };
-  const testRuns = { approve: jest.fn(), delete: jest.fn(), findMany: jest.fn() };
   const deleteImage = jest.fn().mockResolvedValue(true);
 
   const module = await Test.createTestingModule({
     providers: [
       BuildsService,
       { provide: PrismaService, useValue: prisma },
-      { provide: TestRunsService, useValue: testRuns },
       { provide: EventsGateway, useValue: events },
       {
         provide: StaticService,
@@ -69,7 +65,7 @@ const setup = async () => {
     ],
   }).compile();
 
-  return { service: module.get(BuildsService), prisma, events, testRuns, deleteImage };
+  return { service: module.get(BuildsService), prisma, events, deleteImage };
 };
 
 describe('BuildsService', () => {
@@ -268,7 +264,7 @@ describe('BuildsService', () => {
     const removedBuild = { ...buildRow, testRuns: [run] };
 
     it('removes a build, its runs, their files and announces it', async () => {
-      const { service, prisma, events, testRuns, deleteImage } = await setup();
+      const { service, prisma, events, deleteImage } = await setup();
       prisma.build.findUnique.mockResolvedValueOnce(buildRow);
       prisma.build.delete.mockResolvedValueOnce(buildRow);
       prisma.testRun.findMany.mockResolvedValueOnce([run]);
@@ -286,7 +282,6 @@ describe('BuildsService', () => {
       expect(mocked(BuildDto).mock.calls.at(-1)).toEqual([removedBuild]);
       expect(events.buildDeleted).toHaveBeenCalledTimes(1);
       expect(result).toEqual(removedBuild);
-      expect(testRuns.delete).not.toHaveBeenCalled();
     });
 
     it('deletes the rows of a chunk before its files', async () => {
@@ -772,46 +767,6 @@ describe('BuildsService', () => {
       expect(stopped).toBe(true);
       expect(service.remove).toHaveBeenCalledTimes(1);
       expect(service.remove).not.toHaveBeenCalledWith('o2', expect.anything());
-    });
-  });
-
-  describe('approve', () => {
-    it('approves the new and unresolved runs of the build', async () => {
-      const { service, prisma, testRuns } = await setup();
-      prisma.build.findUnique.mockResolvedValueOnce(build);
-      testRuns.approve.mockResolvedValueOnce({ ...run, status: TestStatus.approved });
-
-      await service.approve('someId', true, 'user id');
-
-      expect(prisma.build.findUnique).toHaveBeenCalledWith({
-        where: { id: 'someId' },
-        include: {
-          testRuns: {
-            where: { status: { in: [TestStatus.new, TestStatus.unresolved] } },
-            select: { id: true },
-          },
-        },
-      });
-      expect(testRuns.approve).toHaveBeenCalledWith(run.id, true, false, 'user id');
-    });
-
-    it('goes on past a run someone else decided meanwhile', async () => {
-      const { service, prisma, testRuns } = await setup();
-      prisma.build.findUnique.mockResolvedValueOnce({ ...build, testRuns: [{ id: 'decided' }, { id: 'next' }] });
-      testRuns.approve.mockRejectedValueOnce(new TestRunAlreadyDecidedException('decided')).mockResolvedValueOnce(run);
-
-      await service.approve('someId', false, 'user id');
-
-      expect(testRuns.approve).toHaveBeenLastCalledWith('next', false, false, 'user id');
-    });
-
-    it('throws NotFoundException for an unknown build', async () => {
-      const { service, prisma } = await setup();
-      prisma.build.findUnique.mockResolvedValueOnce(null);
-
-      await expect(service.approve('missing', false)).rejects.toThrow(
-        new NotFoundException('Build not found: missing')
-      );
     });
   });
 });

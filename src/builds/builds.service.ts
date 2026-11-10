@@ -1,24 +1,13 @@
-import {
-  BeforeApplicationShutdown,
-  ConflictException,
-  forwardRef,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BeforeApplicationShutdown, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPrismaError } from '../prisma/prisma-errors';
-import { Build, Prisma, TestRun, TestStatus } from '@prisma/client';
-import { TestRunsService } from '../test-runs/test-runs.service';
-import { TestRunAlreadyDecidedException } from '../test-runs/test-runs.shared';
+import { Build, Prisma, TestRun } from '@prisma/client';
 import { EventsGateway } from '../shared/events/events.gateway';
 import { BuildDto } from './dto/build.dto';
 import { getBuildsStats } from './build-stats';
 import { testRunImageNames } from '../utils';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
 import { ModifyBuildDto } from './dto/build-modify.dto';
-import type { WrapperType } from '../shared/wrapper-type';
 import { StaticService } from '../static/static.service';
 
 const TEST_RUN_CHUNK = 500;
@@ -38,8 +27,6 @@ export class BuildsService implements BeforeApplicationShutdown {
   constructor(
     private prismaService: PrismaService,
     private eventsGateway: EventsGateway,
-    @Inject(forwardRef(() => TestRunsService))
-    private testRunsService: WrapperType<TestRunsService>,
     private staticService: StaticService
   ) {}
 
@@ -260,34 +247,6 @@ export class BuildsService implements BeforeApplicationShutdown {
   async beforeApplicationShutdown(): Promise<void> {
     this.shuttingDown = true;
     await this.whenRetentionIdle();
-  }
-
-  async approve(id: string, merge: boolean, userId?: string): Promise<void> {
-    const build = await this.prismaService.build.findUnique({
-      where: { id },
-      include: {
-        testRuns: {
-          where: {
-            status: {
-              in: [TestStatus.new, TestStatus.unresolved],
-            },
-          },
-          select: { id: true },
-        },
-      },
-    });
-
-    if (!build) {
-      throw new NotFoundException(`Build not found: ${id}`);
-    }
-
-    for (const testRun of build.testRuns) {
-      try {
-        await this.testRunsService.approve(testRun.id, merge, false, userId);
-      } catch (e) {
-        if (!(e instanceof TestRunAlreadyDecidedException)) throw e;
-      }
-    }
   }
 
   async findOrCreate({
