@@ -85,20 +85,10 @@ describe('DiffWorkerPool with worker threads', () => {
   let loggerErrorSpy: jest.SpyInstance;
   let loggerLogSpy: jest.SpyInstance;
 
-  const createPool = ({
-    workers = '1',
-    queueLimit,
-    maxHeap,
-  }: { workers?: string; queueLimit?: string; maxHeap?: string } = {}) => {
-    const env = {
-      DIFF_WORKER_MAX_HEAP_MB: maxHeap,
-      DIFF_WORKERS_COUNT: workers,
-      DIFF_QUEUE_LIMIT: queueLimit,
-    };
-    for (const [name, value] of Object.entries(env)) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
+  const createPool = ({ cores = 2, maxHeap }: { cores?: number; maxHeap?: string } = {}) => {
+    availableParallelismMock.mockReturnValue(cores);
+    if (maxHeap === undefined) delete process.env.DIFF_WORKER_MAX_HEAP_MB;
+    else process.env.DIFF_WORKER_MAX_HEAP_MB = maxHeap;
     pool = new DiffWorkerPool();
     return pool;
   };
@@ -122,15 +112,11 @@ describe('DiffWorkerPool with worker threads', () => {
 
   describe('pool size', () => {
     it.each([
-      ['DIFF_WORKERS_COUNT when set', '3', 4, 3],
-      ['DIFF_WORKERS_COUNT capped at 8', '20', 4, 8],
-      ['cores - 1 when DIFF_WORKERS_COUNT is not a number', 'abc', 4, 3],
-      ['cores - 1 when DIFF_WORKERS_COUNT is 0 (no workers is not an option)', '0', 6, 5],
-      ['cores - 1 capped at 8', '', 32, 8],
-      ['at least one worker on a single core', '', 1, 1],
-    ])('uses %s', async (_, workers, cores, expected) => {
-      availableParallelismMock.mockReturnValue(cores);
-      createPool({ workers });
+      ['cores - 1', 4, 3],
+      ['cores - 1 capped at 8', 32, 8],
+      ['at least one worker on a single core', 1, 1],
+    ])('uses %s', async (_, cores, expected) => {
+      createPool({ cores });
 
       void settle(pool.run(job(1)));
 
@@ -138,7 +124,7 @@ describe('DiffWorkerPool with worker threads', () => {
     });
 
     it('spawns no worker until the first job and logs how many it started', async () => {
-      createPool({ workers: '2' });
+      createPool({ cores: 3 });
 
       expect(WorkerMock).not.toHaveBeenCalled();
 
@@ -194,7 +180,7 @@ describe('DiffWorkerPool with worker threads', () => {
     });
 
     it('hands the first job to the most recently spawned idle worker', async () => {
-      createPool({ workers: '2' });
+      createPool({ cores: 3 });
 
       void settle(pool.run(job(1)));
       void settle(pool.run(job(2)));
@@ -241,23 +227,23 @@ describe('DiffWorkerPool with worker threads', () => {
   });
 
   describe('queue limit', () => {
-    it('rejects a job once the waiting queue holds DIFF_QUEUE_LIMIT jobs, not counting the ones in flight, with 503 and a retry hint', async () => {
-      createPool({ queueLimit: '1' });
+    it('rejects a job once 256 jobs wait, not counting the one in flight, with 503 and a retry hint', async () => {
+      createPool();
 
-      const inFlight = settle(pool.run(job(1)));
-      const queued = settle(pool.run(job(2)));
+      const inFlight = settle(pool.run(job(0)));
+      const waiting = Array.from({ length: 256 }, (_, i) => settle(pool.run(job(i + 1))));
 
-      const { error } = await settle(pool.run(job(3)));
+      const { error } = await settle(pool.run(job(999)));
       expect(error).toBeInstanceOf(ImageDiffQueueFullException);
       expect((error as ImageDiffQueueFullException).getStatus()).toBe(503);
       expect((error as ImageDiffQueueFullException).retryAfterSeconds).toBe(5);
-      expect(error?.message).toBe('Image diff queue is full (1 jobs)');
+      expect(error?.message).toBe('Image diff queue is full (256 jobs)');
       expect(mockWorkers[0].postMessage).toHaveBeenCalledTimes(1);
 
+      mockWorkers[0].emit('message', output(0));
+      expect((await inFlight).value).toEqual(output(0));
       mockWorkers[0].emit('message', output(1));
-      mockWorkers[0].emit('message', output(2));
-      expect((await inFlight).value).toEqual(output(1));
-      expect((await queued).value).toEqual(output(2));
+      expect((await waiting[0]).value).toEqual(output(1));
     });
 
     it('does not queue an oversized job', async () => {
@@ -269,17 +255,6 @@ describe('DiffWorkerPool with worker threads', () => {
 
       expect(WorkerMock).not.toHaveBeenCalled();
       expect(runWorkerJobMock).not.toHaveBeenCalled();
-    });
-
-    it('defaults to a queue of 256 waiting jobs', async () => {
-      createPool();
-
-      const pending = Array.from({ length: 257 }, (_, i) => settle(pool.run(job(i))));
-
-      await expect(pool.run(job(999))).rejects.toThrow('Image diff queue is full (256 jobs)');
-
-      await pool.onApplicationShutdown();
-      expect((await Promise.all(pending)).every(({ error }) => error?.message.includes('shutting down'))).toBe(true);
     });
   });
 
@@ -341,7 +316,7 @@ describe('DiffWorkerPool with worker threads', () => {
     });
 
     it('runs a job at most twice on loaded workers', async () => {
-      createPool({ workers: '2' });
+      createPool({ cores: 3 });
 
       const target = settle(pool.run(job(1)));
       const other = pool.run(job(2));
@@ -427,7 +402,7 @@ describe('DiffWorkerPool with worker threads', () => {
     });
 
     it('rejects with the exit code when the last failure was a non-zero exit', async () => {
-      createPool({ workers: '2' });
+      createPool({ cores: 3 });
 
       const target = settle(pool.run(job(1)));
       const other = pool.run(job(2));
@@ -516,7 +491,7 @@ describe('DiffWorkerPool with worker threads', () => {
     });
 
     it('takes only the crashed worker out of the idle ones', async () => {
-      createPool({ workers: '3' });
+      createPool({ cores: 4 });
 
       void settle(pool.run(job(1)));
       const [crashed, idle, busy] = mockWorkers;
@@ -637,7 +612,7 @@ describe('DiffWorkerPool with worker threads', () => {
 
   describe('onApplicationShutdown', () => {
     it('rejects queued and in-flight jobs and terminates every worker', async () => {
-      createPool({ workers: '2' });
+      createPool({ cores: 3 });
 
       const jobs = [1, 2, 3, 4].map((id) => settle(pool.run(job(id))));
 

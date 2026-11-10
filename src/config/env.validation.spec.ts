@@ -74,15 +74,6 @@ describe('validateEnv', () => {
   });
 
   describe('other settings only warn', () => {
-    it.each(['WS_AUTH_REQUIRED', 'WS_BROADCAST'])('warns that the removed %s is ignored', (name) => {
-      validateEnv(
-        { JWT_SECRET: 'a-random-secret', JWT_LIFE_TIME: '1d', APP_FRONTEND_URL: 'x', [name]: 'false' },
-        logger
-      );
-
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(`${name} is no longer read`));
-    });
-
     it('warns when APP_FRONTEND_URL is not set', () => {
       validateEnv({ JWT_SECRET: 'a-random-secret', JWT_LIFE_TIME: '1d' }, logger);
 

@@ -41,6 +41,8 @@ export class ImageDiffJobTimeoutError extends Error {
 
 const JOB_TIMEOUT_MS = 120_000;
 const DEFAULT_WORKER_MAX_HEAP_MB = 512;
+const MAX_WORKERS = 8;
+const QUEUE_LIMIT = 256;
 
 interface Job {
   input: WorkerJobInput;
@@ -53,11 +55,7 @@ interface Job {
 @Injectable()
 export class DiffWorkerPool implements OnApplicationShutdown {
   private readonly logger: Logger = new Logger(DiffWorkerPool.name);
-  private readonly size = Math.max(
-    1,
-    Math.min(Number(process.env.DIFF_WORKERS_COUNT) || availableParallelism() - 1, 8)
-  );
-  private readonly queueLimit = Number(process.env.DIFF_QUEUE_LIMIT) || 256;
+  private readonly size = Math.max(1, Math.min(availableParallelism() - 1, MAX_WORKERS));
   private readonly maxHeapMb = nonNegativeNumber(process.env.DIFF_WORKER_MAX_HEAP_MB, DEFAULT_WORKER_MAX_HEAP_MB);
   private inline = !existsSync(WORKER_FILE);
   private workers: Worker[] = [];
@@ -77,8 +75,8 @@ export class DiffWorkerPool implements OnApplicationShutdown {
     if (this.destroyed) {
       throw new ImageDiffPoolStoppedException('Image diff worker pool is shut down');
     }
-    if (this.queue.length >= this.queueLimit) {
-      throw new ImageDiffQueueFullException(this.queueLimit);
+    if (this.queue.length >= QUEUE_LIMIT) {
+      throw new ImageDiffQueueFullException(QUEUE_LIMIT);
     }
     this.start();
     return new Promise<WorkerJobResult<K>>((resolve, reject) => {

@@ -7,8 +7,7 @@ pixels but clear in meaning — a missing light icon, a removed input border.
 
 The service only measures. The backend (`src/compare/libs/dinov2`) takes the patches the blur
 stage marked, asks for the distances of the tiles holding them, and labels the run "likely change"
-when the strongest marked patch is above the project's `distanceThreshold` (0.15 by default,
-checked against the noise pairs of `test_noise`). Otherwise the run stays "likely noise". Nothing
+when the strongest marked patch is above 0.15 (checked against the noise pairs of `test_noise`). Otherwise the run stays "likely noise". Nothing
 fails a run, and no status changes. If the service cannot be reached, the hint falls back to the
 blur stage's verdict and says so.
 
