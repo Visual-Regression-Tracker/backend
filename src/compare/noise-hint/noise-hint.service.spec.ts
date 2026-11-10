@@ -765,6 +765,22 @@ describe('NoiseHintService.enqueue', () => {
       await analysed(h, 257);
     });
 
+    it('accepts a re-request of the id in flight even when the queue is full', async () => {
+      const h = build();
+      const ids = Array.from({ length: 257 }, (_, i) => `run-${i}`);
+      ids.forEach((id) => h.add(id));
+      const gate = blocked(h);
+      await h.service.enqueue([ids[0]]);
+      await settled(() => h.pool.run.mock.calls.length === 1);
+      await h.service.enqueue(ids.slice(1));
+
+      const again = await h.service.enqueue([ids[0]]);
+
+      expect(again).toEqual({ queued: 1, skipped: [] });
+      gate.resolve(noiseOutput());
+      await analysed(h, 257);
+    });
+
     it('analyses an id in flight again after the current pass and keeps the newer marker meanwhile', async () => {
       const h = build();
       h.add('a');

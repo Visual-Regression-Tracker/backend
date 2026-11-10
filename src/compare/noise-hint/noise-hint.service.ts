@@ -57,7 +57,7 @@ export class NoiseHintService implements OnApplicationBootstrap, OnApplicationSh
   private readonly logger: Logger = new Logger(NoiseHintService.name);
   private readonly queue = new Set<string>();
   private enqueuing: Promise<unknown> = Promise.resolve();
-  private draining = false;
+  private inFlight: string | undefined;
 
   constructor(
     private readonly prismaService: PrismaService,
@@ -200,7 +200,7 @@ export class NoiseHintService implements OnApplicationBootstrap, OnApplicationSh
       const reason = this.skipReason(run, this.configOf(run));
       if (reason) {
         skipped.push({ id, reason });
-      } else if (this.queue.has(id)) {
+      } else if (this.queue.has(id) || this.inFlight === id) {
         accepted.push(id);
       } else if (room <= 0) {
         skipped.push({ id, reason: 'queue full' });
@@ -298,17 +298,17 @@ export class NoiseHintService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private async drain(): Promise<void> {
-    if (this.draining) {
+    if (this.inFlight !== undefined) {
       return;
     }
-    this.draining = true;
     try {
       for (const id of this.queue) {
         this.queue.delete(id);
+        this.inFlight = id;
         await this.process(id);
       }
     } finally {
-      this.draining = false;
+      this.inFlight = undefined;
     }
   }
 
