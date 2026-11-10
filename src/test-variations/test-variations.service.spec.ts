@@ -4,16 +4,11 @@ import { TestVariationsService } from './test-variations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaticService } from '../static/static.service';
 import { Prisma } from '@prisma/client';
-import { PNG } from 'pngjs';
-import { BuildsService } from '../builds/builds.service';
-import { TestRunsService } from '../test-runs/test-runs.service';
 import { generateTestVariation, TEST_PROJECT } from '../_data_';
 
 const build = async () => {
   const m = {
     static: { getImageBuffer: jest.fn(), deleteImage: jest.fn() },
-    builds: { findOrCreate: jest.fn(), update: jest.fn() },
-    testRuns: { create: jest.fn(), calculateDiff: jest.fn() },
     prisma: {
       $executeRaw: jest.fn(),
       $transaction: jest.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
@@ -40,8 +35,6 @@ const build = async () => {
           },
         },
       },
-      { provide: BuildsService, useValue: m.builds },
-      { provide: TestRunsService, useValue: m.testRuns },
       { provide: PrismaService, useValue: m.prisma },
     ],
   }).compile();
@@ -401,136 +394,6 @@ describe('TestVariationsService', () => {
         ignoreAreasBeforeApproval: '[{"x":1}]',
         commentBeforeApproval: null,
       });
-    });
-  });
-
-  describe('merge', () => {
-    const project = TEST_PROJECT;
-    const fromBranch = 'develop';
-    const targetBranch = 'test';
-    const source = (overrides: object = {}) =>
-      generateTestVariation({ id: '123', projectId: project.id, branchName: fromBranch, ...overrides }, []);
-
-    it('merge', async () => {
-      const mergeBuild = { id: 'a9385fc1-884d-4f9f-915e-40da0e7773d5' };
-      const testVariation = source();
-      const testVariationSecond = source({ name: 'Test name second' });
-      const testVariationNoBaseline = source({ baselineName: null });
-      const testVariationTargetBranch = { ...source(), branchName: targetBranch };
-      const imageBuffer = PNG.sync.write(new PNG({ width: 10, height: 10 }));
-      const { service, m } = await build();
-      m.builds.findOrCreate.mockResolvedValueOnce(mergeBuild);
-      m.prisma.testVariation.findMany.mockResolvedValueOnce([
-        testVariation,
-        testVariationSecond,
-        testVariationNoBaseline,
-      ]);
-      m.static.getImageBuffer
-        .mockReturnValueOnce(imageBuffer)
-        .mockReturnValueOnce(imageBuffer)
-        .mockReturnValueOnce(null);
-      m.prisma.project.findUnique.mockResolvedValue(project);
-      service.findUnique = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null);
-      service.create = jest
-        .fn()
-        .mockResolvedValueOnce(testVariationTargetBranch)
-        .mockResolvedValueOnce(testVariationTargetBranch);
-
-      await service.merge(project.id, fromBranch, targetBranch);
-
-      expect(m.builds.findOrCreate).toHaveBeenCalledWith({ branchName: targetBranch, projectId: project.id });
-      expect(service.findUnique).toHaveBeenNthCalledWith(1, keyOf(testVariation, targetBranch));
-      expect(service.findUnique).toHaveBeenNthCalledWith(2, keyOf(testVariationSecond, targetBranch));
-      [testVariation, testVariationSecond].forEach((variation, index) =>
-        expect(m.testRuns.create).toHaveBeenNthCalledWith(index + 1, {
-          testVariation: testVariationTargetBranch,
-          createTestRequestDto: {
-            ...variation,
-            branchName: targetBranch,
-            buildId: mergeBuild.id,
-            diffTollerancePercent: 0,
-            merge: true,
-            ignoreAreas: JSON.parse(variation.ignoreAreas),
-          },
-          imageBuffer,
-        })
-      );
-      expect(m.testRuns.create).toHaveBeenCalledTimes(2);
-      expect(m.prisma.project.findUnique).toHaveBeenCalledTimes(1);
-      expect(m.testRuns.calculateDiff).toHaveBeenCalledTimes(2);
-      expect(m.testRuns.calculateDiff).toHaveBeenCalledWith(project.id, undefined, imageBuffer, project);
-      expect(m.builds.update).toHaveBeenCalledWith(mergeBuild.id, { isRunning: false });
-    });
-
-    it('merge reuses a variation that already lives on the target branch', async () => {
-      const mergeSource = generateTestVariation({
-        branchName: 'develop',
-        ignoreAreas: '[{"x":1,"y":2,"width":3,"height":4}]',
-      });
-      const target = generateTestVariation({ id: 'target', branchName: 'master' });
-      const imageBuffer = Buffer.from('png');
-      const testRun = { id: 'testRunId' };
-      const mergeProject = { ...TEST_PROJECT, id: 'projectId' };
-      const { service, m } = await build();
-      m.builds.findOrCreate.mockResolvedValueOnce({ id: 'buildId' });
-      m.prisma.testVariation.findMany.mockResolvedValueOnce([mergeSource]);
-      m.static.getImageBuffer.mockResolvedValueOnce(imageBuffer);
-      m.testRuns.create.mockResolvedValueOnce(testRun);
-      m.builds.update.mockResolvedValueOnce('stopped build');
-      m.prisma.project.findUnique.mockResolvedValue(mergeProject);
-      service.findUnique = jest.fn().mockResolvedValueOnce(target);
-      service.create = jest.fn();
-
-      const result = await service.merge('projectId', 'develop', 'master');
-
-      expect(m.prisma.testVariation.findMany).toHaveBeenCalledWith({
-        where: { projectId: 'projectId', branchName: 'develop' },
-      });
-      expect(m.static.getImageBuffer).toHaveBeenCalledWith(mergeSource.baselineName);
-      expect(service.create).not.toHaveBeenCalled();
-      expect(m.testRuns.create).toHaveBeenCalledWith({
-        testVariation: target,
-        createTestRequestDto: expect.objectContaining({
-          branchName: 'master',
-          buildId: 'buildId',
-          merge: true,
-          diffTollerancePercent: 0,
-          ignoreAreas: [{ x: 1, y: 2, width: 3, height: 4 }],
-        }),
-        imageBuffer,
-      });
-      expect(m.testRuns.calculateDiff).toHaveBeenCalledWith('projectId', testRun, imageBuffer, mergeProject);
-      expect(m.builds.update).toHaveBeenCalledWith('buildId', { isRunning: false });
-      expect(result).toBe('stopped build');
-    });
-
-    it('merge into a deleted project answers 404 and stops its build', async () => {
-      const { service, m } = await build();
-      m.builds.findOrCreate.mockResolvedValueOnce({ id: 'buildId' });
-      m.builds.update.mockResolvedValueOnce('stopped build');
-      m.prisma.project.findUnique.mockResolvedValue(null);
-
-      await expect(service.merge('gone', 'develop', 'master')).rejects.toThrow(
-        new NotFoundException('Project not found: gone')
-      );
-
-      expect(m.builds.update).toHaveBeenCalledWith('buildId', { isRunning: false });
-      expect(m.prisma.testVariation.findMany).not.toHaveBeenCalled();
-    });
-
-    it('merge stops its build when a step fails and passes the failure on', async () => {
-      const { service, m } = await build();
-      m.builds.findOrCreate.mockResolvedValueOnce({ id: 'buildId' });
-      m.prisma.testVariation.findMany.mockResolvedValueOnce([generateTestVariation({ branchName: 'develop' })]);
-      m.static.getImageBuffer.mockResolvedValueOnce(Buffer.from('png'));
-      m.testRuns.create.mockRejectedValueOnce(new Error('storage down'));
-      m.builds.update.mockResolvedValueOnce('stopped build');
-      m.prisma.project.findUnique.mockResolvedValue({ ...TEST_PROJECT, id: 'projectId' });
-      service.findUnique = jest.fn().mockResolvedValueOnce(generateTestVariation({ branchName: 'master' }));
-
-      await expect(service.merge('projectId', 'develop', 'master')).rejects.toThrow('storage down');
-
-      expect(m.builds.update).toHaveBeenCalledWith('buildId', { isRunning: false });
     });
   });
 

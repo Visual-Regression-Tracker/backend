@@ -181,24 +181,4 @@ describe('Builds (e2e)', () => {
       return requestWithAuth(app, 'patch', `/builds/${build.id}`, '').send().expect(403);
     });
   });
-
-  describe('PATCH /:id/approve', () => {
-    it.each([
-      ['default', false],
-      ['with merge', true],
-    ])('200 %s', async (_name, merge) => {
-      const { build } = await haveRun(merge);
-
-      await buildsService.approve(build.id, merge);
-
-      expect(await buildsService.findOne(build.id)).toEqual({
-        ...build,
-        status: 'passed',
-        passedCount: 1,
-        failedCount: 0,
-        unresolvedCount: 0,
-        merge,
-      });
-    });
-  });
 });

@@ -10,7 +10,6 @@ import {
   Query,
   Patch,
   ParseIntPipe,
-  ParseBoolPipe,
   forwardRef,
   Inject,
   NotFoundException,
@@ -21,7 +20,7 @@ import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import { ApiBearerAuth, ApiTags, ApiSecurity, ApiOkResponse, ApiQuery } from '@nestjs/swagger';
 import { CreateBuildDto } from './dto/build-create.dto';
 import { ApiGuard } from '../auth/guards/api.guard';
-import { Build, Role, User } from '@prisma/client';
+import { Build, Role } from '@prisma/client';
 import { BuildDto } from './dto/build.dto';
 import { MixedGuard } from '../auth/guards/mixed.guard';
 import { PaginatedBuildDto } from './dto/build-paginated.dto';
@@ -29,7 +28,6 @@ import { ModifyBuildDto } from './dto/build-modify.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { Roles } from '../shared/roles.decorator';
-import { CurrentUser } from '../shared/current-user.decorator';
 import type { WrapperType } from '../shared/wrapper-type';
 
 @Controller('builds')
@@ -113,18 +111,5 @@ export class BuildsController {
       modifyBuildDto = { isRunning: false };
     }
     return this.buildsService.update(id, modifyBuildDto);
-  }
-
-  @Patch(':id/approve')
-  @ApiOkResponse({ type: BuildDto })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(Role.admin, Role.editor)
-  approve(
-    @CurrentUser() user: User,
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Query('merge', new ParseBoolPipe()) merge: boolean
-  ): Promise<void> {
-    return this.buildsService.approve(id, merge, user.id);
   }
 }

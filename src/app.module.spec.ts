@@ -168,15 +168,12 @@ describe('AppModule', () => {
       const testVariations = inner(TestVariationsService);
       const tasks = inner(TasksService);
 
-      expect(builds.testRunsService).toBe(testRuns);
       expect(builds.eventsGateway).toBe(get(EventsGateway));
       expect(projects.staticService).toBe(get(StaticService));
       expect(projects.eventsGateway).toBe(get(EventsGateway));
       expect(testRuns.testVariationService).toBe(testVariations);
       expect(testRuns.compareService).toBe(get(CompareService));
       expect(testRuns.staticService).toBe(get(StaticService));
-      expect(testVariations.testRunsService).toBe(testRuns);
-      expect(testVariations.buildsService).toBe(builds);
       expect(tasks.testVariationService).toBe(testVariations);
     });
 

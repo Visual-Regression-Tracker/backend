@@ -240,49 +240,6 @@ describe('Builds API (e2e)', () => {
     });
   });
 
-  describe('PATCH /builds/:id/approve', () => {
-    it('approves every new and unresolved run, leaving rejected ones', async () => {
-      const baselineBuild = await newBuild();
-      const baselineRun = await postRun(baselineBuild, WHITE, 'Unresolved');
-      await testRunsService.approve(baselineRun.id);
-      const build = await newBuild();
-      const unresolved = await postRun(build, CHANGED, 'Unresolved');
-      const fresh = await postRun(build, WHITE, 'New');
-      const failed = await postRun(build, WHITE, 'Failed');
-      await prisma.testRun.update({ where: { id: failed.id }, data: { status: TestStatus.failed } });
-
-      await requestWithAuth(app, 'patch', `/builds/${build.id}/approve?merge=false`, user.token).expect(200);
-
-      const statuses = Object.fromEntries(
-        (await prisma.testRun.findMany({ where: { buildId: build.id } })).map((run) => [run.id, run.status])
-      );
-      expect(statuses).toEqual({
-        [unresolved.id]: TestStatus.approved,
-        [fresh.id]: TestStatus.approved,
-        [failed.id]: TestStatus.failed,
-      });
-      const baselines = await prisma.baseline.findMany({ where: { testRunId: { in: [unresolved.id, fresh.id] } } });
-      expect(baselines.map((baseline) => baseline.userId)).toEqual([user.id, user.id]);
-    });
-
-    it('400 without merge', async () => {
-      const build = await newBuild();
-
-      await requestWithAuth(app, 'patch', `/builds/${build.id}/approve`, user.token).expect(400);
-    });
-
-    it('404 for an unknown id', async () => {
-      await requestWithAuth(app, 'patch', `/builds/${randomUUID()}/approve?merge=false`, user.token).expect(404);
-    });
-
-    it('403 for a guest', async () => {
-      const build = await newBuild();
-      await withUser(usersService, 'guest', (guest) =>
-        requestWithAuth(app, 'patch', `/builds/${build.id}/approve?merge=false`, guest.token).expect(403)
-      );
-    });
-  });
-
   describe('PATCH /builds/:id', () => {
     it('stops the build and sets a CI build id', async () => {
       const build = await newBuild();
