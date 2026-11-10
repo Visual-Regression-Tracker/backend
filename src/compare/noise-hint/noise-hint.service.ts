@@ -157,6 +157,7 @@ export class NoiseHintService implements OnApplicationBootstrap, OnApplicationSh
     };
   }
 
+  // One request at a time, so the room check against MAX_WAITING needs no reservations.
   enqueue(ids: string[]): Promise<NoiseEnqueueResult> {
     const result = this.enqueuing.then(() => this.mark(ids));
     this.enqueuing = result.catch(() => undefined);

@@ -16,8 +16,6 @@ export const NOISE_ANALYSIS_THRESHOLDS: NoiseAnalysisThresholds = {
   dinov2: { distanceThreshold: 0.15 },
 };
 
-const flag = (value: unknown): boolean => value === true;
-
 const section = (value: unknown): Record<string, unknown> => (isJsonObject(value) ? value : {});
 
 export function parseNoiseAnalysisConfig(json: string): NoiseAnalysisConfig {
@@ -29,7 +27,7 @@ export function parseNoiseAnalysisConfig(json: string): NoiseAnalysisConfig {
   }
   const config = section(raw);
   return {
-    blur: { enabled: flag(section(config.blur).enabled) },
-    dinov2: { enabled: flag(section(config.dinov2).enabled) },
+    blur: { enabled: section(config.blur).enabled === true },
+    dinov2: { enabled: section(config.dinov2).enabled === true },
   };
 }
