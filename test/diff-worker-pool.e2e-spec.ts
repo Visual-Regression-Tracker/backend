@@ -11,7 +11,6 @@ type JobModule = typeof import('../src/compare/libs/pixelmatch/worker-job');
 describe('DiffWorkerPool on real worker threads (compiled build)', () => {
   const baseline = readFileSync(join(__dirname, 'image.png'));
   const image = readFileSync(join(__dirname, 'image_edited.png'));
-  const workersCount = process.env.DIFF_WORKERS_COUNT;
   let pool: InstanceType<PoolModule['DiffWorkerPool']>;
   let runWorkerJob: JobModule['runWorkerJob'];
 
@@ -19,14 +18,11 @@ describe('DiffWorkerPool on real worker threads (compiled build)', () => {
     execFileSync('npm', ['run', 'build'], { cwd: ROOT, stdio: 'pipe' });
     const { DiffWorkerPool } = require(join(DIST, 'diff-worker-pool.js')) as PoolModule;
     ({ runWorkerJob } = require(join(DIST, 'libs', 'pixelmatch', 'worker-job.js')) as JobModule);
-    process.env.DIFF_WORKERS_COUNT = '2';
     pool = new DiffWorkerPool();
   }, 120000);
 
   afterAll(async () => {
     await pool?.onApplicationShutdown();
-    if (workersCount === undefined) delete process.env.DIFF_WORKERS_COUNT;
-    else process.env.DIFF_WORKERS_COUNT = workersCount;
   });
 
   const internals = () => pool as unknown as { inline: boolean; workers: unknown[] };

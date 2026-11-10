@@ -11,7 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StaticService } from '../../static/static.service';
 import { DEFAULT_NOISE_ANALYSIS_CONFIG, NoiseAnalysisConfig } from './noise-analysis.config';
 import { NoiseAnalysisResult } from './noise-analysis.types';
-import { MAX_WAITING, NoiseHintService } from './noise-hint.service';
+import { NoiseHintService } from './noise-hint.service';
 
 const BASELINE = pngBytes(solidPng(32, 32));
 const IMAGE = pngBytes(solidPng(32, 32, [250, 250, 250]));
@@ -296,10 +296,7 @@ describe('NoiseHintService.analyse', () => {
     it('skips DINOv2 as "off" when the project switched it off', async () => {
       const { service, dinov2 } = build();
 
-      const result = await service.analyse(
-        analysedRun(),
-        config({ dinov2: { enabled: false, distanceThreshold: 0.15 } })
-      );
+      const result = await service.analyse(analysedRun(), config({ dinov2: { enabled: false } }));
 
       expect(result.dinov2).toEqual({ skipped: 'off' });
       expect(result).toMatchObject({ verdict: 'noise', score: 0.5 });
@@ -313,7 +310,7 @@ describe('NoiseHintService.analyse', () => {
       await service.analyse(analysedRun(), config());
       expect(asked()).toBe(true);
 
-      await service.analyse(analysedRun(), config({ dinov2: { enabled: false, distanceThreshold: 0.15 } }));
+      await service.analyse(analysedRun(), config({ dinov2: { enabled: false } }));
       expect(asked()).toBe(false);
 
       dinov2.isConfigured.mockReturnValue(false);
@@ -325,10 +322,7 @@ describe('NoiseHintService.analyse', () => {
       const { service, pool } = build();
       pool.run.mockResolvedValue(noiseOutput({ gate: undefined }));
 
-      const result = await service.analyse(
-        analysedRun(),
-        config({ dinov2: { enabled: false, distanceThreshold: 0.15 } })
-      );
+      const result = await service.analyse(analysedRun(), config({ dinov2: { enabled: false } }));
 
       expect(pool.run).toHaveBeenCalledWith(expect.objectContaining({ wantGate: false }));
       expect(result.dinov2).toEqual({ skipped: 'off' });
@@ -469,18 +463,6 @@ describe('NoiseHintService.analyse', () => {
 
       expect(result.dinov2).toEqual({ error: 'dinov2 unavailable' });
       expect(result).toMatchObject({ verdict: 'noise', score: 0.5, reason: null });
-    });
-
-    it('uses the distance threshold of the config', async () => {
-      const { service, dinov2 } = build();
-      dinov2.patchDistances.mockResolvedValue(distances({ 5: 0.1 }));
-
-      const result = await service.analyse(
-        analysedRun(),
-        config({ dinov2: { enabled: true, distanceThreshold: 0.05 } })
-      );
-
-      expect(result).toMatchObject({ verdict: 'change', score: 1 });
     });
   });
 
@@ -828,71 +810,22 @@ describe('NoiseHintService.enqueue', () => {
       expect(stored(h, 'a')).toMatchObject({ version: 1, verdict: 'noise' });
     });
 
-    it('still analyses an id that a second request marked while the first request failed', async () => {
+    it('handles overlapping requests one after another, also when the first one fails', async () => {
       const h = build();
       h.add('a');
       const lookup = deferred<StoredRun[]>();
       h.prisma.testRun.findMany.mockReturnValueOnce(lookup.promise);
 
       const first = h.service.enqueue(['a']);
-      const second = await h.service.enqueue(['a']);
-      lookup.reject(new Error('db gone'));
+      const second = h.service.enqueue(['a']);
+      await new Promise((resolve) => setImmediate(resolve));
 
+      expect(h.prisma.testRun.findMany).toHaveBeenCalledTimes(1);
+      lookup.reject(new Error('db gone'));
       await expect(first).rejects.toThrow('db gone');
-      expect(second).toEqual({ queued: 1, skipped: [] });
+      expect(await second).toEqual({ queued: 1, skipped: [] });
       await analysed(h, 1);
       expect(stored(h, 'a')).toMatchObject({ version: 1, verdict: 'noise' });
-    });
-
-    it('still analyses an id that a second request marked while the first one refused it as "queue full"', async () => {
-      const h = build();
-      const ids = Array.from({ length: MAX_WAITING + 1 }, (_, i) => `run-${i}`);
-      [...ids, 'a'].forEach((id) => h.add(id));
-      const gate = blocked(h);
-      await h.service.enqueue([ids[0]]);
-      await h.service.enqueue(ids.slice(1));
-      const lookup = deferred<StoredRun[]>();
-      h.prisma.testRun.findMany.mockReturnValueOnce(lookup.promise);
-
-      const first = h.service.enqueue(['a']);
-      const second = await h.service.enqueue(['a']);
-      lookup.resolve([h.store.get('a') as StoredRun]);
-
-      expect(second).toEqual({ queued: 1, skipped: [] });
-      expect(await first).toEqual({ queued: 0, skipped: [{ id: 'a', reason: 'queue full' }] });
-      gate.resolve(noiseOutput());
-      await analysed(h, MAX_WAITING + 2);
-      expect(stored(h, 'a')).toMatchObject({ version: 1 });
-    });
-
-    it('keeps an id known that a later request reserved while a failing request that skipped it was still running', async () => {
-      const h = build();
-      const others = Array.from({ length: MAX_WAITING }, (_, i) => `run-${i}`);
-      [...others, 'busy', 'a', 'b'].forEach((id) => h.add(id));
-      h.add('a', { status: TestStatus.approved });
-      const gate = blocked(h);
-      await h.service.enqueue(['busy']);
-      await h.service.enqueue(others.slice(0, MAX_WAITING - 2));
-      const write = deferred<{ count: number }>();
-      const requested = deferred<void>();
-      h.prisma.testRun.updateMany.mockImplementationOnce(() => {
-        requested.resolve();
-        return write.promise;
-      });
-
-      const failing = h.service.enqueue(['a', 'b']);
-      await requested.promise;
-      h.add('a');
-      await h.service.enqueue(['a']);
-      write.reject(new Error('db gone'));
-      await expect(failing).rejects.toThrow('db gone');
-      await h.service.enqueue([others[MAX_WAITING - 2]]);
-      const again = await h.service.enqueue(['a']);
-
-      expect(again).toEqual({ queued: 1, skipped: [] });
-      gate.resolve(noiseOutput());
-      await analysed(h, MAX_WAITING + 1);
-      expect(stored(h, 'a')).toMatchObject({ version: 1 });
     });
 
     it('does not mark an ineligible id again while its analysis is in flight', async () => {
@@ -1036,7 +969,7 @@ describe('NoiseHintService.enqueue', () => {
       expect(h.pool.run).not.toHaveBeenCalled();
     });
 
-    it('analyses with the current config of the project', async () => {
+    it('analyses with the current switches of the project and the fixed thresholds', async () => {
       const h = build();
       h.add('a', {
         project: {
@@ -1049,7 +982,7 @@ describe('NoiseHintService.enqueue', () => {
       await analysed(h, 1);
 
       const result = stored(h, 'a') as NoiseAnalysisResult;
-      expect(result.config.blur.amplitudeThreshold).toBe(50);
+      expect(result.config.blur.amplitudeThreshold).toBe(80);
       expect(result.dinov2).toEqual({ skipped: 'off' });
     });
 

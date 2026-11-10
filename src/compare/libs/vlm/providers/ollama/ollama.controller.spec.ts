@@ -1,4 +1,3 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -9,14 +8,12 @@ import { PrismaService } from '../../../../../prisma/prisma.service';
 import { OllamaController } from './ollama.controller';
 import { OllamaService } from './ollama.service';
 
-const image = (content: string) => ({ buffer: Buffer.from(content) }) as Express.Multer.File;
-
 describe('OllamaController', () => {
   let controller: OllamaController;
-  let ollamaService: { listModels: jest.Mock; generate: jest.Mock };
+  let ollamaService: { listModels: jest.Mock };
 
   beforeEach(async () => {
-    ollamaService = { listModels: jest.fn(), generate: jest.fn() };
+    ollamaService = { listModels: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OllamaController],
@@ -29,10 +26,8 @@ describe('OllamaController', () => {
     controller = module.get<OllamaController>(OllamaController);
   });
 
-  describe.each([
-    ['listModels', OllamaController.prototype.listModels],
-    ['compareImages', OllamaController.prototype.compareImages],
-  ])('%s', (_, handler) => {
+  describe('listModels', () => {
+    const handler = OllamaController.prototype.listModels;
     const guards = () => [
       ...(Reflect.getMetadata(GUARDS_METADATA, OllamaController) ?? []),
       ...(Reflect.getMetadata(GUARDS_METADATA, handler) ?? []),
@@ -61,36 +56,5 @@ describe('OllamaController', () => {
     ollamaService.listModels.mockRejectedValue(new Error('Connection refused'));
 
     await expect(controller.listModels()).rejects.toThrow('Connection refused');
-  });
-
-  it.each([
-    ['no images', undefined],
-    ['one image', [image('a')]],
-    ['three images', [image('a'), image('b'), image('c')]],
-  ])('rejects compare with %s as a 400', async (_, files) => {
-    await expect(
-      controller.compareImages(files as Express.Multer.File[], 'gemma3:12b', 'prompt', '0.1')
-    ).rejects.toThrow(new HttpException('Two images required', HttpStatus.BAD_REQUEST));
-    expect(ollamaService.generate).not.toHaveBeenCalled();
-  });
-
-  it('compares two images with the given config', async () => {
-    ollamaService.generate.mockResolvedValue({ content: '{}' });
-
-    await expect(controller.compareImages([image('a'), image('b')], 'gemma3:12b', 'prompt', '0.1')).resolves.toEqual({
-      content: '{}',
-    });
-    expect(ollamaService.generate).toHaveBeenCalledWith(
-      { provider: 'ollama', model: 'gemma3:12b', prompt: 'prompt', temperature: 0.1 },
-      [new Uint8Array(Buffer.from('a')), new Uint8Array(Buffer.from('b'))]
-    );
-  });
-
-  it('passes a missing temperature on as NaN', async () => {
-    ollamaService.generate.mockResolvedValue({});
-
-    await controller.compareImages([image('a'), image('b')], 'gemma3:12b', 'prompt', undefined as unknown as string);
-
-    expect(ollamaService.generate.mock.calls[0][0].temperature).toBeNaN();
   });
 });

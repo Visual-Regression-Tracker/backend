@@ -6,16 +6,12 @@ import { OllamaService } from '../src/compare/libs/vlm/providers/ollama/ollama.s
 import { createE2eApp } from './api-helpers';
 import { haveUserLogged, requestWithApiKey, requestWithAuth } from './preconditions';
 
-const image = './test/image.png';
-const compareUrl = '/ollama/compare?model=gemma3:12b&prompt=compare&temperature=0.1';
-
 describe('Ollama (e2e)', () => {
   let app: INestApplication;
   let usersService: UsersService;
   const userIds: string[] = [];
   const ollamaServiceMock = {
     listModels: jest.fn().mockResolvedValue([{ name: 'gemma3:12b' }]),
-    generate: jest.fn().mockResolvedValue({ content: '{"identical":true}' }),
   };
 
   const loggedUserToken = async (role: Role): Promise<string> => {
@@ -66,32 +62,6 @@ describe('Ollama (e2e)', () => {
         .expect((res) => {
           expect(res.body).toEqual({ models: [{ name: 'gemma3:12b' }] });
         });
-    });
-  });
-
-  describe('POST /ollama/compare', () => {
-    it('401 without authentication', async () => {
-      await request(app.getHttpServer()).post(compareUrl).expect(401);
-      expect(ollamaServiceMock.generate).not.toHaveBeenCalled();
-    });
-
-    it('403 for a guest', async () => {
-      await requestWithAuth(app, 'post', compareUrl, await loggedUserToken(Role.guest)).expect(403);
-      expect(ollamaServiceMock.generate).not.toHaveBeenCalled();
-    });
-
-    it.each([Role.admin, Role.editor])('201 for %s', async (role) => {
-      await requestWithAuth(app, 'post', compareUrl, await loggedUserToken(role))
-        .attach('images', image)
-        .attach('images', image)
-        .expect(201)
-        .expect((res) => {
-          expect(res.body).toEqual({ content: '{"identical":true}' });
-        });
-      expect(ollamaServiceMock.generate).toHaveBeenCalledWith(
-        { provider: 'ollama', model: 'gemma3:12b', prompt: 'compare', temperature: 0.1 },
-        [expect.any(Uint8Array), expect.any(Uint8Array)]
-      );
     });
   });
 });

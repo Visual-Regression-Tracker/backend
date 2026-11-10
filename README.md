@@ -16,14 +16,14 @@
 
 ## Running the test suites
 
-| Suite | Command | Needs | Covers |
-|---|---|---|---|
-| unit | `npm test` | nothing | services with mocked dependencies (`src/**/*.spec.ts`) |
-| e2e | `npm run test:e2e` | Postgres with the migrations applied (`DATABASE_URL`); run `npm run build` first | the app in-process against that database |
-| acceptance | `npm run test:acceptance` | `docker compose up -d`; the API on `localhost:4200` | the running API over HTTP and socket.io |
-| ldap | `npm run test:ldap` | `COMPOSE_FILE=docker-compose.yml:docker-compose.ldap.yml docker compose up -d` | LDAP login against the LDAP mock |
-| oidc | `npm run test:oidc` | `COMPOSE_FILE=docker-compose.yml:docker-compose.oidc.yml docker compose up -d` | the OIDC endpoints against the OIDC mock |
-| prisma package | `cd prisma && npm test` | `npm ci` in `prisma/` | the `prisma/` package's own tests |
+| Suite          | Command                   | Needs                                                                            | Covers                                                 |
+| -------------- | ------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| unit           | `npm test`                | nothing                                                                          | services with mocked dependencies (`src/**/*.spec.ts`) |
+| e2e            | `npm run test:e2e`        | Postgres with the migrations applied (`DATABASE_URL`); run `npm run build` first | the app in-process against that database               |
+| acceptance     | `npm run test:acceptance` | `docker compose up -d`; the API on `localhost:4200`                              | the running API over HTTP and socket.io                |
+| ldap           | `npm run test:ldap`       | `COMPOSE_FILE=docker-compose.yml:docker-compose.ldap.yml docker compose up -d`   | LDAP login against the LDAP mock                       |
+| oidc           | `npm run test:oidc`       | `COMPOSE_FILE=docker-compose.yml:docker-compose.oidc.yml docker compose up -d`   | the OIDC endpoints against the OIDC mock               |
+| prisma package | `cd prisma && npm test`   | `npm ci` in `prisma/`                                                            | the `prisma/` package's own tests                      |
 
 The compose stack runs the production image, which refuses the sample `JWT_SECRET` in `.env`:
 run `export JWT_SECRET=$(openssl rand -hex 32)` before `docker compose up`.
@@ -34,6 +34,7 @@ inline, so `npm run build` makes the e2e run match production.
 Schema drift check (AGENTS.md: every schema change ships with its migration). Run it
 against a database where the migrations are applied; exit code 2 means the schema has
 changes without a migration:
+
 ```
 cd prisma && npx prisma migrate deploy && npx prisma migrate diff --from-config-datasource --to-schema schema.prisma --exit-code
 ```
@@ -45,95 +46,93 @@ lines in `.env` (section `# optional`) show the same variables.
 
 ### Core
 
-| Variable | Default | What it does |
-|---|---|---|
-| `DATABASE_URL` | none, required | Postgres connection string. `connection_limit` sets the pool size per instance (see Database connections). |
-| `APP_PORT` | `3000` | Port the API listens on. |
-| `APP_FRONTEND_URL` | none | Frontend base URL, used to build links in test run results. |
-| `BODY_PARSER_JSON_LIMIT` | body-parser default | Maximum JSON request body size, e.g. `5mb`. |
-| `JWT_SECRET` | none, required | Key that signs login tokens; startup fails when it is unset. Public sample values (`jwtPrivateKey`, the one in `.env`) stop startup when `NODE_ENV=production` (as in the Docker image) and log a warning otherwise. Generate one with `openssl rand -hex 32`. |
-| `JWT_LIFE_TIME` | `1d` | Token lifetime as a timespan such as `1d`, `12h` or `3600s`. An invalid value falls back to `1d` with a warning. |
-| `SERVER_TIMEOUT` | Node.js default | HTTP `server.timeout`, in milliseconds. |
-| `SERVER_HEADERS_TIMEOUT` | Node.js default | HTTP `headersTimeout`, in milliseconds. |
-| `SERVER_KEEP_ALIVE_TIMEOUT` | Node.js default | HTTP `keepAliveTimeout`, in milliseconds. |
-| `LOG_LEVEL` | `log,error,warn,fatal` | Comma-separated Nest log levels to keep, e.g. `log,warn,error,fatal`. |
-| `HTTPS_KEY_PATH` | `./secrets/ssl.key` | TLS private key. HTTPS is used only when both files exist; otherwise the API serves HTTP. A file that exists but cannot be read stops startup. |
-| `HTTPS_CERT_PATH` | `./secrets/ssl.cert` | TLS certificate. |
+| Variable                    | Default                | What it does                                                                                                                                                                                                                                                   |
+| --------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`              | none, required         | Postgres connection string. `connection_limit` sets the pool size per instance (see Database connections).                                                                                                                                                     |
+| `APP_PORT`                  | `3000`                 | Port the API listens on.                                                                                                                                                                                                                                       |
+| `APP_FRONTEND_URL`          | none                   | Frontend base URL, used to build links in test run results.                                                                                                                                                                                                    |
+| `BODY_PARSER_JSON_LIMIT`    | body-parser default    | Maximum JSON request body size, e.g. `5mb`.                                                                                                                                                                                                                    |
+| `JWT_SECRET`                | none, required         | Key that signs login tokens; startup fails when it is unset. Public sample values (`jwtPrivateKey`, the one in `.env`) stop startup when `NODE_ENV=production` (as in the Docker image) and log a warning otherwise. Generate one with `openssl rand -hex 32`. |
+| `JWT_LIFE_TIME`             | `1d`                   | Token lifetime as a timespan such as `1d`, `12h` or `3600s`. An invalid value falls back to `1d` with a warning.                                                                                                                                               |
+| `SERVER_TIMEOUT`            | Node.js default        | HTTP `server.timeout`, in milliseconds.                                                                                                                                                                                                                        |
+| `SERVER_HEADERS_TIMEOUT`    | Node.js default        | HTTP `headersTimeout`, in milliseconds.                                                                                                                                                                                                                        |
+| `SERVER_KEEP_ALIVE_TIMEOUT` | Node.js default        | HTTP `keepAliveTimeout`, in milliseconds.                                                                                                                                                                                                                      |
+| `LOG_LEVEL`                 | `log,error,warn,fatal` | Comma-separated Nest log levels to keep, e.g. `log,warn,error,fatal`.                                                                                                                                                                                          |
+| `HTTPS_KEY_PATH`            | `./secrets/ssl.key`    | TLS private key. HTTPS is used only when both files exist; otherwise the API serves HTTP. A file that exists but cannot be read stops startup.                                                                                                                 |
+| `HTTPS_CERT_PATH`           | `./secrets/ssl.cert`   | TLS certificate.                                                                                                                                                                                                                                               |
 
 ### Storage
 
-| Variable | Default | What it does |
-|---|---|---|
-| `STATIC_SERVICE` | `hdd` | Where images are stored: `hdd` (`imageUploads/` in the working directory, `/imageUploads` in the image) or `s3`. With `hdd`, startup fails when that directory is not writable. Odiff works only with `hdd`. |
-| `AWS_S3_BUCKET_NAME` | none | Bucket for `STATIC_SERVICE=s3`; required then. |
-| `AWS_REGION` | from the AWS SDK | Read by the AWS SDK v3 default chain, not by VRT code. |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from the AWS SDK | Same chain. An IAM role or shared AWS config works without them. |
+| Variable                                     | Default          | What it does                                                                                                                                                                                                 |
+| -------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `STATIC_SERVICE`                             | `hdd`            | Where images are stored: `hdd` (`imageUploads/` in the working directory, `/imageUploads` in the image) or `s3`. With `hdd`, startup fails when that directory is not writable. Odiff works only with `hdd`. |
+| `AWS_S3_BUCKET_NAME`                         | none             | Bucket for `STATIC_SERVICE=s3`; required then.                                                                                                                                                               |
+| `AWS_REGION`                                 | from the AWS SDK | Read by the AWS SDK v3 default chain, not by VRT code.                                                                                                                                                       |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from the AWS SDK | Same chain. An IAM role or shared AWS config works without them.                                                                                                                                             |
 
 ### Image comparison
 
-| Variable | Default | What it does |
-|---|---|---|
-| `MAX_IMAGE_PIXELS` | `100000000` | Largest accepted image in pixels (width times height), checked from the PNG header before decoding. `0` turns the limit off. |
-| `MULTIPART_FILE_SIZE_LIMIT` | `104857600` (100 MiB) | Largest accepted multipart file upload, in bytes. |
-| `DIFF_WORKERS_COUNT` | CPUs minus 1, between 1 and 8 | Number of diff worker threads. |
-| `DIFF_QUEUE_LIMIT` | `256` | Diff jobs allowed to wait for a worker. When the queue is full the API answers `503` with `Retry-After: 5`. |
-| `DIFF_WORKER_MAX_HEAP_MB` | `512` | Heap limit of each diff worker, in MB. |
-| `OLLAMA_BASE_URL` | none | Ollama server for VLM comparisons; required when the Ollama provider is used. |
-| `DINOV2_URL` | none | DINOv2 service for the second stage of the rendering-noise check. Unset, only the blur stage runs. |
-| `DINOV2_TIMEOUT_MS` | `60000` | Timeout for one DINOv2 request, in milliseconds. A failed or timed-out request leaves the verdict to the blur stage. |
+| Variable                    | Default               | What it does                                                                                                                 |
+| --------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `MAX_IMAGE_PIXELS`          | `100000000`           | Largest accepted image in pixels (width times height), checked from the PNG header before decoding. `0` turns the limit off. |
+| `MULTIPART_FILE_SIZE_LIMIT` | `104857600` (100 MiB) | Largest accepted multipart file upload, in bytes.                                                                            |
+| `DIFF_WORKER_MAX_HEAP_MB`   | `512`                 | Heap limit of each diff worker, in MB.                                                                                       |
+| `OLLAMA_BASE_URL`           | none                  | Ollama server for VLM comparisons; required when the Ollama provider is used.                                                |
+| `DINOV2_URL`                | none                  | DINOv2 service for the second stage of the rendering-noise check. Unset, only the blur stage runs.                           |
+| `DINOV2_TIMEOUT_MS`         | `60000`               | Timeout for one DINOv2 request, in milliseconds. A failed or timed-out request leaves the verdict to the blur stage.         |
 
 **Rendering-noise check.** A post-analysis that starts only on request: a reviewer runs it on one run from the diff dialog, or on all unresolved runs of a build from the list. It never changes a run's status or approves anything. It marks each unresolved run "likely noise" or "likely change" and sorts real changes first. The check has two stages, each with its own verdict:
 
-- **Blur** runs whenever the project enables it. It measures the peak difference after a blur with σ = 1 px (`amplitudeThreshold`, default `80`) and the share of solid changed pixels (`solidShareMax`, default `0.01`). Above either threshold, the stage says "change".
-- **DINOv2** takes a second look at the patches that the blur stage called noise. The stage says "change" when the strongest marked patch is above `distanceThreshold` (default `0.15`).
+- **Blur** runs whenever the project enables it. It measures the peak difference after a blur with σ = 1 px (threshold `80`) and the share of solid changed pixels (threshold `0.01`). Above either threshold, the stage says "change".
+- **DINOv2** takes a second look at the patches that the blur stage called noise. The stage says "change" when the strongest marked patch is above `0.15`.
 
-Both stages are on by default and are set per project in the "Post-analysis" section (`noiseAnalysisConfig`). Projects that use the VLM comparator are excluded. `DINOV2_URL` enables the second stage; without it the blur stage works alone. Runs are analysed one at a time from a queue in the API process. The queue is not persisted: analyses still pending when the API restarts are dropped and can be requested again. `POST /test-runs/noise-analysis` queues a list of run ids. The `ignoreRenderingNoise` key in `imageComparisonConfig` (rc1–rc3) is ignored.
+Both stages are on by default and are switched on or off per project in the "Post-analysis" section (`noiseAnalysisConfig`); the thresholds are fixed, and threshold keys saved by release candidates are ignored. Projects that use the VLM comparator are excluded. `DINOV2_URL` enables the second stage; without it the blur stage works alone. Runs are analysed one at a time from a queue in the API process. The queue is not persisted: analyses still pending when the API restarts are dropped and can be requested again. `POST /test-runs/noise-analysis` queues a list of run ids. The `ignoreRenderingNoise` key in `imageComparisonConfig` (rc1–rc3) is ignored.
 
 On our benchmark of 168 real screenshot pairs it labels about 1 in 4 of the benchmark's bugs noise with blur alone (28 of 120, mostly small text changes, faint borders and light icons) and 1 in 7 with DINOv2 (18 of 120); no noise pair is labelled a change. The lists live in `test_noise/bugs-labelled-noise.ts`; `npm run test:noise` keeps them current.
 
 ### Auth
 
-| Variable | Default | What it does |
-|---|---|---|
-| `REGISTRATION_ENABLED` | `true` | `false` (also `0`, `no`, `off`) disables self-registration. |
-| `LDAP_ENABLED` | `false` | Enables LDAP login. When OIDC is enabled too, OIDC is used. |
-| `LDAP_URL` | none | LDAP server URL, e.g. `ldaps://ldap.example.com:636/`. Required when LDAP is enabled. |
-| `LDAP_BIND_USER` | none | DN of the service account used for the user search. Required when LDAP is enabled. |
-| `LDAP_BIND_PASSWORD` | none | Password of the service account. Required when LDAP is enabled. |
-| `LDAP_SEARCH_DN` | none | Base DN of the user search. Required when LDAP is enabled. |
-| `LDAP_USERS_SEARCH_FILTER` | none | User search filter; `{{email}}` is replaced by the login email. Required when LDAP is enabled. |
-| `LDAP_ATTRIBUTE_MAIL`, `LDAP_ATTRIBUTE_FIRST_NAME`, `LDAP_ATTRIBUTE_LAST_NAME` | none | Attributes that hold the email, first name and last name. Required when LDAP is enabled. |
-| `LDAP_TLS_NO_VERIFY` | `false` | Skip TLS certificate verification for LDAP. Test servers only. |
-| `OIDC_ENABLED` | `false` | Enables OIDC (SSO) login; see the OIDC section. |
-| `OIDC_ISSUER_URL` | none | Issuer URL of the identity provider. Required when OIDC is enabled. An `http://` issuer works (with a warning) for local setups. |
-| `OIDC_CLIENT_ID` | none | OIDC client ID. Required when OIDC is enabled. |
-| `OIDC_CLIENT_SECRET` | none | OIDC client secret. Required when OIDC is enabled. |
-| `OIDC_REDIRECT_URI` | `http://localhost:4200/users/oidc/callback` | Callback URL registered at the identity provider, without a query string. |
-| `OIDC_SCOPES` | `openid profile email` | Requested scopes. |
-| `OIDC_ATTRIBUTE_MAIL` | `email` | Claim that holds the email. |
-| `OIDC_ATTRIBUTE_FIRST_NAME` | `given_name` | Claim that holds the first name. |
-| `OIDC_ATTRIBUTE_LAST_NAME` | `family_name` | Claim that holds the last name. |
-| `OIDC_ROLE_CLAIM` | `groups` | Claim, or dotted path, that holds the roles. |
-| `OIDC_ADMIN_VALUES` | `vrt-admin,admin` | Comma-separated claim values that give the admin role. |
-| `OIDC_DEFAULT_ROLE` | `editor` | Role for every other user: `admin` or `editor`. |
-| `OIDC_REQUIRE_VERIFIED_EMAIL` | `true` | Reject logins whose email is not verified. |
-| `OIDC_TLS_NO_VERIFY` | `false` | Skip TLS verification for requests to the issuer's origin; other hosts are still verified. Test servers only. |
+| Variable                                                                       | Default                                     | What it does                                                                                                                     |
+| ------------------------------------------------------------------------------ | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `REGISTRATION_ENABLED`                                                         | `true`                                      | `false` (also `0`, `no`, `off`) disables self-registration.                                                                      |
+| `LDAP_ENABLED`                                                                 | `false`                                     | Enables LDAP login. When OIDC is enabled too, OIDC is used.                                                                      |
+| `LDAP_URL`                                                                     | none                                        | LDAP server URL, e.g. `ldaps://ldap.example.com:636/`. Required when LDAP is enabled.                                            |
+| `LDAP_BIND_USER`                                                               | none                                        | DN of the service account used for the user search. Required when LDAP is enabled.                                               |
+| `LDAP_BIND_PASSWORD`                                                           | none                                        | Password of the service account. Required when LDAP is enabled.                                                                  |
+| `LDAP_SEARCH_DN`                                                               | none                                        | Base DN of the user search. Required when LDAP is enabled.                                                                       |
+| `LDAP_USERS_SEARCH_FILTER`                                                     | none                                        | User search filter; `{{email}}` is replaced by the login email. Required when LDAP is enabled.                                   |
+| `LDAP_ATTRIBUTE_MAIL`, `LDAP_ATTRIBUTE_FIRST_NAME`, `LDAP_ATTRIBUTE_LAST_NAME` | none                                        | Attributes that hold the email, first name and last name. Required when LDAP is enabled.                                         |
+| `LDAP_TLS_NO_VERIFY`                                                           | `false`                                     | Skip TLS certificate verification for LDAP. Test servers only.                                                                   |
+| `OIDC_ENABLED`                                                                 | `false`                                     | Enables OIDC (SSO) login; see the OIDC section.                                                                                  |
+| `OIDC_ISSUER_URL`                                                              | none                                        | Issuer URL of the identity provider. Required when OIDC is enabled. An `http://` issuer works (with a warning) for local setups. |
+| `OIDC_CLIENT_ID`                                                               | none                                        | OIDC client ID. Required when OIDC is enabled.                                                                                   |
+| `OIDC_CLIENT_SECRET`                                                           | none                                        | OIDC client secret. Required when OIDC is enabled.                                                                               |
+| `OIDC_REDIRECT_URI`                                                            | `http://localhost:4200/users/oidc/callback` | Callback URL registered at the identity provider, without a query string.                                                        |
+| `OIDC_SCOPES`                                                                  | `openid profile email`                      | Requested scopes.                                                                                                                |
+| `OIDC_ATTRIBUTE_MAIL`                                                          | `email`                                     | Claim that holds the email.                                                                                                      |
+| `OIDC_ATTRIBUTE_FIRST_NAME`                                                    | `given_name`                                | Claim that holds the first name.                                                                                                 |
+| `OIDC_ATTRIBUTE_LAST_NAME`                                                     | `family_name`                               | Claim that holds the last name.                                                                                                  |
+| `OIDC_ROLE_CLAIM`                                                              | `groups`                                    | Claim, or dotted path, that holds the roles.                                                                                     |
+| `OIDC_ADMIN_VALUES`                                                            | `vrt-admin,admin`                           | Comma-separated claim values that give the admin role.                                                                           |
+| `OIDC_DEFAULT_ROLE`                                                            | `editor`                                    | Role for every other user: `admin` or `editor`.                                                                                  |
+| `OIDC_REQUIRE_VERIFIED_EMAIL`                                                  | `true`                                      | Reject logins whose email is not verified.                                                                                       |
+| `OIDC_TLS_NO_VERIFY`                                                           | `false`                                     | Skip TLS verification for requests to the issuer's origin; other hosts are still verified. Test servers only.                    |
 
 ### Service variables
 
-| Variable | Default | What it does |
-|---|---|---|
+| Variable    | Default                  | What it does                                                                       |
+| ----------- | ------------------------ | ---------------------------------------------------------------------------------- |
 | `REDIS_URL` | unset, in-memory adapter | Redis for socket.io fan-out between instances (see Scaling to multiple instances). |
 
 ### Seed
 
 Read by `prisma db seed`.
 
-| Variable | Default | What it does |
-|---|---|---|
-| `DEFAULT_USER_EMAIL` | `visual-regression-tracker@example.com` | Email of the default user. |
-| `DEFAULT_USER_PASSWORD` | generated, printed once | Password of the default user. |
-| `DEFAULT_USER_API_KEY` | generated, printed once | API key of the default user. |
+| Variable                | Default                                 | What it does                  |
+| ----------------------- | --------------------------------------- | ----------------------------- |
+| `DEFAULT_USER_EMAIL`    | `visual-regression-tracker@example.com` | Email of the default user.    |
+| `DEFAULT_USER_PASSWORD` | generated, printed once                 | Password of the default user. |
+| `DEFAULT_USER_API_KEY`  | generated, printed once                 | API key of the default user.  |
 
 ## Docker images
 
@@ -162,9 +161,11 @@ break:
    pub/sub adapter. Without it, an event emitted on one instance never reaches
    clients connected to another (events are silently lost and the UI only
    updates after a manual refresh).
+
    ```
    REDIS_URL=redis://<host>:6379
    ```
+
    When `REDIS_URL` is unset, the default in-memory adapter is used, so a single
    instance and local development work with no extra setup. Any Redis server
    from 5.0 on works (the API speaks RESP2). If Redis goes down, the API keeps
@@ -172,7 +173,7 @@ break:
 
 2. **Reverse proxy with sticky sessions + WebSocket upgrade** for `/socket.io/`.
    Without sticky sessions the polling handshake fails with `400 "Session ID
-   unknown"` because consecutive requests land on different instances. Example
+unknown"` because consecutive requests land on different instances. Example
    nginx:
    ```nginx
    map $http_upgrade $connection_upgrade { default upgrade; '' close; }
@@ -203,6 +204,7 @@ Each API instance keeps one Prisma connection pool. By default it opens up to
 reuse. Size the pool with the `connection_limit` parameter of `DATABASE_URL` so
 that `replicas * connection_limit` stays below Postgres `max_connections`
 (default 100), leaving room for migrations and admin tools:
+
 ```
 DATABASE_URL=postgresql://user:password@postgres:5432/vrt?connection_limit=10
 ```
@@ -216,13 +218,13 @@ DATABASE_URL=postgresql://user:password@postgres:5432/vrt?connection_limit=10
 
 - Run `JWT_SECRET=$(openssl rand -hex 32) docker compose -f docker-compose.yml -f docker-compose.ldap.yml up` (see [docker docs for multiple-compose-files - merge](https://docs.docker.com/compose/multiple-compose-files/merge/))
 - test the login with ldap and have a look at the logs
-    ```sh
-    curl 'http://localhost:4200/users/login' \
-    -H 'accept: */*' \
-    -H 'accept-language: de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7,fr;q=0.6' \
-    -H 'content-type: application/json' \
-    --data-raw '{"email":"developer.one@ldapmock.local","password":"password"}'
-    ```
+  ```sh
+  curl 'http://localhost:4200/users/login' \
+  -H 'accept: */*' \
+  -H 'accept-language: de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7,fr;q=0.6' \
+  -H 'content-type: application/json' \
+  --data-raw '{"email":"developer.one@ldapmock.local","password":"password"}'
+  ```
 
 ## OIDC (SSO)
 
@@ -240,8 +242,8 @@ Set `OIDC_ENABLED=true` and the `OIDC_*` variables in `.env`. Password login and
 - Mock users: username `admin` (role `admin`), any other username (role `editor`). The password is ignored. See `oauth2-mock-server-config.json`.
 - Optional: inspect/trigger the flow manually via the debugger at `http://host.docker.internal:8090/default/debugger`.
 - Verify the OIDC endpoints (api must run with OIDC enabled) and run the integration tests:
-    ```sh
-    curl -i 'http://localhost:4200/users/oidc/enabled'
-    curl -i 'http://localhost:4200/users/oidc/login'
-    npm run test:oidc
-    ```
+  ```sh
+  curl -i 'http://localhost:4200/users/oidc/enabled'
+  curl -i 'http://localhost:4200/users/oidc/login'
+  npm run test:oidc
+  ```

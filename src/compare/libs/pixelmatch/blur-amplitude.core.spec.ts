@@ -12,12 +12,11 @@ import {
   SOLID_PARAMS,
   solidMask,
 } from './blur-amplitude.core';
-import { DEFAULT_NOISE_ANALYSIS_CONFIG } from '../../noise-hint/noise-analysis.config';
+import { NOISE_ANALYSIS_THRESHOLDS } from '../../noise-hint/noise-analysis.config';
 import { DINOV2_PATCH, gateOfDecoded } from './patch-gate.core';
 import { runWorkerJob } from './worker-job';
 
-const { amplitudeThreshold: BLUR_AMPLITUDE_THRESHOLD, solidShareMax: MAX_SOLID_SHARE } =
-  DEFAULT_NOISE_ANALYSIS_CONFIG.blur;
+const { amplitudeThreshold: BLUR_AMPLITUDE_THRESHOLD, solidShareMax: MAX_SOLID_SHARE } = NOISE_ANALYSIS_THRESHOLDS.blur;
 const SIZE = 20;
 type Rgba = [number, number, number, number];
 const WHITE: Rgba = [255, 255, 255, 255];
@@ -131,7 +130,7 @@ describe('a faint panel shade', () => {
 });
 
 describe('looksLikeNoise', () => {
-  const thresholds = DEFAULT_NOISE_ANALYSIS_CONFIG.blur;
+  const thresholds = NOISE_ANALYSIS_THRESHOLDS.blur;
 
   it('is noise when the change is weak and thin', () => {
     expect(looksLikeNoise({ amplitude: 40, solidPixels: 0, solidShare: 0 }, thresholds)).toBe(true);
@@ -170,7 +169,7 @@ describe('computeBlurAmplitude', () => {
     baseline: encode(blank),
     image: encode(block),
     ignoreAreas: [],
-    thresholds: DEFAULT_NOISE_ANALYSIS_CONFIG.blur,
+    thresholds: NOISE_ANALYSIS_THRESHOLDS.blur,
     wantGate: true,
     ...overrides,
   });
@@ -338,7 +337,7 @@ describe('computeBlurAmplitude', () => {
     });
 
     it('keeps windows inside the image', () => {
-      const output = analyseDifference(blank, pixel(19, 19), DEFAULT_NOISE_ANALYSIS_CONFIG.blur, true);
+      const output = analyseDifference(blank, pixel(19, 19), NOISE_ANALYSIS_THRESHOLDS.blur, true);
 
       expect(output.densest).toEqual([{ x: 12, y: 12, width: 8, height: 8, weight: 1 }]);
     });
@@ -350,7 +349,7 @@ describe('computeBlurAmplitude', () => {
         return { data, width: 5, height: 6 };
       };
 
-      const output = analyseDifference(tiny([]), tiny([0, 29]), DEFAULT_NOISE_ANALYSIS_CONFIG.blur, true);
+      const output = analyseDifference(tiny([]), tiny([0, 29]), NOISE_ANALYSIS_THRESHOLDS.blur, true);
 
       expect(output.densest).toEqual([{ x: 0, y: 0, width: 5, height: 6, weight: 2 }]);
     });
@@ -373,7 +372,7 @@ describe('computeBlurAmplitude', () => {
       b.data[0] = 0;
       b.data[b.data.length - 4] = 0;
 
-      expect(analyseDifference(a, b, DEFAULT_NOISE_ANALYSIS_CONFIG.blur, true)).toEqual({
+      expect(analyseDifference(a, b, NOISE_ANALYSIS_THRESHOLDS.blur, true)).toEqual({
         measure: null,
         unmeasured: 'image too large',
         densest: [],

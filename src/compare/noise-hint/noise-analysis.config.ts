@@ -1,22 +1,22 @@
 import { isJsonObject } from '../../utils';
+import { NoiseAnalysisThresholds } from './noise-analysis.types';
 
 export interface NoiseAnalysisConfig {
-  blur: { enabled: boolean; amplitudeThreshold: number; solidShareMax: number };
-  dinov2: { enabled: boolean; distanceThreshold: number };
+  blur: { enabled: boolean };
+  dinov2: { enabled: boolean };
 }
 
 export const DEFAULT_NOISE_ANALYSIS_CONFIG: NoiseAnalysisConfig = {
-  blur: { enabled: false, amplitudeThreshold: 80, solidShareMax: 0.01 },
-  dinov2: { enabled: false, distanceThreshold: 0.15 },
+  blur: { enabled: false },
+  dinov2: { enabled: false },
 };
 
-const finitePositive = (value: unknown, fallback: number): number =>
-  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+export const NOISE_ANALYSIS_THRESHOLDS: NoiseAnalysisThresholds = {
+  blur: { amplitudeThreshold: 80, solidShareMax: 0.01 },
+  dinov2: { distanceThreshold: 0.15 },
+};
 
-const finiteNonNegative = (value: unknown, fallback: number): number =>
-  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
-
-const flag = (value: unknown, fallback: boolean): boolean => (typeof value === 'boolean' ? value : fallback);
+const flag = (value: unknown): boolean => value === true;
 
 const section = (value: unknown): Record<string, unknown> => (isJsonObject(value) ? value : {});
 
@@ -28,19 +28,8 @@ export function parseNoiseAnalysisConfig(json: string): NoiseAnalysisConfig {
     raw = null;
   }
   const config = section(raw);
-  const blur = section(config.blur);
-  const dinov2 = section(config.dinov2);
-  const defaults = DEFAULT_NOISE_ANALYSIS_CONFIG;
-
   return {
-    blur: {
-      enabled: flag(blur.enabled, defaults.blur.enabled),
-      amplitudeThreshold: finitePositive(blur.amplitudeThreshold, defaults.blur.amplitudeThreshold),
-      solidShareMax: finiteNonNegative(blur.solidShareMax, defaults.blur.solidShareMax),
-    },
-    dinov2: {
-      enabled: flag(dinov2.enabled, defaults.dinov2.enabled),
-      distanceThreshold: finitePositive(dinov2.distanceThreshold, defaults.dinov2.distanceThreshold),
-    },
+    blur: { enabled: flag(section(config.blur).enabled) },
+    dinov2: { enabled: flag(section(config.dinov2).enabled) },
   };
 }
