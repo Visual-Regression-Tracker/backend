@@ -10,6 +10,7 @@ import { IgnoreAreaDto } from '../test-runs/dto/ignore-area.dto';
 import { NoiseAnalysisRequestDto } from '../test-runs/dto/noise-analysis-request.dto';
 import { UpdateIgnoreAreasDto } from '../test-runs/dto/update-ignore-area.dto';
 import { UpdateTestRunDto } from '../test-runs/dto/update-test.dto';
+import { MergeParams } from '../test-variations/types';
 import { AssignRoleDto } from '../users/dto/assign-role.dto';
 import { ChangePasswordDto } from '../users/dto/change-password.dto';
 import { CreateUserDto } from '../users/dto/user-create.dto';
@@ -53,6 +54,12 @@ describe.each([
     const properties = declared(dto);
     expect(properties).not.toEqual([]);
     expect(properties.filter((name) => !validated(dto).has(name))).toEqual([]);
+  });
+});
+
+describe('MergeParams', () => {
+  it('validates every query parameter', () => {
+    expect([...validated(MergeParams)].sort()).toEqual(['fromBranch', 'projectId', 'toBranch']);
   });
 });
 

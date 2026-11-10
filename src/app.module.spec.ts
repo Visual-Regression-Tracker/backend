@@ -174,6 +174,8 @@ describe('AppModule', () => {
       expect(testRuns.testVariationService).toBe(testVariations);
       expect(testRuns.compareService).toBe(get(CompareService));
       expect(testRuns.staticService).toBe(get(StaticService));
+      expect(testVariations.testRunsService).toBe(testRuns);
+      expect(testVariations.buildsService).toBe(builds);
       expect(tasks.testVariationService).toBe(testVariations);
     });
 

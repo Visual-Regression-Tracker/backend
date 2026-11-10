@@ -17,7 +17,6 @@ describe('Builds Controller', () => {
     findOne: jest.fn(),
     remove: jest.fn(),
     update: jest.fn(),
-    approve: jest.fn(),
     scheduleRetention: jest.fn(),
     findOrCreate: jest.fn(),
   };

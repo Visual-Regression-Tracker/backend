@@ -7,6 +7,7 @@ import { CreateTestRequestBase64Dto } from '../test-runs/dto/create-test-request
 import { CreateTestRequestMultipartDto } from '../test-runs/dto/create-test-request-multipart.dto';
 import { UpdateIgnoreAreasDto } from '../test-runs/dto/update-ignore-area.dto';
 import { UpdateTestRunDto } from '../test-runs/dto/update-test.dto';
+import { MergeParams } from '../test-variations/types';
 import { AssignRoleDto } from '../users/dto/assign-role.dto';
 import { ChangePasswordDto } from '../users/dto/change-password.dto';
 import { CreateUserDto } from '../users/dto/user-create.dto';
@@ -107,6 +108,11 @@ describe('global whitelist', () => {
     it('keeps an empty body empty', async () => {
       expect(await run(undefined, ModifyBuildDto)).toBeUndefined();
     });
+  });
+
+  it('MergeParams keeps its three body fields', async () => {
+    const body = await run({ projectId: PROJECT_ID, fromBranch: 'a', toBranch: 'b', junk: 'x' }, MergeParams);
+    expect(body).toEqual({ projectId: PROJECT_ID, fromBranch: 'a', toBranch: 'b' });
   });
 
   describe('projects', () => {
