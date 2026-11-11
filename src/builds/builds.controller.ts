@@ -64,8 +64,9 @@ export class BuildsController {
 
   @Get(':id')
   @ApiOkResponse({ type: BuildDto })
+  @ApiSecurity('api_key')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(MixedGuard)
   getDetails(@Param('id', new ParseUUIDPipe()) id: string): Promise<BuildDto> {
     return this.buildsService.findOne(id);
   }

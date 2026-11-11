@@ -143,6 +143,23 @@ describe('Builds (e2e)', () => {
           expect(JSON.stringify(res.body)).toEqual(JSON.stringify(build));
         });
     });
+
+    it('200 api', async () => {
+      const build = await haveBuild();
+
+      return requestWithApiKey(app, 'get', `/builds/${build.id}`, user.apiKey)
+        .send()
+        .expect(200)
+        .expect((res) => {
+          expect(JSON.stringify(res.body)).toEqual(JSON.stringify(build));
+        });
+    });
+
+    it('403', async () => {
+      const build = await haveBuild();
+
+      return requestWithAuth(app, 'get', `/builds/${build.id}`, '').send().expect(403);
+    });
   });
 
   describe('DELETE /', () => {
