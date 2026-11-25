@@ -36,6 +36,13 @@ export class TestRunsService {
     return list.map((item) => new TestRunDto(item));
   }
 
+  async findManyByBuilds(buildIds: string[]): Promise<TestRunDto[]> {
+    const list = await this.prismaService.testRun.findMany({
+      where: { buildId: { in: buildIds } },
+    });
+    return list.map((item) => new TestRunDto(item));
+  }
+
   async findOne(id: string): Promise<
     TestRun & {
       testVariation?: TestVariation;

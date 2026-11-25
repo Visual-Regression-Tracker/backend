@@ -282,8 +282,9 @@ describe('TestRunsService', () => {
         viewport: testVariation.viewport,
         customTags: testVariation.customTags,
         baselineName: testVariation.baselineName,
-        ignoreAreas: testVariation.ignoreAreas,
-        tempIgnoreAreas: JSON.stringify(createTestRequestDto.ignoreAreas),
+        // A merge run keeps the request's areas as permanent ones, after the variation's.
+        ignoreAreas: expect.any(String),
+        tempIgnoreAreas: '[]',
         comment: testVariation.comment,
         baselineBranchName: testVariation.branchName,
         branchName: createTestRequestDto.branchName,
@@ -292,6 +293,12 @@ describe('TestRunsService', () => {
         status: TestStatus.new,
       },
     });
+    const savedAreas = JSON.parse(testRunCreateMock.mock.calls[0][0].data.ignoreAreas);
+    expect(savedAreas.map(({ id, ...area }) => area)).toEqual([
+      ...JSON.parse(testVariation.ignoreAreas),
+      ...createTestRequestDto.ignoreAreas,
+    ]);
+    expect(savedAreas[1].id).toEqual(expect.any(String));
     expect(result).toBe(testRun);
   });
 
@@ -398,6 +405,24 @@ describe('TestRunsService', () => {
       where: { buildId },
     });
     expect(result).toEqual([new TestRunDto(testRun)]);
+  });
+
+  it('findManyByBuilds reads the test runs of every build in one query, with their project', async () => {
+    const buildIds = ['build 1', 'build 2'];
+    const testRun: TestRun = { ...generateTestRun(), projectId: 'project id' };
+    const testRunFindManyMock = jest.fn().mockResolvedValueOnce([testRun]);
+    service = await initService({
+      testRunFindManyMock,
+    });
+
+    const result = await service.findManyByBuilds(buildIds);
+
+    expect(testRunFindManyMock).toHaveBeenCalledTimes(1);
+    expect(testRunFindManyMock).toHaveBeenCalledWith({
+      where: { buildId: { in: buildIds } },
+    });
+    expect(result).toEqual([new TestRunDto(testRun)]);
+    expect(result[0].projectId).toBe('project id');
   });
 
   it('delete', async () => {

@@ -13,6 +13,7 @@ import {
   ValidationPipe,
   Logger,
   Patch,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -41,6 +42,7 @@ import {
 } from './dto/create-test-request-multipart.dto';
 import { FileToBodyInterceptor } from '../shared/fite-to-body.interceptor';
 import { UpdateIgnoreAreasDto } from './dto/update-ignore-area.dto';
+import { TestRunsByBuildsDto } from './dto/test-runs-by-builds.dto';
 import { UpdateTestRunDto } from './dto/update-test.dto';
 import { CurrentUser } from '../shared/current-user.decorator';
 import { RoleGuard } from '../auth/guards/role.guard';
@@ -59,6 +61,17 @@ export class TestRunsController {
   @UseGuards(JwtAuthGuard)
   async get(@Query('buildId', new ParseUUIDPipe()) buildId: string): Promise<TestRunDto[]> {
     return await this.testRunsService.findMany(buildId);
+  }
+
+  // The test runs of many builds in one query: a client showing a run of many builds asked
+  // for them one build at a time. POST, so a long list of ids never hits a URL length limit.
+  @Post('by-builds')
+  @HttpCode(200)
+  @ApiOkResponse({ type: [TestRunDto] })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async getByBuilds(@Body() body: TestRunsByBuildsDto): Promise<TestRunDto[]> {
+    return await this.testRunsService.findManyByBuilds(body.buildIds);
   }
 
   @Get(':id')

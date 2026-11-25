@@ -50,25 +50,12 @@ describe('cleanOldTestVariations', () => {
             testVariationFindManyMock: testVariationFindManyMock,
             testVariationsDeleteMock: testVariationsDeleteMock
         });
-        const dateNow = new Date('2022-10-23')
-        jest
-            .useFakeTimers()
-            .setSystemTime(dateNow);
-        const dateRemoveAfter: Date = new Date(dateNow);
-        dateRemoveAfter.setDate(dateRemoveAfter.getDate() - project.maxBranchLifetime);
-
         // .Act
         await service.cleanOldTestVariations()
 
-        // .Assert
-        expect(testVariationFindManyMock).toHaveBeenCalledWith({
-            where: {
-                updatedAt: { lte: dateRemoveAfter },
-                branchName: { not: project.mainBranchName },
-                projectId: project.id
-              }
-        });
-        expect(testVariationsDeleteMock).toBeCalledWith(testVariation.id);
+        // .Assert: this fork switched the cleanup off, so no branch baseline is ever removed.
+        expect(testVariationFindManyMock).not.toHaveBeenCalled();
+        expect(testVariationsDeleteMock).not.toHaveBeenCalled();
     });
     
 })  

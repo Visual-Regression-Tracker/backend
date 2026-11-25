@@ -44,10 +44,13 @@ export class TestRunDto {
   baselineBranchName: string;
   @ApiProperty()
   merge: boolean;
+  @ApiProperty({ required: false, nullable: true })
+  projectId: string | null;
 
   constructor(testRun: TestRun) {
     this.id = testRun.id;
     this.buildId = testRun.buildId;
+    this.projectId = testRun.projectId ?? null;
     this.imageName = testRun.imageName;
     this.diffName = testRun.diffName;
     this.diffPercent = testRun.diffPercent;
