@@ -19,12 +19,10 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Prisma 2.12 ships engines for OpenSSL 1.1 only; the runner image has OpenSSL 3.
+    container: node:16-bullseye
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 16
-          cache: npm
       - run: npm ci --ignore-scripts
       - run: npx prisma generate
       - run: npm test
